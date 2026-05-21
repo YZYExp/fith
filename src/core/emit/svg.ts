@@ -8,6 +8,7 @@ import type {
   Clip,
   CornerRadii,
   BorderEdges,
+  LinearGradientFill,
 } from '../ir/types.js';
 
 const n = (v: number) => {
@@ -95,24 +96,66 @@ function emitBox(node: BoxNode, defs: Defs): string {
     out += `<g${filt}>${shape}</g>`;
   }
 
-  if (node.fill) {
-    if (noRadii(radii)) {
-      out += `<rect x="${n(rect.x)}" y="${n(rect.y)}" width="${n(rect.width)}" height="${n(
-        rect.height,
-      )}" fill="${esc(node.fill)}"/>`;
-    } else if (uniformRadii(radii)) {
-      out += `<rect x="${n(rect.x)}" y="${n(rect.y)}" width="${n(rect.width)}" height="${n(
-        rect.height,
-      )}" rx="${n(radii[0])}" fill="${esc(node.fill)}"/>`;
-    } else {
-      out += `<path d="${roundedRectPath(rect.x, rect.y, rect.width, rect.height, radii)}" fill="${esc(
-        node.fill,
-      )}"/>`;
-    }
-  }
+  if (node.fill) out += fillShape(rect, radii, esc(node.fill));
+  if (node.gradient) out += fillShape(rect, radii, `url(#${gradientId(defs, node.gradient, rect)})`);
 
   if (node.border) out += emitBorder(node.border, rect, radii);
   return out;
+}
+
+function fillShape(
+  rect: { x: number; y: number; width: number; height: number },
+  radii: CornerRadii,
+  fill: string,
+): string {
+  if (noRadii(radii)) {
+    return `<rect x="${n(rect.x)}" y="${n(rect.y)}" width="${n(rect.width)}" height="${n(
+      rect.height,
+    )}" fill="${fill}"/>`;
+  }
+  if (uniformRadii(radii)) {
+    return `<rect x="${n(rect.x)}" y="${n(rect.y)}" width="${n(rect.width)}" height="${n(
+      rect.height,
+    )}" rx="${n(radii[0])}" fill="${fill}"/>`;
+  }
+  return `<path d="${roundedRectPath(rect.x, rect.y, rect.width, rect.height, radii)}" fill="${fill}"/>`;
+}
+
+function splitColor(c: string): { color: string; opacity: string } {
+  const m = c.match(/rgba?\(\s*([\d.]+)[,\s]+([\d.]+)[,\s]+([\d.]+)(?:[,/\s]+([\d.]+))?\s*\)/i);
+  if (m && m[4] !== undefined && parseFloat(m[4]) < 1) {
+    return { color: `rgb(${m[1]}, ${m[2]}, ${m[3]})`, opacity: m[4] };
+  }
+  return { color: c, opacity: '1' };
+}
+
+function gradientId(
+  defs: Defs,
+  g: LinearGradientFill,
+  rect: { x: number; y: number; width: number; height: number },
+): string {
+  // CSS 0deg = to top; direction vector in screen coords (y down) = (sinθ, -cosθ)
+  const dx = Math.sin((g.angle * Math.PI) / 180);
+  const dy = -Math.cos((g.angle * Math.PI) / 180);
+  const cx = rect.x + rect.width / 2;
+  const cy = rect.y + rect.height / 2;
+  const len = (Math.abs(rect.width * dx) + Math.abs(rect.height * dy)) / 2;
+  const x1 = cx - dx * len;
+  const y1 = cy - dy * len;
+  const x2 = cx + dx * len;
+  const y2 = cy + dy * len;
+  const stops = g.stops
+    .map((s) => {
+      const { color, opacity } = splitColor(s.color);
+      const op = opacity !== '1' ? ` stop-opacity="${opacity}"` : '';
+      return `<stop offset="${n(s.offset * 100)}%" stop-color="${esc(color)}"${op}/>`;
+    })
+    .join('');
+  return defs.add(
+    `<linearGradient id="{ID}" gradientUnits="userSpaceOnUse" x1="${n(x1)}" y1="${n(y1)}" x2="${n(
+      x2,
+    )}" y2="${n(y2)}">${stops}</linearGradient>`,
+  );
 }
 
 function dash(style: string, w: number): string {

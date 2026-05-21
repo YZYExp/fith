@@ -65,10 +65,25 @@ export interface NodeBase {
   clip?: Clip | null;
 }
 
+export interface GradientStop {
+  /** 0..1 along the gradient line. */
+  offset: number;
+  color: string;
+}
+
+export interface LinearGradientFill {
+  type: 'linear-gradient';
+  /** CSS angle in degrees (0 = to top, 90 = to right). */
+  angle: number;
+  stops: GradientStop[];
+}
+
 export interface BoxNode extends NodeBase {
   kind: 'box';
   /** Solid background color, or null/absent for none. */
   fill?: string | null;
+  /** Background gradient painted over `fill`. */
+  gradient?: LinearGradientFill | null;
   radii: CornerRadii;
   border?: BorderEdges | null;
   shadows?: BoxShadow[];

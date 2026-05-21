@@ -18,4 +18,16 @@ describe('visual regression', () => {
     },
     60_000,
   );
+
+  it(
+    'vectorizes linear gradients faithfully',
+    async () => {
+      const r = await validate(
+        { url: pathToFileURL(resolve(FIXTURES, 'gradients.html')).href },
+        { width: 560, height: 300, name: 'gradients', outDir: OUT },
+      );
+      expect(r.ratio).toBeLessThan(0.01);
+    },
+    60_000,
+  );
 });
