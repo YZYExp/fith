@@ -1,0 +1,45 @@
+{
+  "name": "fitting-html",
+  "version": "0.0.0",
+  "description": "Pixel-faithful HTML to pure SVG conversion using a headless browser engine.",
+  "type": "module",
+  "bin": {
+    "fitting-html": "./dist/backends/node/cli.js"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "render": "tsx scripts/render.ts",
+    "validate": "tsx scripts/validate.ts"
+  },
+  "keywords": [
+    "html",
+    "svg",
+    "html-to-svg",
+    "playwright",
+    "render",
+    "screenshot"
+  ],
+  "license": "MIT",
+  "dependencies": {
+    "playwright": "^1.47.0"
+  },
+  "devDependencies": {
+    "@sparticuz/chromium": "^148.0.0",
+    "@types/node": "^20.0.0",
+    "pixelmatch": "^6.0.0",
+    "pngjs": "^7.0.0",
+    "tsx": "^4.22.3",
+    "typescript": "^5.5.0",
+    "vitest": "^2.0.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
