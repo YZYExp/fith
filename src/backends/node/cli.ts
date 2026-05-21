@@ -17,7 +17,9 @@ async function main() {
   const { out, positional } = parseArgs(process.argv.slice(2));
   const src = positional[0];
   if (!src) {
-    console.error('usage: fitting-html <input.html|url> -o out.svg [--width N] [--height N] [--scale N]');
+    console.error(
+      'usage: fitting-html <input.html|url> -o out.svg [--width N] [--height N] [--scale N] [--font-mode embed|outline|none]',
+    );
     process.exit(1);
   }
   const isUrl = /^https?:\/\//.test(src);
@@ -26,6 +28,7 @@ async function main() {
     width: out.width ? parseInt(out.width, 10) : 1280,
     height: out.height ? parseInt(out.height, 10) : undefined,
     deviceScaleFactor: out.scale ? parseFloat(out.scale) : 1,
+    fontMode: (out['font-mode'] as 'embed' | 'outline' | 'none') || 'embed',
     executablePath: process.env.CHROMIUM_PATH || undefined,
   });
   const dest = out.out || 'out.svg';

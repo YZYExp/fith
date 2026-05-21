@@ -1,0 +1,17 @@
+{
+  "manifest_version": 3,
+  "name": "fitting-html",
+  "version": "0.1.0",
+  "description": "Capture the current page as a self-contained, vector-first SVG.",
+  "permissions": ["activeTab", "tabs"],
+  "host_permissions": ["<all_urls>"],
+  "background": { "service_worker": "background.js", "type": "module" },
+  "action": { "default_title": "Capture page as SVG" },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}

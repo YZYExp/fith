@@ -1,6 +1,8 @@
 import { chromium, type Browser, type Page } from 'playwright';
 import { captureScene } from '../../core/capture/capture.js';
 import { emitSvg } from '../../core/emit/svg.js';
+import { createOutliner } from '../../core/emit/outline.js';
+import { systemFontLoader } from './fonts.js';
 import type { Scene } from '../../core/ir/types.js';
 
 export interface RenderOptions {
@@ -12,6 +14,11 @@ export interface RenderOptions {
   launchArgs?: string[];
   /** Extra wait (ms) after load for late layout/fonts. */
   settleMs?: number;
+  /**
+   * 'embed' (default) inlines @font-face fonts as base64; 'outline' converts text
+   * to glyph <path>s (no font dependency); 'none' references families by name.
+   */
+  fontMode?: 'embed' | 'outline' | 'none';
 }
 
 export type RenderInput = { html: string } | { url: string } | { page: Page };
@@ -45,6 +52,9 @@ async function captureAndEmit(page: Page, opts: RenderOptions): Promise<string> 
     width: opts.width,
     height: opts.height,
     deviceScaleFactor: dsr,
+    // outline mode still needs @font-face bytes to outline webfont glyphs
+    fontMode: (opts.fontMode === 'none' ? 'none' : 'embed') as 'embed' | 'none',
+    collectGlyphX: opts.fontMode === 'outline',
   });
 
   // Resolve raster targets via screenshots.
@@ -64,6 +74,11 @@ async function captureAndEmit(page: Page, opts: RenderOptions): Promise<string> 
     }
   }
 
+  if (opts.fontMode === 'outline') {
+    const outline = createOutliner(scene.fonts, systemFontLoader());
+    scene.fonts = []; // glyphs become paths; no @font-face <style> needed
+    return emitSvg(scene, { outline });
+  }
   return emitSvg(scene);
 }
 

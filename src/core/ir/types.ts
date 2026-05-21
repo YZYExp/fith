@@ -17,6 +17,17 @@ export interface Scene {
   nodes: PaintNode[];
   /** Regions the emitter renders as <image>; filled in by the backend screenshotter. */
   rasterTargets: RasterTarget[];
+  /** @font-face fonts used by text nodes, inlined as base64 in `embed` mode. */
+  fonts: FontFace[];
+}
+
+export interface FontFace {
+  family: string;
+  weight: string;
+  style: string;
+  /** base64 data URI of the font file. */
+  src: string;
+  format: string;
 }
 
 export interface RasterTarget {
@@ -27,7 +38,7 @@ export interface RasterTarget {
   height: number;
 }
 
-export type PaintNode = BoxNode | TextNode | ImageNode | RasterNode;
+export type PaintNode = BoxNode | TextNode | ImageNode | InlineSvgNode | RasterNode;
 
 export interface Rect {
   x: number;
@@ -54,10 +65,25 @@ export interface NodeBase {
   clip?: Clip | null;
 }
 
+export interface GradientStop {
+  /** 0..1 along the gradient line. */
+  offset: number;
+  color: string;
+}
+
+export interface LinearGradientFill {
+  type: 'linear-gradient';
+  /** CSS angle in degrees (0 = to top, 90 = to right). */
+  angle: number;
+  stops: GradientStop[];
+}
+
 export interface BoxNode extends NodeBase {
   kind: 'box';
   /** Solid background color, or null/absent for none. */
   fill?: string | null;
+  /** Background gradient painted over `fill`. */
+  gradient?: LinearGradientFill | null;
   radii: CornerRadii;
   border?: BorderEdges | null;
   shadows?: BoxShadow[];
@@ -88,6 +114,8 @@ export interface TextLine {
   text: string;
   x: number;
   baseline: number;
+  /** Per-character left x (outline mode), aligned to `text` by code unit. */
+  glyphX?: number[];
 }
 
 export interface TextNode extends NodeBase {
@@ -112,6 +140,12 @@ export interface ImageNode extends NodeBase {
   preserveAspectRatio?: string;
 }
 
+export interface InlineSvgNode extends NodeBase {
+  kind: 'inline-svg';
+  /** Serialized <svg> markup, already positioned/sized and color-resolved. */
+  markup: string;
+}
+
 export interface RasterNode extends NodeBase {
   kind: 'raster';
   /** Filled in by the backend; references RasterTarget.id until then. */
@@ -123,4 +157,8 @@ export interface CaptureOptions {
   width: number;
   height?: number;
   deviceScaleFactor?: number;
+  /** 'embed' inlines @font-face files as base64; 'none' references families by name. */
+  fontMode?: 'embed' | 'none';
+  /** Capture per-glyph x positions for outline mode (slower). */
+  collectGlyphX?: boolean;
 }

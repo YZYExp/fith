@@ -3,8 +3,8 @@
 把任意 HTML（含 CSS）**像素级忠实地**转换为一份**纯 SVG**。
 
 - 复用浏览器引擎计算布局，只负责把渲染结果翻译成 SVG —— 不自研排版引擎。
-- 向量优先（盒子 / 文本 / 边框 / 圆角 / 阴影），SVG 无法忠实表达的特性局部栅格化兜底。
-- 输出单个自包含 `.svg`（图片、回退图全部内联为 base64）。
+- 向量优先（盒子 / 文本 / 边框 / 圆角 / 阴影 / 线性渐变 / 内联 SVG 图标），SVG 无法忠实表达的特性局部栅格化兜底。
+- 输出单个自包含 `.svg`：`@font-face` 字体 base64 内联（`embed`），或字形轮廓化为 `<path>` 彻底去字体依赖（`outline`）；图片、回退图全部内联。
 - **捕获层用纯 DOM API 实现、与环境解耦**：同一核心可在 Node（headless Chrome）、浏览器插件、页内库三种形态运行。
 
 ## 用法
@@ -22,6 +22,16 @@ CLI：
 fitting-html input.html -o out.svg --width 1280 --scale 2
 fitting-html https://example.com -o out.svg
 ```
+
+页内 / 浏览器插件（同一核心，纯 DOM，无 Node）：
+
+```ts
+import { captureCurrentPage } from 'fitting-html/browser';
+const svg = await captureCurrentPage({ fontMode: 'embed' });
+// 插件中由 content script 调用，栅格回退经 service worker 的 captureVisibleTab 提供
+```
+
+构建 MV3 插件：`npm run build:extension` → `dist/extension/`（`chrome://extensions` 加载）。
 
 ## 工作原理
 

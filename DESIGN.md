@@ -298,11 +298,12 @@ const { svg } = await captureCurrentPage({ fontMode: 'outline' });
 
 ## 12. 实施现状
 
-M1–M6 的核心已落地并通过端到端验证：
+M1–M8 的核心已落地并通过端到端验证：
 
-- **捕获**（`src/core/capture/capture.ts`，纯 DOM、可注入）：DOM 遍历、层叠 paint order（positioned + z-index 分组）、逐行文本（`Range.getClientRects` + canvas 字体度量推算基线）、overflow/圆角裁剪栈、累积不透明度、栅格回退判定。
-- **发射**（`src/core/emit/svg.ts`，纯函数）：盒子背景、统一/异色边框、圆角（rx 或 path）、外阴影（高斯模糊 filter）、逐行 `<text>`、`<image>` 内联、clipPath 去重。
-- **Node 后端**（`src/backends/node/playwright.ts`）：Playwright 启动 Chromium、注入捕获、为回退区域截图内联。
-- **验证**：`examples/antd-app`（Vite+React+Antd 复杂仪表盘）端到端逐像素对比，**差异 < 0.01%**；`test/` 含发射器单测与视觉回归。
+- **捕获**（`src/core/capture/capture.ts`，纯 DOM、可注入）：DOM 遍历、层叠 paint order（positioned + z-index 分组）、逐行文本（`Range.getClientRects` + canvas 字体度量推算基线、可选逐字形 x）、overflow/圆角裁剪栈、累积不透明度、单层 linear-gradient 解析、内联 `<svg>` 转写、`@font-face` 收集与 base64 内联、栅格回退判定。
+- **发射**（`src/core/emit/svg.ts`，纯函数）：盒子背景、统一/异色边框、圆角（rx 或 path）、外阴影（高斯模糊 filter）、线性渐变 `<linearGradient>`、逐行 `<text>` 或字形轮廓 `<path>`、`<image>` 内联、内联 SVG 图标 defs+use 去重、clipPath/渐变/filter 去重、`@font-face <style>`。
+- **字体**：`embed`（base64 内联 @font-face）/ `outline`（opentype.js 字形轮廓化，Node 经 fontconfig 解析系统字体）/ `none` 三种模式。
+- **后端**：Node（`backends/node`，Playwright + 截图回退 + 系统字体）、浏览器/页内库（`backends/browser`，纯 DOM）、MV3 插件（`backends/extension`，content script + service worker 截图回退）。
+- **验证**：`examples/antd-app`（Vite+React+Antd 复杂仪表盘）端到端逐像素对比，embed **差异 < 0.01%**；`test/` 含发射器单测、视觉回归（smoke/gradients/outline）、字体内嵌、in-page 后端等共 18 项。
 
-待办（按规划）：M2/M3 的字体 `embed`/`outline` 内联、linear-gradient 向量化、inset 阴影、M7 浏览器插件/页内库后端、M8 体积优化。
+设计取舍：inset 阴影、conic/radial 渐变、滤镜、表单控件、canvas/video 维持栅格回退（已像素级忠实，向量化收益低/风险高）。

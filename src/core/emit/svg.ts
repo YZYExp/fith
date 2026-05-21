@@ -4,11 +4,14 @@ import type {
   BoxNode,
   TextNode,
   ImageNode,
+  InlineSvgNode,
   RasterNode,
   Clip,
   CornerRadii,
   BorderEdges,
+  LinearGradientFill,
 } from '../ir/types.js';
+import type { Outliner } from './outline.js';
 
 const n = (v: number) => {
   const r = Math.round(v * 100) / 100;
@@ -95,24 +98,66 @@ function emitBox(node: BoxNode, defs: Defs): string {
     out += `<g${filt}>${shape}</g>`;
   }
 
-  if (node.fill) {
-    if (noRadii(radii)) {
-      out += `<rect x="${n(rect.x)}" y="${n(rect.y)}" width="${n(rect.width)}" height="${n(
-        rect.height,
-      )}" fill="${esc(node.fill)}"/>`;
-    } else if (uniformRadii(radii)) {
-      out += `<rect x="${n(rect.x)}" y="${n(rect.y)}" width="${n(rect.width)}" height="${n(
-        rect.height,
-      )}" rx="${n(radii[0])}" fill="${esc(node.fill)}"/>`;
-    } else {
-      out += `<path d="${roundedRectPath(rect.x, rect.y, rect.width, rect.height, radii)}" fill="${esc(
-        node.fill,
-      )}"/>`;
-    }
-  }
+  if (node.fill) out += fillShape(rect, radii, esc(node.fill));
+  if (node.gradient) out += fillShape(rect, radii, `url(#${gradientId(defs, node.gradient, rect)})`);
 
   if (node.border) out += emitBorder(node.border, rect, radii);
   return out;
+}
+
+function fillShape(
+  rect: { x: number; y: number; width: number; height: number },
+  radii: CornerRadii,
+  fill: string,
+): string {
+  if (noRadii(radii)) {
+    return `<rect x="${n(rect.x)}" y="${n(rect.y)}" width="${n(rect.width)}" height="${n(
+      rect.height,
+    )}" fill="${fill}"/>`;
+  }
+  if (uniformRadii(radii)) {
+    return `<rect x="${n(rect.x)}" y="${n(rect.y)}" width="${n(rect.width)}" height="${n(
+      rect.height,
+    )}" rx="${n(radii[0])}" fill="${fill}"/>`;
+  }
+  return `<path d="${roundedRectPath(rect.x, rect.y, rect.width, rect.height, radii)}" fill="${fill}"/>`;
+}
+
+function splitColor(c: string): { color: string; opacity: string } {
+  const m = c.match(/rgba?\(\s*([\d.]+)[,\s]+([\d.]+)[,\s]+([\d.]+)(?:[,/\s]+([\d.]+))?\s*\)/i);
+  if (m && m[4] !== undefined && parseFloat(m[4]) < 1) {
+    return { color: `rgb(${m[1]}, ${m[2]}, ${m[3]})`, opacity: m[4] };
+  }
+  return { color: c, opacity: '1' };
+}
+
+function gradientId(
+  defs: Defs,
+  g: LinearGradientFill,
+  rect: { x: number; y: number; width: number; height: number },
+): string {
+  // CSS 0deg = to top; direction vector in screen coords (y down) = (sinθ, -cosθ)
+  const dx = Math.sin((g.angle * Math.PI) / 180);
+  const dy = -Math.cos((g.angle * Math.PI) / 180);
+  const cx = rect.x + rect.width / 2;
+  const cy = rect.y + rect.height / 2;
+  const len = (Math.abs(rect.width * dx) + Math.abs(rect.height * dy)) / 2;
+  const x1 = cx - dx * len;
+  const y1 = cy - dy * len;
+  const x2 = cx + dx * len;
+  const y2 = cy + dy * len;
+  const stops = g.stops
+    .map((s) => {
+      const { color, opacity } = splitColor(s.color);
+      const op = opacity !== '1' ? ` stop-opacity="${opacity}"` : '';
+      return `<stop offset="${n(s.offset * 100)}%" stop-color="${esc(color)}"${op}/>`;
+    })
+    .join('');
+  return defs.add(
+    `<linearGradient id="{ID}" gradientUnits="userSpaceOnUse" x1="${n(x1)}" y1="${n(y1)}" x2="${n(
+      x2,
+    )}" y2="${n(y2)}">${stops}</linearGradient>`,
+  );
 }
 
 function dash(style: string, w: number): string {
@@ -165,10 +210,27 @@ function emitBorder(b: BorderEdges, rect: { x: number; y: number; width: number;
   return out;
 }
 
-function emitText(node: TextNode): string {
+function emitText(node: TextNode, outline?: Outliner): string {
+  if (outline) {
+    const paths: string[] = [];
+    let allOutlined = true;
+    for (const l of node.lines) {
+      const d = outline(node, l);
+      if (d) paths.push(`<path d="${d}" fill="${esc(node.color)}"/>`);
+      else {
+        allOutlined = false;
+        break;
+      }
+    }
+    if (allOutlined) return paths.join('');
+    // fall through to <text> if any line couldn't be outlined
+  }
+  const weightAttr = node.fontWeight === '400' || node.fontWeight === 'normal' ? '' : ` font-weight="${esc(node.fontWeight)}"`;
+  const styleAttr = node.fontStyle === 'normal' ? '' : ` font-style="${esc(node.fontStyle)}"`;
   const attrs =
-    `font-family="${esc(node.fontFamily)}" font-size="${n(node.fontSize)}" ` +
-    `font-weight="${esc(node.fontWeight)}" font-style="${esc(node.fontStyle)}" fill="${esc(node.color)}"` +
+    `font-family="${esc(node.fontFamily)}" font-size="${n(node.fontSize)}"${weightAttr}${styleAttr} fill="${esc(
+      node.color,
+    )}"` +
     (node.letterSpacing ? ` letter-spacing="${n(node.letterSpacing)}"` : '') +
     (node.wordSpacing ? ` word-spacing="${n(node.wordSpacing)}"` : '') +
     (node.decoration ? ` text-decoration="${esc(node.decoration)}"` : '') +
@@ -194,6 +256,24 @@ function emitRaster(node: RasterNode): string {
   )}" preserveAspectRatio="none" href="${node.href}"/>`;
 }
 
+function splitInlineSvg(markup: string): { open: string; rest: string; x: string; y: string } {
+  const gt = markup.indexOf('>');
+  let open = markup.slice(0, gt + 1);
+  const rest = markup.slice(gt + 1);
+  const x = (open.match(/\sx="([^"]*)"/) || [])[1] ?? '0';
+  const y = (open.match(/\sy="([^"]*)"/) || [])[1] ?? '0';
+  open = open.replace(/\sx="[^"]*"/, '').replace(/\sy="[^"]*"/, '');
+  return { open, rest, x, y };
+}
+
+function emitInlineSvg(node: InlineSvgNode, defs: Defs, dedupe: boolean): string {
+  if (!dedupe) return node.markup;
+  const { open, rest, x, y } = splitInlineSvg(node.markup);
+  const symbol = open.replace(/^<svg/, '<svg id="{ID}"') + rest;
+  const id = defs.add(symbol);
+  return `<use href="#${id}" x="${x}" y="${y}"/>`;
+}
+
 function wrap(node: PaintNode, inner: string, defs: Defs): string {
   if (!inner) return '';
   const parts: string[] = [];
@@ -204,9 +284,23 @@ function wrap(node: PaintNode, inner: string, defs: Defs): string {
   return `<g ${parts.join(' ')}>${inner}</g>`;
 }
 
-export function emitSvg(scene: Scene): string {
+export interface EmitOptions {
+  /** When provided, text is converted to glyph <path> outlines where possible. */
+  outline?: Outliner;
+}
+
+export function emitSvg(scene: Scene, opts: EmitOptions = {}): string {
   const defs = new Defs();
   const body: string[] = [];
+
+  // count repeated icons (position-independent) so only repeats go to defs+use
+  const iconCounts = new Map<string, number>();
+  for (const node of scene.nodes) {
+    if (node.kind !== 'inline-svg') continue;
+    const { open, rest } = splitInlineSvg(node.markup);
+    const key = open + rest;
+    iconCounts.set(key, (iconCounts.get(key) || 0) + 1);
+  }
 
   for (const node of scene.nodes) {
     let inner = '';
@@ -215,11 +309,16 @@ export function emitSvg(scene: Scene): string {
         inner = emitBox(node, defs);
         break;
       case 'text':
-        inner = emitText(node);
+        inner = emitText(node, opts.outline);
         break;
       case 'image':
         inner = emitImage(node);
         break;
+      case 'inline-svg': {
+        const { open, rest } = splitInlineSvg(node.markup);
+        inner = emitInlineSvg(node, defs, (iconCounts.get(open + rest) || 0) >= 2);
+        break;
+      }
       case 'raster':
         inner = emitRaster(node);
         break;
@@ -237,9 +336,23 @@ export function emitSvg(scene: Scene): string {
     `<svg xmlns="http://www.w3.org/2000/svg" width="${n(scene.width)}" height="${n(
       scene.height,
     )}" viewBox="0 0 ${n(scene.width)} ${n(scene.height)}">` +
+    emitFonts(scene.fonts) +
     defs.render() +
     bg +
     body.join('') +
     `</svg>`
   );
+}
+
+function emitFonts(fonts: Scene['fonts']): string {
+  if (!fonts || fonts.length === 0) return '';
+  const faces = fonts
+    .map(
+      (f) =>
+        `@font-face{font-family:'${f.family.replace(/'/g, '')}';` +
+        `font-weight:${f.weight};font-style:${f.style};` +
+        `src:url(${f.src}) format('${f.format}');}`,
+    )
+    .join('');
+  return `<style>${faces}</style>`;
 }

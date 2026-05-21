@@ -18,6 +18,7 @@ export async function captureScene(opts: CaptureOptions): Promise<Scene> {
 
   const nodes: PaintNode[] = [];
   const rasterTargets: { id: string; x: number; y: number; width: number; height: number }[] = [];
+  const collectGlyphX = !!opts.collectGlyphX;
   let counter = 0;
   const nid = () => 'n' + counter++;
 
@@ -45,6 +46,106 @@ export async function captureScene(opts: CaptureOptions): Promise<Scene> {
       return { a: p[0], b: p[1], c: p[4], d: p[5], e: p[12], f: p[13] };
     }
     return null;
+  };
+
+  const splitTopLevel = (s: string): string[] => {
+    const out: string[] = [];
+    let depth = 0;
+    let cur = '';
+    for (const ch of s) {
+      if (ch === '(') depth++;
+      else if (ch === ')') depth--;
+      if (ch === ',' && depth === 0) {
+        out.push(cur);
+        cur = '';
+      } else cur += ch;
+    }
+    if (cur.trim()) out.push(cur);
+    return out;
+  };
+
+  const sideToAngle: Record<string, number> = {
+    'to top': 0,
+    'to right': 90,
+    'to bottom': 180,
+    'to left': 270,
+  };
+
+  // Parse a single linear-gradient() into a structured fill, or null if it is
+  // anything we don't vectorize (radial/conic/url, corner keywords, px stops,
+  // multiple layers) — those fall back to raster.
+  const parseLinearGradient = (value: string) => {
+    const v = value.trim();
+    if (!/^linear-gradient\(/.test(v)) return null;
+    if (v.lastIndexOf('linear-gradient(') !== 0) return null; // single layer only
+    const inner = v.slice(v.indexOf('(') + 1, v.lastIndexOf(')'));
+    const parts = splitTopLevel(inner).map((p) => p.trim());
+    if (parts.length === 0) return null;
+
+    let angle = 180;
+    let i = 0;
+    const first = parts[0];
+    if (/deg$/.test(first)) {
+      angle = parseFloat(first);
+      i = 1;
+    } else if (/^to\b/.test(first)) {
+      if (!(first in sideToAngle)) return null; // corner keyword: aspect-dependent, raster it
+      angle = sideToAngle[first];
+      i = 1;
+    } else if (/(rad|turn|grad)$/.test(first)) {
+      const num = parseFloat(first);
+      if (/turn$/.test(first)) angle = num * 360;
+      else if (/grad$/.test(first)) angle = num * 0.9;
+      else angle = (num * 180) / Math.PI;
+      i = 1;
+    }
+
+    const stops: { offset: number | null; color: string }[] = [];
+    for (; i < parts.length; i++) {
+      const seg = parts[i];
+      const colorMatch = seg.match(/^(rgba?\([^)]+\)|#[0-9a-fA-F]+|[a-zA-Z]+)/);
+      if (!colorMatch) return null;
+      const color = colorMatch[0];
+      // SVG stop-opacity interpolation diverges from CSS when stop alphas differ;
+      // raster gradients with any non-opaque stop to stay faithful.
+      const alpha = color.match(/rgba\([^)]*,\s*([\d.]+)\s*\)$/);
+      if ((alpha && parseFloat(alpha[1]) < 1) || color === 'transparent') return null;
+      const rest = seg.slice(color.length).trim();
+      const positions = rest ? rest.split(/\s+/) : [];
+      if (positions.length === 0) {
+        stops.push({ offset: null, color });
+      } else {
+        for (const p of positions) {
+          if (!/%$/.test(p)) return null; // px / other units: raster
+          stops.push({ offset: parseFloat(p) / 100, color });
+        }
+      }
+    }
+    if (stops.length < 2) return null;
+
+    // fill missing offsets (CSS rules) and enforce monotonic non-decreasing
+    if (stops[0].offset == null) stops[0].offset = 0;
+    if (stops[stops.length - 1].offset == null) stops[stops.length - 1].offset = 1;
+    let lastDefined = 0;
+    for (let k = 1; k < stops.length; k++) {
+      if (stops[k].offset != null) {
+        const gap = k - lastDefined;
+        if (gap > 1) {
+          const start = stops[lastDefined].offset as number;
+          const end = stops[k].offset as number;
+          for (let j = 1; j < gap; j++) stops[lastDefined + j].offset = start + ((end - start) * j) / gap;
+        }
+        lastDefined = k;
+      }
+    }
+    let prev = 0;
+    const finalStops = stops.map((s) => {
+      let off = Math.max(0, Math.min(1, s.offset as number));
+      off = Math.max(off, prev);
+      prev = off;
+      return { offset: off, color: s.color };
+    });
+    return { type: 'linear-gradient' as const, angle, stops: finalStops };
   };
 
   const radiiOf = (cs: CSSStyleDeclaration): CornerRadii => [
@@ -91,7 +192,7 @@ export async function captureScene(opts: CaptureOptions): Promise<Scene> {
 
   const needsRaster = (el: Element, cs: CSSStyleDeclaration) => {
     const tag = el.tagName.toUpperCase();
-    if (['CANVAS', 'VIDEO', 'IFRAME', 'SVG', 'OBJECT', 'EMBED'].includes(tag)) return 'media:' + tag;
+    if (['CANVAS', 'VIDEO', 'IFRAME', 'OBJECT', 'EMBED'].includes(tag)) return 'media:' + tag;
     if (['INPUT', 'SELECT', 'TEXTAREA', 'PROGRESS', 'METER'].includes(tag)) return 'form-control';
     if (cs.filter && cs.filter !== 'none') return 'filter';
     if ((cs as any).backdropFilter && (cs as any).backdropFilter !== 'none') return 'backdrop-filter';
@@ -101,7 +202,8 @@ export async function captureScene(opts: CaptureOptions): Promise<Scene> {
     if (cs.clipPath && cs.clipPath !== 'none') return 'clip-path';
     const m = parseMatrix(cs.transform);
     if (m && (Math.abs(m.b) > 1e-3 || Math.abs(m.c) > 1e-3)) return 'transform-rotate';
-    if (cs.backgroundImage && cs.backgroundImage !== 'none') return 'background-image';
+    if (cs.backgroundImage && cs.backgroundImage !== 'none' && !parseLinearGradient(cs.backgroundImage))
+      return 'background-image';
     if (cs.boxShadow && cs.boxShadow.includes('inset')) return 'inset-shadow';
     if (cs.borderTopStyle === 'double' || cs.borderTopStyle === 'groove' || cs.borderTopStyle === 'ridge')
       return 'border-style';
@@ -188,8 +290,32 @@ export async function captureScene(opts: CaptureOptions): Promise<Scene> {
       const rects = Array.from(range.getClientRects()).filter((r) => r.width > 0 && r.height > 0);
       if (rects.length === 0) continue;
 
-      const lines: { text: string; x: number; baseline: number }[] = [];
-      if (rects.length === 1) {
+      const lines: { text: string; x: number; baseline: number; glyphX?: number[] }[] = [];
+      if (collectGlyphX) {
+        // capture each glyph's exact x so outline mode matches the browser's
+        // shaping (kerning/hinting) instead of accumulating advance-width drift
+        const buckets = new Map<number, { chars: string[]; xs: number[]; top: number; height: number }>();
+        for (let i = 0; i < raw.length; i++) {
+          const cr = document.createRange();
+          cr.setStart(child, i);
+          cr.setEnd(child, i + 1);
+          const rb = cr.getBoundingClientRect();
+          if (rb.width === 0 && rb.height === 0) continue;
+          const key = Math.round(rb.top);
+          let b = buckets.get(key);
+          if (!b) {
+            b = { chars: [], xs: [], top: rb.top, height: rb.height };
+            buckets.set(key, b);
+          }
+          b.chars.push(raw[i]);
+          b.xs.push(rb.left);
+        }
+        for (const b of Array.from(buckets.values()).sort((a, c) => a.top - c.top)) {
+          if (b.chars.length === 0) continue;
+          const baseline = b.top + (b.height - (ascent + descent)) / 2 + ascent;
+          lines.push({ text: b.chars.join(''), x: b.xs[0], baseline, glyphX: b.xs });
+        }
+      } else if (rects.length === 1) {
         const r = rects[0];
         const text = raw.replace(/\s+/g, ' ').trim();
         const baseline = r.top + (r.height - (ascent + descent)) / 2 + ascent;
@@ -260,7 +386,9 @@ export async function captureScene(opts: CaptureOptions): Promise<Scene> {
         }
       : null;
     const shadows = parseShadows(cs.boxShadow);
-    if (!fill && !border && shadows.length === 0) return;
+    const gradient =
+      cs.backgroundImage && cs.backgroundImage !== 'none' ? parseLinearGradient(cs.backgroundImage) : null;
+    if (!fill && !gradient && !border && shadows.length === 0) return;
     nodes.push({
       kind: 'box',
       id: nid(),
@@ -268,6 +396,7 @@ export async function captureScene(opts: CaptureOptions): Promise<Scene> {
       opacity,
       clip,
       fill,
+      gradient,
       radii: radiiOf(cs),
       border,
       shadows,
@@ -285,6 +414,26 @@ export async function captureScene(opts: CaptureOptions): Promise<Scene> {
     const reason = needsRaster(el, cs);
     if (reason) {
       pushRaster(r, clip, opacity, reason);
+      return;
+    }
+
+    if (el.tagName.toLowerCase() === 'svg') {
+      const clone = el.cloneNode(true) as SVGElement;
+      clone.setAttribute('x', String(r.left));
+      clone.setAttribute('y', String(r.top));
+      clone.setAttribute('width', String(r.width));
+      clone.setAttribute('height', String(r.height));
+      // resolve currentColor used by icon fonts/icons
+      (clone as any).style.color = cs.color;
+      if (!clone.getAttribute('xmlns')) clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+      nodes.push({
+        kind: 'inline-svg',
+        id: nid(),
+        rect: { x: r.left, y: r.top, width: r.width, height: r.height },
+        opacity,
+        clip,
+        markup: clone.outerHTML,
+      });
       return;
     }
 
@@ -351,6 +500,8 @@ export async function captureScene(opts: CaptureOptions): Promise<Scene> {
   await walk(document.documentElement, null, 1);
   await Promise.all(imgTasks);
 
+  const fonts = (opts.fontMode ?? 'embed') === 'embed' ? await collectFonts(nodes) : [];
+
   return {
     width: W,
     height: H,
@@ -358,5 +509,67 @@ export async function captureScene(opts: CaptureOptions): Promise<Scene> {
     background: rootBg,
     nodes,
     rasterTargets,
+    fonts,
   };
+
+  async function collectFonts(painted: PaintNode[]) {
+    // families actually referenced by text nodes
+    const used = new Set<string>();
+    for (const node of painted) {
+      if (node.kind !== 'text') continue;
+      for (const fam of node.fontFamily.split(',')) {
+        used.add(fam.trim().replace(/^["']|["']$/g, '').toLowerCase());
+      }
+    }
+
+    const fmtFromUrl = (url: string, hint?: string) => {
+      const h = (hint || '').toLowerCase();
+      if (h.includes('woff2')) return 'woff2';
+      if (h.includes('woff')) return 'woff';
+      if (h.includes('truetype')) return 'truetype';
+      if (h.includes('opentype')) return 'opentype';
+      if (/\.woff2(\?|$)/i.test(url)) return 'woff2';
+      if (/\.woff(\?|$)/i.test(url)) return 'woff';
+      if (/\.otf(\?|$)/i.test(url)) return 'opentype';
+      return 'truetype';
+    };
+
+    const out: { family: string; weight: string; style: string; src: string; format: string }[] = [];
+    const seen = new Set<string>();
+
+    for (const sheet of Array.from(document.styleSheets)) {
+      let rules: CSSRuleList;
+      try {
+        rules = (sheet as CSSStyleSheet).cssRules;
+        if (!rules) continue;
+      } catch {
+        continue; // cross-origin sheet
+      }
+      for (const rule of Array.from(rules)) {
+        if (rule.constructor.name !== 'CSSFontFaceRule' && (rule as any).type !== 5) continue;
+        const style = (rule as CSSFontFaceRule).style;
+        const family = style.getPropertyValue('font-family').trim().replace(/^["']|["']$/g, '');
+        if (!family || !used.has(family.toLowerCase())) continue;
+        const weight = style.getPropertyValue('font-weight') || '400';
+        const fstyle = style.getPropertyValue('font-style') || 'normal';
+        const src = style.getPropertyValue('src');
+        if (!src) continue;
+        const key = family + '|' + weight + '|' + fstyle;
+        if (seen.has(key)) continue;
+
+        // pick first url() src (prefer woff2)
+        const entries = Array.from(src.matchAll(/url\(([^)]+)\)(?:\s*format\(([^)]+)\))?/g)).map((m) => ({
+          url: m[1].trim().replace(/^["']|["']$/g, ''),
+          hint: (m[2] || '').replace(/["']/g, ''),
+        }));
+        if (entries.length === 0) continue;
+        const pick = entries.find((e) => /woff2/i.test(e.hint) || /\.woff2/i.test(e.url)) || entries[0];
+        const dataUrl = await fetchDataURL(new URL(pick.url, document.baseURI).href);
+        if (!dataUrl) continue;
+        seen.add(key);
+        out.push({ family, weight, style: fstyle, src: dataUrl, format: fmtFromUrl(pick.url, pick.hint) });
+      }
+    }
+    return out;
+  }
 }
