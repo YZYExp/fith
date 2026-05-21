@@ -114,6 +114,8 @@ export interface TextLine {
   text: string;
   x: number;
   baseline: number;
+  /** Per-character left x (outline mode), aligned to `text` by code unit. */
+  glyphX?: number[];
 }
 
 export interface TextNode extends NodeBase {
@@ -157,4 +159,6 @@ export interface CaptureOptions {
   deviceScaleFactor?: number;
   /** 'embed' inlines @font-face files as base64; 'none' references families by name. */
   fontMode?: 'embed' | 'none';
+  /** Capture per-glyph x positions for outline mode (slower). */
+  collectGlyphX?: boolean;
 }

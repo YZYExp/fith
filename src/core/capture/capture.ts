@@ -18,6 +18,7 @@ export async function captureScene(opts: CaptureOptions): Promise<Scene> {
 
   const nodes: PaintNode[] = [];
   const rasterTargets: { id: string; x: number; y: number; width: number; height: number }[] = [];
+  const collectGlyphX = !!opts.collectGlyphX;
   let counter = 0;
   const nid = () => 'n' + counter++;
 
@@ -289,8 +290,32 @@ export async function captureScene(opts: CaptureOptions): Promise<Scene> {
       const rects = Array.from(range.getClientRects()).filter((r) => r.width > 0 && r.height > 0);
       if (rects.length === 0) continue;
 
-      const lines: { text: string; x: number; baseline: number }[] = [];
-      if (rects.length === 1) {
+      const lines: { text: string; x: number; baseline: number; glyphX?: number[] }[] = [];
+      if (collectGlyphX) {
+        // capture each glyph's exact x so outline mode matches the browser's
+        // shaping (kerning/hinting) instead of accumulating advance-width drift
+        const buckets = new Map<number, { chars: string[]; xs: number[]; top: number; height: number }>();
+        for (let i = 0; i < raw.length; i++) {
+          const cr = document.createRange();
+          cr.setStart(child, i);
+          cr.setEnd(child, i + 1);
+          const rb = cr.getBoundingClientRect();
+          if (rb.width === 0 && rb.height === 0) continue;
+          const key = Math.round(rb.top);
+          let b = buckets.get(key);
+          if (!b) {
+            b = { chars: [], xs: [], top: rb.top, height: rb.height };
+            buckets.set(key, b);
+          }
+          b.chars.push(raw[i]);
+          b.xs.push(rb.left);
+        }
+        for (const b of Array.from(buckets.values()).sort((a, c) => a.top - c.top)) {
+          if (b.chars.length === 0) continue;
+          const baseline = b.top + (b.height - (ascent + descent)) / 2 + ascent;
+          lines.push({ text: b.chars.join(''), x: b.xs[0], baseline, glyphX: b.xs });
+        }
+      } else if (rects.length === 1) {
         const r = rects[0];
         const text = raw.replace(/\s+/g, ' ').trim();
         const baseline = r.top + (r.height - (ascent + descent)) / 2 + ascent;

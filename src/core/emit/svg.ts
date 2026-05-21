@@ -11,6 +11,7 @@ import type {
   BorderEdges,
   LinearGradientFill,
 } from '../ir/types.js';
+import type { Outliner } from './outline.js';
 
 const n = (v: number) => {
   const r = Math.round(v * 100) / 100;
@@ -209,10 +210,27 @@ function emitBorder(b: BorderEdges, rect: { x: number; y: number; width: number;
   return out;
 }
 
-function emitText(node: TextNode): string {
+function emitText(node: TextNode, outline?: Outliner): string {
+  if (outline) {
+    const paths: string[] = [];
+    let allOutlined = true;
+    for (const l of node.lines) {
+      const d = outline(node, l);
+      if (d) paths.push(`<path d="${d}" fill="${esc(node.color)}"/>`);
+      else {
+        allOutlined = false;
+        break;
+      }
+    }
+    if (allOutlined) return paths.join('');
+    // fall through to <text> if any line couldn't be outlined
+  }
+  const weightAttr = node.fontWeight === '400' || node.fontWeight === 'normal' ? '' : ` font-weight="${esc(node.fontWeight)}"`;
+  const styleAttr = node.fontStyle === 'normal' ? '' : ` font-style="${esc(node.fontStyle)}"`;
   const attrs =
-    `font-family="${esc(node.fontFamily)}" font-size="${n(node.fontSize)}" ` +
-    `font-weight="${esc(node.fontWeight)}" font-style="${esc(node.fontStyle)}" fill="${esc(node.color)}"` +
+    `font-family="${esc(node.fontFamily)}" font-size="${n(node.fontSize)}"${weightAttr}${styleAttr} fill="${esc(
+      node.color,
+    )}"` +
     (node.letterSpacing ? ` letter-spacing="${n(node.letterSpacing)}"` : '') +
     (node.wordSpacing ? ` word-spacing="${n(node.wordSpacing)}"` : '') +
     (node.decoration ? ` text-decoration="${esc(node.decoration)}"` : '') +
@@ -252,7 +270,12 @@ function wrap(node: PaintNode, inner: string, defs: Defs): string {
   return `<g ${parts.join(' ')}>${inner}</g>`;
 }
 
-export function emitSvg(scene: Scene): string {
+export interface EmitOptions {
+  /** When provided, text is converted to glyph <path> outlines where possible. */
+  outline?: Outliner;
+}
+
+export function emitSvg(scene: Scene, opts: EmitOptions = {}): string {
   const defs = new Defs();
   const body: string[] = [];
 
@@ -263,7 +286,7 @@ export function emitSvg(scene: Scene): string {
         inner = emitBox(node, defs);
         break;
       case 'text':
-        inner = emitText(node);
+        inner = emitText(node, opts.outline);
         break;
       case 'image':
         inner = emitImage(node);

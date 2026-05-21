@@ -5,6 +5,7 @@
  */
 import { captureScene } from '../../core/capture/capture.js';
 import { emitSvg } from '../../core/emit/svg.js';
+import { createOutliner } from '../../core/emit/outline.js';
 import type { Rect, Scene } from '../../core/ir/types.js';
 
 export interface InPageOptions {
@@ -13,7 +14,8 @@ export interface InPageOptions {
   /** Defaults to the full document height. */
   height?: number;
   deviceScaleFactor?: number;
-  fontMode?: 'embed' | 'none';
+  /** 'outline' works for @font-face fonts in-page (no system-font access). */
+  fontMode?: 'embed' | 'outline' | 'none';
   /**
    * Optional rasterizer for regions the core cannot vectorize (canvas, video,
    * filters, native form controls, …). Pure in-page contexts can't screenshot
@@ -31,7 +33,8 @@ export async function captureCurrentPage(opts: InPageOptions = {}): Promise<stri
       opts.height ??
       Math.max(document.documentElement.scrollHeight, document.body ? document.body.scrollHeight : 0),
     deviceScaleFactor: opts.deviceScaleFactor ?? window.devicePixelRatio ?? 1,
-    fontMode: opts.fontMode ?? 'embed',
+    fontMode: opts.fontMode === 'none' ? 'none' : 'embed',
+    collectGlyphX: opts.fontMode === 'outline',
   });
 
   if (opts.rasterize) {
@@ -47,6 +50,11 @@ export async function captureCurrentPage(opts: InPageOptions = {}): Promise<stri
     }
   }
 
+  if (opts.fontMode === 'outline') {
+    const outline = createOutliner(scene.fonts);
+    scene.fonts = [];
+    return emitSvg(scene, { outline });
+  }
   return emitSvg(scene);
 }
 

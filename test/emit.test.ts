@@ -101,6 +101,68 @@ describe('emitSvg', () => {
     expect(svg.match(/<clipPath/g)?.length).toBe(1);
   });
 
+  it('emits glyph <path> instead of <text> when an outliner is provided', () => {
+    const textNode: Scene['nodes'][number] = {
+      kind: 'text',
+      id: 't',
+      rect: { x: 0, y: 0, width: 50, height: 20 },
+      opacity: 1,
+      lines: [{ text: 'hi', x: 0, baseline: 10 }],
+      fontFamily: 'sans-serif',
+      fontSize: 14,
+      fontWeight: '400',
+      fontStyle: 'normal',
+      color: 'black',
+      letterSpacing: 0,
+      wordSpacing: 0,
+    };
+    const svg = emitSvg(base([textNode]), { outline: () => 'M0,0 L10,0 L10,10 Z' });
+    expect(svg).toContain('<path d="M0,0 L10,0 L10,10 Z" fill="black"/>');
+    expect(svg).not.toContain('<text');
+  });
+
+  it('falls back to <text> when the outliner returns null', () => {
+    const textNode: Scene['nodes'][number] = {
+      kind: 'text',
+      id: 't',
+      rect: { x: 0, y: 0, width: 50, height: 20 },
+      opacity: 1,
+      lines: [{ text: 'hi', x: 0, baseline: 10 }],
+      fontFamily: 'sans-serif',
+      fontSize: 14,
+      fontWeight: '400',
+      fontStyle: 'normal',
+      color: 'black',
+      letterSpacing: 0,
+      wordSpacing: 0,
+    };
+    const svg = emitSvg(base([textNode]), { outline: () => null });
+    expect(svg).toContain('<text');
+  });
+
+  it('omits default font-weight/style attributes', () => {
+    const svg = emitSvg(
+      base([
+        {
+          kind: 'text',
+          id: 't',
+          rect: { x: 0, y: 0, width: 50, height: 20 },
+          opacity: 1,
+          lines: [{ text: 'hi', x: 0, baseline: 10 }],
+          fontFamily: 'sans-serif',
+          fontSize: 14,
+          fontWeight: '400',
+          fontStyle: 'normal',
+          color: 'black',
+          letterSpacing: 0,
+          wordSpacing: 0,
+        },
+      ]),
+    );
+    expect(svg).not.toContain('font-weight');
+    expect(svg).not.toContain('font-style');
+  });
+
   it('wraps low-opacity nodes in a group', () => {
     const svg = emitSvg(
       base([{ kind: 'box', id: 'a', rect: { x: 0, y: 0, width: 10, height: 10 }, opacity: 0.5, radii: [0, 0, 0, 0], fill: 'red' }]),
