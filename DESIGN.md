@@ -34,11 +34,11 @@
 
 因此架构上**第一原则**：把"捕获"实现为**只用标准 DOM API 的页内脚本**（`getComputedStyle` / `getBoundingClientRect` / `Range.getClientRects`），它直接产出 Scene IR。
 
-- **Node 后端**：用 Puppeteer **或** Playwright（二选一，封在后端里）启动 Chromium，把同一份页内脚本 `page.evaluate` 注入执行，并提供截图能力。
+- **Node 后端**：用 Playwright **或** Puppeteer（二选一，封在后端里）启动 Chromium，把同一份页内脚本 `page.evaluate` 注入执行，并提供截图能力。
 - **插件后端**：把同一份脚本作为 content script 运行；截图走 `chrome.tabs.captureVisibleTab`。
 - **页内库后端**：在当前页直接运行；无截图能力 → `fallback:'none'`。
 
-> **Playwright vs Puppeteer**：对"加载页面+快照"这件事二者几乎等价（都驱动 Chromium、都能开原始 CDP）。Playwright 胜在多浏览器与 auto-wait，Puppeteer 更轻且自带 Chromium。这不是承重决策——封在 Node 后端接口后，换实现只动一个文件。默认用 Puppeteer，保留可换。
+> **Playwright vs Puppeteer**：对"加载页面+快照"这件事二者几乎等价（都驱动 Chromium、都能开原始 CDP）。**默认用 Playwright**（团队更熟、auto-wait 稳、多浏览器可扩展）；Puppeteer 作为同接口的可选替代。封在 Node 后端接口后，换实现只动一个文件，不是承重决策。
 
 **代价**：CDP `DOMSnapshot` 本来免费给出 Chrome 的精确 paint order；改走页内后，需要**自己实现层叠上下文的绘制排序**（CSS 已规范的算法，繁琐但确定）。好处是捕获只有一套、各环境行为完全一致；且 Node 测试里可用 CDP `paintOrders` 作为**校验基准（oracle）**，验证我们的排序算法与 Chrome 一致（见 §10）。
 
@@ -48,7 +48,7 @@
 
 ```
                          ┌──────────────── 环境后端（薄壳，可替换）────────────────┐
-   HTML / URL / 现有页面 │  Node: Puppeteer|Playwright 启动 Chromium 并注入脚本     │
+   HTML / URL / 现有页面 │  Node: Playwright|Puppeteer 启动 Chromium 并注入脚本     │
                          │  插件: content script 直接运行；页内库: 当前页运行       │
                          └───────────────────────────┬─────────────────────────────┘
                                                       │ 注入/直接运行
@@ -80,7 +80,7 @@
 
 ```
 src/
-  core/         ★ 纯 TS，跨环境共用，可 bundle 进插件（禁止 import 任何 node/puppeteer）
+  core/         ★ 纯 TS，跨环境共用，可 bundle 进插件（禁止 import 任何 node/playwright/puppeteer）
     capture/        页内捕获（只用标准 DOM API）
       walk.ts           遍历 DOM + getComputedStyle/getBoundingClientRect
       paint-order.ts    自实现层叠上下文绘制排序（CDP-free）
@@ -105,8 +105,8 @@ src/
 
   backends/     ★ 环境适配（各自只在对应形态打包）
     node/
-      puppeteer.ts      默认：启动 Chromium、注入 core 捕获脚本、截图回退
-      playwright.ts     可选替代实现（同接口）
+      playwright.ts     默认：启动 Chromium、注入 core 捕获脚本、截图回退
+      puppeteer.ts      可选替代实现（同接口）
       cli.ts            命令行入口
     extension/
       content.ts        content script：直接运行 core 捕获
@@ -183,7 +183,7 @@ interface CaptureBackend {
 向量做不到 100% 的特性，用**局部栅格化**兜底：把该元素/子树按 `devicePixelRatio` 截高清图，作为 `<image>` 放到 IR 中它原本的绘制位置和尺寸。
 
 **截图能力由后端注入**（见 §3 `CaptureBackend.rasterize`），core 不直接调用任何环境 API：
-- Node 后端：Puppeteer/Playwright `element.screenshot()` 或 CDP clip 截图。
+- Node 后端：Playwright/Puppeteer `element.screenshot()` 或 CDP clip 截图。
 - 插件后端：`chrome.tabs.captureVisibleTab`（仅可视区，必要时滚动拼接）。
 - 页内库后端：**无截图能力** → 自动降级 `fallback:'none'`。
 
@@ -200,7 +200,7 @@ interface CaptureBackend {
 
 - **语言**：TypeScript（strict）。`core/` 严禁依赖 Node API，保证可 bundle 进浏览器。
 - **`core/` 依赖**：仅 `opentype.js`（字体轮廓化，浏览器/Node 通用）+ 轻量自写 CSS 值 parser（计算值已被浏览器规范化，解析压力小）。**不依赖 puppeteer/playwright。**
-- **`backends/node/`**：`puppeteer`（默认，自带 Chromium）。`playwright` 作为同接口的可选替代实现；Node 测试里另用 CDP `DOMSnapshot.paintOrders` 仅作校验基准。
+- **`backends/node/`**：`playwright`（默认，`playwright install chromium` 拉浏览器）。`puppeteer` 作为同接口的可选替代实现；Node 测试里用 CDP `DOMSnapshot.paintOrders` 仅作校验基准。
 - **`backends/extension/`**：Chrome Extension MV3（`scripting` / `tabs` 权限），无第三方运行时依赖。
 - **测试**：`vitest` + `pixelmatch` + `pngjs`（视觉回归）。
 - **构建**：`tsup`/`tsc` 多目标产物——npm 库（ESM+CJS）、CLI `bin`、插件 bundle（IIFE/单文件）。
@@ -223,11 +223,11 @@ const svg: string = await htmlToSvg(html, {
 });
 ```
 
-也支持 URL / 已有 Puppeteer Page 作为输入：
+也支持 URL / 已有 Playwright Page 作为输入：
 
 ```ts
 htmlToSvg({ url: 'https://example.com' }, opts);
-htmlToSvg({ page }, opts);   // 复用调用方的 page，便于批量
+htmlToSvg({ page }, opts);   // 复用调用方的 Playwright page，便于批量
 ```
 
 CLI：

@@ -1,7 +1,7 @@
 /**
  * Public API surface (planned). Implementation lands per milestone — see DESIGN.md.
  */
-import type { Page } from 'puppeteer';
+import type { Page } from 'playwright';
 
 export type * from './ir/types.js';
 
@@ -22,7 +22,7 @@ export interface ConvertOptions {
   optimize?: boolean;
 }
 
-/** Input may be raw HTML, a URL, or a caller-owned Puppeteer page (for batching). */
+/** Input may be raw HTML, a URL, or a caller-owned Playwright page (for batching). */
 export type ConvertInput =
   | string
   | { html: string }
