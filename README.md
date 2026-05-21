@@ -23,6 +23,16 @@ fitting-html input.html -o out.svg --width 1280 --scale 2
 fitting-html https://example.com -o out.svg
 ```
 
+页内 / 浏览器插件（同一核心，纯 DOM，无 Node）：
+
+```ts
+import { captureCurrentPage } from 'fitting-html/browser';
+const svg = await captureCurrentPage({ fontMode: 'embed' });
+// 插件中由 content script 调用，栅格回退经 service worker 的 captureVisibleTab 提供
+```
+
+构建 MV3 插件：`npm run build:extension` → `dist/extension/`（`chrome://extensions` 加载）。
+
 ## 工作原理
 
 ```
