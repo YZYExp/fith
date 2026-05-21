@@ -1,41 +1,21 @@
 /**
- * Public API surface (planned). Implementation lands per milestone — see DESIGN.md.
+ * Public API. Default entry = core pipeline + Node (Playwright) backend.
  */
-import type { Page } from 'playwright';
+export type * from './core/ir/types.js';
+export { emitSvg } from './core/emit/svg.js';
+export { captureScene } from './core/capture/capture.js';
+export { renderToSvg } from './backends/node/playwright.js';
+export type { RenderInput, RenderOptions } from './backends/node/playwright.js';
 
-export type * from './ir/types.js';
+import { renderToSvg, type RenderInput, type RenderOptions } from './backends/node/playwright.js';
 
-export interface ConvertOptions {
-  /** Viewport width in CSS px (required). */
-  width: number;
-  /** Viewport height in CSS px; omit to use content height. */
-  height?: number;
-  /** Resolution multiplier for raster fallbacks and image embedding. */
-  deviceScaleFactor?: number;
-  /** 'embed' keeps selectable <text> + base64 webfonts; 'outline' vectorizes glyphs to <path>. */
-  fontMode?: 'embed' | 'outline';
-  /** 'raster' falls back to <image> for non-vectorizable regions; 'none' approximates and warns. */
-  fallback?: 'raster' | 'none';
-  /** Page background; 'transparent' to keep alpha. */
-  background?: string;
-  /** Enable defs dedup + path/number minification. */
-  optimize?: boolean;
-}
+export interface ConvertOptions extends RenderOptions {}
 
-/** Input may be raw HTML, a URL, or a caller-owned Playwright page (for batching). */
-export type ConvertInput =
-  | string
-  | { html: string }
-  | { url: string }
-  | { page: Page };
-
-export interface ConvertResult {
-  svg: string;
-  /** Non-fatal notes, e.g. regions that were rasterized in 'none' mode. */
-  warnings: string[];
-}
-
-export declare function htmlToSvg(
-  input: ConvertInput,
+/** Convert HTML / a URL into a self-contained SVG string. */
+export async function htmlToSvg(
+  input: string | RenderInput,
   options: ConvertOptions,
-): Promise<ConvertResult>;
+): Promise<string> {
+  const normalized: RenderInput = typeof input === 'string' ? { html: input } : input;
+  return renderToSvg(normalized, options);
+}

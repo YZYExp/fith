@@ -296,6 +296,13 @@ const { svg } = await captureCurrentPage({ fontMode: 'outline' });
 
 ---
 
-## 12. 下一步
+## 12. 实施现状
 
-M0 脚手架（package.json / tsconfig / IR 类型 / 公共 API 签名）已随本规划落地，见 `src/`。捕获/发射/后端为按里程碑落地的骨架。批准后即可从 **M1 捕获核心（纯 DOM walk + 自实现 paint order）** 开始迭代。
+M1–M6 的核心已落地并通过端到端验证：
+
+- **捕获**（`src/core/capture/capture.ts`，纯 DOM、可注入）：DOM 遍历、层叠 paint order（positioned + z-index 分组）、逐行文本（`Range.getClientRects` + canvas 字体度量推算基线）、overflow/圆角裁剪栈、累积不透明度、栅格回退判定。
+- **发射**（`src/core/emit/svg.ts`，纯函数）：盒子背景、统一/异色边框、圆角（rx 或 path）、外阴影（高斯模糊 filter）、逐行 `<text>`、`<image>` 内联、clipPath 去重。
+- **Node 后端**（`src/backends/node/playwright.ts`）：Playwright 启动 Chromium、注入捕获、为回退区域截图内联。
+- **验证**：`examples/antd-app`（Vite+React+Antd 复杂仪表盘）端到端逐像素对比，**差异 < 0.01%**；`test/` 含发射器单测与视觉回归。
+
+待办（按规划）：M2/M3 的字体 `embed`/`outline` 内联、linear-gradient 向量化、inset 阴影、M7 浏览器插件/页内库后端、M8 体积优化。
