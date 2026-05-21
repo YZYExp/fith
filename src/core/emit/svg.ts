@@ -4,6 +4,7 @@ import type {
   BoxNode,
   TextNode,
   ImageNode,
+  InlineSvgNode,
   RasterNode,
   Clip,
   CornerRadii,
@@ -237,6 +238,10 @@ function emitRaster(node: RasterNode): string {
   )}" preserveAspectRatio="none" href="${node.href}"/>`;
 }
 
+function emitInlineSvg(node: InlineSvgNode): string {
+  return node.markup;
+}
+
 function wrap(node: PaintNode, inner: string, defs: Defs): string {
   if (!inner) return '';
   const parts: string[] = [];
@@ -262,6 +267,9 @@ export function emitSvg(scene: Scene): string {
         break;
       case 'image':
         inner = emitImage(node);
+        break;
+      case 'inline-svg':
+        inner = emitInlineSvg(node);
         break;
       case 'raster':
         inner = emitRaster(node);

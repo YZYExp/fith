@@ -191,7 +191,7 @@ export async function captureScene(opts: CaptureOptions): Promise<Scene> {
 
   const needsRaster = (el: Element, cs: CSSStyleDeclaration) => {
     const tag = el.tagName.toUpperCase();
-    if (['CANVAS', 'VIDEO', 'IFRAME', 'SVG', 'OBJECT', 'EMBED'].includes(tag)) return 'media:' + tag;
+    if (['CANVAS', 'VIDEO', 'IFRAME', 'OBJECT', 'EMBED'].includes(tag)) return 'media:' + tag;
     if (['INPUT', 'SELECT', 'TEXTAREA', 'PROGRESS', 'METER'].includes(tag)) return 'form-control';
     if (cs.filter && cs.filter !== 'none') return 'filter';
     if ((cs as any).backdropFilter && (cs as any).backdropFilter !== 'none') return 'backdrop-filter';
@@ -389,6 +389,26 @@ export async function captureScene(opts: CaptureOptions): Promise<Scene> {
     const reason = needsRaster(el, cs);
     if (reason) {
       pushRaster(r, clip, opacity, reason);
+      return;
+    }
+
+    if (el.tagName.toLowerCase() === 'svg') {
+      const clone = el.cloneNode(true) as SVGElement;
+      clone.setAttribute('x', String(r.left));
+      clone.setAttribute('y', String(r.top));
+      clone.setAttribute('width', String(r.width));
+      clone.setAttribute('height', String(r.height));
+      // resolve currentColor used by icon fonts/icons
+      (clone as any).style.color = cs.color;
+      if (!clone.getAttribute('xmlns')) clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+      nodes.push({
+        kind: 'inline-svg',
+        id: nid(),
+        rect: { x: r.left, y: r.top, width: r.width, height: r.height },
+        opacity,
+        clip,
+        markup: clone.outerHTML,
+      });
       return;
     }
 

@@ -38,7 +38,7 @@ export interface RasterTarget {
   height: number;
 }
 
-export type PaintNode = BoxNode | TextNode | ImageNode | RasterNode;
+export type PaintNode = BoxNode | TextNode | ImageNode | InlineSvgNode | RasterNode;
 
 export interface Rect {
   x: number;
@@ -136,6 +136,12 @@ export interface ImageNode extends NodeBase {
   /** base64 data URI, or null if it must be rasterized by the backend. */
   href: string | null;
   preserveAspectRatio?: string;
+}
+
+export interface InlineSvgNode extends NodeBase {
+  kind: 'inline-svg';
+  /** Serialized <svg> markup, already positioned/sized and color-resolved. */
+  markup: string;
 }
 
 export interface RasterNode extends NodeBase {
