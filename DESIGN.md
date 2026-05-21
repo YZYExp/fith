@@ -1,7 +1,8 @@
 # fitting-html 设计规划
 
 > 目标：把任意 HTML（含 CSS）**像素级忠实地**转换为一份**纯 SVG**。
-> 技术栈：TypeScript / Node.js；布局计算复用浏览器引擎（headless Chrome via Puppeteer + CDP）。
+> 技术栈：TypeScript；布局计算复用浏览器引擎。
+> **核心架构约束**：捕获逻辑用纯 DOM API 实现，与运行环境解耦——同一套核心既能在 Node（headless Chrome）跑，也能作为浏览器插件 / 页内库跑（见 §1.4、§3）。
 
 ---
 
@@ -17,69 +18,118 @@
 - 视频 / `<iframe>` 跨源内容的逐帧还原（仅取首帧或占位栅格）。
 - 重排响应式：转换针对一个给定视口尺寸；不同视口需分别转换。
 
-### 1.3 为什么选浏览器引擎
-"完全拟合" 要求和 Chrome 的盒模型、Flex/Grid、文本断行、字体度量、层叠顺序完全一致。自研排版引擎等于重造浏览器，工作量与误差都不可接受。复用 Chrome 计算布局，我们只负责**把已经算好的渲染结果翻译成 SVG**。
+### 1.3 为什么复用浏览器引擎
+"完全拟合" 要求和浏览器的盒模型、Flex/Grid、文本断行、字体度量、层叠顺序完全一致。自研排版引擎等于重造浏览器，工作量与误差都不可接受。复用浏览器已经算好的布局，我们只负责**把渲染结果翻译成 SVG**。
+
+### 1.4 多运行环境：捕获层必须解耦（关键设计）
+本项目要面向多个落地形态，最重要的是**未来作为浏览器插件**：
+
+| 形态 | 代码运行位置 | 能用的能力 |
+|---|---|---|
+| Node CLI / 服务端 | Node 进程驱动外部 Chromium | Puppeteer/Playwright、CDP、截图 |
+| **浏览器插件** | content script，**运行在页面内** | 直接 DOM/CSSOM、`fetch`；**无 Puppeteer/无 CDP** |
+| 页内库 | 任意页面里被 `import` | 直接 DOM/CSSOM；无截图能力 |
+
+关键结论：**Puppeteer 和 Playwright 都跑不进浏览器插件**——它们是 Node 自动化驱动，控制的是「外部」浏览器。如果把捕获写死在 CDP `DOMSnapshot` 上，插件形态将无法复用任何代码。
+
+因此架构上**第一原则**：把"捕获"实现为**只用标准 DOM API 的页内脚本**（`getComputedStyle` / `getBoundingClientRect` / `Range.getClientRects`），它直接产出 Scene IR。
+
+- **Node 后端**：用 Puppeteer **或** Playwright（二选一，封在后端里）启动 Chromium，把同一份页内脚本 `page.evaluate` 注入执行，并提供截图能力。
+- **插件后端**：把同一份脚本作为 content script 运行；截图走 `chrome.tabs.captureVisibleTab`。
+- **页内库后端**：在当前页直接运行；无截图能力 → `fallback:'none'`。
+
+> **Playwright vs Puppeteer**：对"加载页面+快照"这件事二者几乎等价（都驱动 Chromium、都能开原始 CDP）。Playwright 胜在多浏览器与 auto-wait，Puppeteer 更轻且自带 Chromium。这不是承重决策——封在 Node 后端接口后，换实现只动一个文件。默认用 Puppeteer，保留可换。
+
+**代价**：CDP `DOMSnapshot` 本来免费给出 Chrome 的精确 paint order；改走页内后，需要**自己实现层叠上下文的绘制排序**（CSS 已规范的算法，繁琐但确定）。好处是捕获只有一套、各环境行为完全一致；且 Node 测试里可用 CDP `paintOrders` 作为**校验基准（oracle）**，验证我们的排序算法与 Chrome 一致（见 §10）。
 
 ---
 
 ## 2. 核心原理
 
 ```
-HTML ──Puppeteer 加载──▶ Chrome 渲染
-                          │
-                          ▼
-        CDP DOMSnapshot.captureSnapshot
-        (computedStyles + layout boxes + paintOrders + text)
-                          │
-                          ▼
-                 Scene IR（中间表示）
-        扁平的、按绘制顺序排列的 Paint 节点列表，
-        坐标全部是绝对像素，样式已解析为最终计算值
-                          │
-            ┌─────────────┼──────────────┐
-            ▼             ▼              ▼
-       向量发射器     资源内联器      栅格回退引擎
-   (rect/text/path)  (字体/图片)   (不可表达区域→<image>)
-            └─────────────┼──────────────┘
-                          ▼
-                     纯 SVG 文档
+                         ┌──────────────── 环境后端（薄壳，可替换）────────────────┐
+   HTML / URL / 现有页面 │  Node: Puppeteer|Playwright 启动 Chromium 并注入脚本     │
+                         │  插件: content script 直接运行；页内库: 当前页运行       │
+                         └───────────────────────────┬─────────────────────────────┘
+                                                      │ 注入/直接运行
+                                                      ▼
+                         ┌─────────── 页内捕获脚本（纯 DOM API，跨环境共用）──────────┐
+                         │ getComputedStyle · getBoundingClientRect ·                 │
+                         │ Range.getClientRects · 自实现层叠上下文 paint order        │
+                         └───────────────────────────┬─────────────────────────────┘
+                                                      ▼
+                                          Scene IR（中间表示）
+                          扁平、按绘制顺序、绝对像素坐标、样式为计算值
+                                                      │
+                            ┌─────────────────────────┼──────────────────────────┐
+                            ▼                          ▼                          ▼
+                       向量发射器                 资源内联器                 栅格回退引擎
+                   (rect/text/path)            (字体/图片)        (后端提供截图能力时；否则跳过)
+                            └─────────────────────────┼──────────────────────────┘
+                                                      ▼
+                                                 纯 SVG 文档
 ```
 
-关键点：**不手动遍历 DOM 重建绘制顺序**。改用 CDP 的 `DOMSnapshot.captureSnapshot`，一次调用即可拿到全树的计算样式、布局盒、文本盒和**官方 paint order**，从根本上规避层叠上下文 / z-index / float / positioned 的排序坑。
+关键点：**捕获脚本只依赖标准 DOM API**，因此一份代码在 Node（注入）、插件（content script）、页内库三种环境完全一致。绘制顺序由我们自实现的层叠上下文算法给出（Node 测试用 CDP `paintOrders` 校验）。栅格回退是**由后端注入的能力**——有截图能力（Node/插件）才启用，纯页内库无此能力则降级为 `fallback:'none'`。
 
 ---
 
 ## 3. 架构与模块
 
+分层铁律：**`core/` 必须是纯 TypeScript，零 Node 依赖、零 Puppeteer/Playwright 引用**，这样才能整体打包进浏览器插件。环境差异全部隔离在 `backends/`。
+
 ```
 src/
-  capture/      浏览器捕获层：启动 Chrome、加载 HTML、跑 CDP 快照
-    browser.ts        Puppeteer 生命周期
-    snapshot.ts       DOMSnapshot.captureSnapshot 封装 + 解码
-    text-runs.ts      Range.getClientRects 取逐行文本盒 + 基线
-  ir/           中间表示（架构中枢）
-    types.ts          Scene / PaintNode / 各类样式结构（纯类型）
-    build.ts          快照 → IR 的规范化
-  emit/         SVG 发射器：IR → SVG 字符串
-    document.ts       <svg> 骨架、viewBox、defs 管理、id 分配
-    box.ts            背景 / 边框 / 圆角 / 阴影
-    text.ts           <text> 逐行发射 / 字形轮廓化
-    image.ts          <image> 内联
-    gradient.ts       CSS 渐变 → SVG 渐变 defs
-    clip.ts           overflow / border-radius → clipPath
-    transform.ts      CSS transform → matrix
-  assets/       资源内联
-    fonts.ts          @font-face 收集 + base64 内嵌 / opentype.js 轮廓化
-    images.ts         图片/canvas → base64 data URI
-  fallback/     栅格回退
-    detector.ts       判定某子树是否需要栅格化
-    rasterize.ts      对指定区域截图 → <image>
-  optimize/     体积优化（defs 去重、路径精简、可选 minify）
-  cli.ts        命令行入口
-  index.ts      编程式 API
+  core/         ★ 纯 TS，跨环境共用，可 bundle 进插件（禁止 import 任何 node/puppeteer）
+    capture/        页内捕获（只用标准 DOM API）
+      walk.ts           遍历 DOM + getComputedStyle/getBoundingClientRect
+      paint-order.ts    自实现层叠上下文绘制排序（CDP-free）
+      text-runs.ts      Range.getClientRects 取逐行文本盒 + 基线
+      build-ir.ts       测量结果 → Scene IR
+    ir/
+      types.ts          Scene / PaintNode / 样式结构（纯类型）
+    emit/         SVG 发射器：IR → SVG 字符串
+      document.ts       <svg> 骨架、viewBox、defs 管理、id 分配
+      box.ts            背景 / 边框 / 圆角 / 阴影
+      text.ts           <text> 逐行发射 / 字形轮廓化
+      image.ts          <image> 内联
+      gradient.ts       CSS 渐变 → SVG 渐变 defs
+      clip.ts / transform.ts
+    assets/
+      fonts.ts          @font-face 收集 + base64 内嵌 / opentype.js 轮廓化（浏览器亦可用）
+      images.ts         图片/canvas → base64 data URI
+    fallback/
+      detector.ts       判定某子树是否需要栅格化
+    optimize/         defs 去重、路径精简、可选 minify
+    backend.ts        ★ CaptureBackend 接口（注入"加载/截图"等环境能力）
+
+  backends/     ★ 环境适配（各自只在对应形态打包）
+    node/
+      puppeteer.ts      默认：启动 Chromium、注入 core 捕获脚本、截图回退
+      playwright.ts     可选替代实现（同接口）
+      cli.ts            命令行入口
+    extension/
+      content.ts        content script：直接运行 core 捕获
+      rasterize.ts      chrome.tabs.captureVisibleTab 提供截图能力
+    browser/
+      index.ts          页内库：当前页运行 core；无截图 → fallback:'none'
+
+  index.ts      ★ 默认导出 = core + node 后端（npm 主入口）
 test/
   fixtures/     HTML 语料库（按特性分类）
   visual/       视觉回归框架（render→diff）
+  paint-order/  用 CDP paintOrders 作 oracle 校验自实现排序
+```
+
+后端接口（概念）：core 不关心是谁、怎么提供环境能力，只面向接口编程。
+
+```ts
+interface CaptureBackend {
+  /** 让捕获脚本在目标页面上下文执行并返回 IR。 */
+  run<T>(fn: () => T): Promise<T>;
+  /** 可选：把某区域栅格化成 data URI；无此能力 → 不做栅格回退。 */
+  rasterize?(rect: Rect, scale: number): Promise<string>;
+}
 ```
 
 ---
@@ -130,25 +180,30 @@ test/
 
 ## 6. 栅格回退策略（保证"完全拟合"的兜底）
 
-向量做不到 100% 的特性，用**局部栅格化**兜底：对该元素/子树用 Puppeteer 的 `element.screenshot()`（或 CDP clip 截图）按 `devicePixelRatio` 截高清图，作为 `<image>` 放到 IR 中它原本的绘制位置和尺寸。
+向量做不到 100% 的特性，用**局部栅格化**兜底：把该元素/子树按 `devicePixelRatio` 截高清图，作为 `<image>` 放到 IR 中它原本的绘制位置和尺寸。
 
-回退触发条件（`fallback/detector.ts`）：
+**截图能力由后端注入**（见 §3 `CaptureBackend.rasterize`），core 不直接调用任何环境 API：
+- Node 后端：Puppeteer/Playwright `element.screenshot()` 或 CDP clip 截图。
+- 插件后端：`chrome.tabs.captureVisibleTab`（仅可视区，必要时滚动拼接）。
+- 页内库后端：**无截图能力** → 自动降级 `fallback:'none'`。
+
+回退触发条件（`core/fallback/detector.ts`）：
 - `conic-gradient`、复杂 `filter`/`backdrop-filter`、不可直译的 `mix-blend-mode`；
 - 原生表单控件、`<video>`、插件内容；
 - 任何被标记为 "向量化误差超阈值" 的子树。
 
-回退是**可配置的**：`fallback: 'raster' | 'none'`。`none` 模式遇到不可表达特性时记录 warning 并尽力近似，适合追求纯向量的场景。
+回退是**可配置的**：`fallback: 'raster' | 'none'`。`none` 模式（或后端无截图能力时）遇到不可表达特性记录 warning 并尽力近似，适合追求纯向量、或纯页内运行的场景。
 
 ---
 
 ## 7. 技术栈与依赖
 
-- **运行时**：Node.js 18+，TypeScript（strict）。
-- **浏览器驱动**：`puppeteer`（自带 Chromium）+ 直接用 CDP session 调 `DOMSnapshot` / `Page.captureScreenshot`。
-- **字体轮廓化**：`opentype.js`。
-- **CSS 解析辅助**：渐变 / transform / filter 值解析用轻量自写 parser（计算值已被浏览器规范化，解析压力小）。
+- **语言**：TypeScript（strict）。`core/` 严禁依赖 Node API，保证可 bundle 进浏览器。
+- **`core/` 依赖**：仅 `opentype.js`（字体轮廓化，浏览器/Node 通用）+ 轻量自写 CSS 值 parser（计算值已被浏览器规范化，解析压力小）。**不依赖 puppeteer/playwright。**
+- **`backends/node/`**：`puppeteer`（默认，自带 Chromium）。`playwright` 作为同接口的可选替代实现；Node 测试里另用 CDP `DOMSnapshot.paintOrders` 仅作校验基准。
+- **`backends/extension/`**：Chrome Extension MV3（`scripting` / `tabs` 权限），无第三方运行时依赖。
 - **测试**：`vitest` + `pixelmatch` + `pngjs`（视觉回归）。
-- **构建**：`tsup`/`tsc` 双产物（ESM + CJS），`bin` 暴露 CLI。
+- **构建**：`tsup`/`tsc` 多目标产物——npm 库（ESM+CJS）、CLI `bin`、插件 bundle（IIFE/单文件）。
 
 ---
 
@@ -182,21 +237,31 @@ fitting-html input.html -o out.svg --width 1280 --font-mode outline
 fitting-html https://example.com -o out.svg
 ```
 
+**插件 / 页内库**：同一核心，捕获当前页（无需传 width/height，自动取视口）：
+
+```ts
+import { captureCurrentPage } from 'fitting-html/browser';
+const { svg } = await captureCurrentPage({ fontMode: 'outline' });
+// 插件中由 content script 调用；得到 svg 后下载或回传 background
+```
+
 ---
 
 ## 9. 实施里程碑
 
 | 阶段 | 内容 | 产出/验收 |
 |---|---|---|
-| **M0 基建** | 脚手架、IR 类型、Puppeteer 捕获、**纯栅格输出**（整页截图→单 `<image>`）、视觉回归框架 | 跑通端到端管线，建立"天然像素完美"的基线和 diff 工具 |
-| **M1 盒子** | 背景、纯色边框、`border-radius`、`opacity`、定位、paint order | 纯盒子页面向量化 diff < 阈值 |
-| **M2 文本** | 逐行 `<text>`、基线推算、字体 embed/outline | 文本页面 diff < 阈值 |
-| **M3 图像与装饰** | `<img>`/canvas 内联、linear/radial 渐变、box-shadow | |
-| **M4 变换与裁剪** | transform matrix、overflow/clip-path、异色边框 | |
-| **M5 硬骨头 + 回退** | conic、filter、blend、表单控件 → 栅格回退判定引擎 | 真实网页样本整体 diff < 阈值 |
-| **M6 打磨** | defs 去重、路径/数字精简、可选 minify、CLI/文档 | 体积优化、发布 0.1 |
+| **M0 基建** | 脚手架、IR 类型、`CaptureBackend` 接口、Node 后端骨架、**纯栅格输出**（整页截图→单 `<image>`）、视觉回归框架 | 跑通端到端管线，建立"天然像素完美"的基线和 diff 工具 |
+| **M1 捕获核心** | 页内 DOM walk + **自实现 paint order**（用 CDP `paintOrders` 做 oracle 校验）→ Scene IR | 排序与 Chrome 一致 |
+| **M2 盒子** | 背景、纯色边框、`border-radius`、`opacity`、定位 | 纯盒子页面向量化 diff < 阈值 |
+| **M3 文本** | 逐行 `<text>`、基线推算、字体 embed/outline | 文本页面 diff < 阈值 |
+| **M4 图像与装饰** | `<img>`/canvas 内联、linear/radial 渐变、box-shadow | |
+| **M5 变换与裁剪** | transform matrix、overflow/clip-path、异色边框 | |
+| **M6 硬骨头 + 回退** | conic、filter、blend、表单控件 → 栅格回退判定引擎 | 真实网页样本整体 diff < 阈值 |
+| **M7 多形态** | 浏览器插件后端（MV3）、页内库后端、插件 bundle 构建 | 同核心在插件中跑通 |
+| **M8 打磨** | defs 去重、路径/数字精简、可选 minify、CLI/文档 | 体积优化、发布 0.1 |
 
-> 顺序原则：**先用纯栅格建立可度量的基线**，再逐特性把栅格替换成向量，每步都有回归保护——任何时刻输出都是"可用且忠实"的。
+> 顺序原则：**先用纯栅格建立可度量的基线**，再逐特性把栅格替换成向量，每步都有回归保护——任何时刻输出都是"可用且忠实"的。M1 起捕获即走"纯 DOM、跨环境"路线，M7 把插件形态接上时无需重写核心。
 
 ---
 
@@ -211,20 +276,26 @@ fitting-html https://example.com -o out.svg
 
 语料库 `test/fixtures/` 按特性分目录（boxes / text / gradients / shadows / transforms / clipping / real-world …），CI 全量跑 diff。**新特性必须先有 fixture。**
 
+**paint order 校验（Node-only oracle）**：对每个 fixture，用 CDP `DOMSnapshot.captureSnapshot({includePaintOrder:true})` 取 Chrome 的官方绘制顺序，与我们自实现的 `core/capture/paint-order.ts` 输出逐节点比对。这把"自实现排序"的正确性钉死在 Chrome 行为上，且只在测试期用 CDP、运行期完全不依赖。
+
 ---
 
 ## 11. 风险与对策
 
 | 风险 | 对策 |
 |---|---|
+| 自实现 paint order 与 Chrome 不一致 | 用 CDP `paintOrders` 做测试 oracle 钉死（§10）；先覆盖常见层叠场景，边角逐 fixture 收敛 |
 | 独立 SVG 渲染器不支持 webfont/filter，导致"在 Chrome 里像、在别处不像" | 提供 `outline` 字体模式；明确声明目标渲染器（首版基准=Chromium）；filter 不支持时回退栅格 |
 | 文本基线/字间距在边缘场景对不齐 | `getClientRects` 逐字符校准 + 必要时逐 glyph 定位 |
 | 大页面 SVG 体积爆炸（尤其 outline / 大量栅格回退） | defs 去重、坐标精度裁剪、可选 minify、回退图按需 DSR |
-| conic-gradient / 复杂合成无法向量化 | 局部栅格回退（默认开启）保证忠实 |
+| conic-gradient / 复杂合成无法向量化 | 局部栅格回退（有截图能力时默认开启）保证忠实 |
 | 字体许可证：内嵌字体可能涉及版权 | 文档提示；提供 `outline` 模式只嵌用到的字形子集，降低暴露 |
+| 插件形态：跨源字体/图片受 CORS 限制无法读取内联 | content script 经 background `fetch` 或声明 `host_permissions`；读不到时退化为字体引用/栅格回退 |
+| 插件形态：`captureVisibleTab` 仅可视区 | 需要整页时滚动分段截图拼接；或仅向量、长页不依赖截图 |
+| `core/` 误引入 Node 依赖破坏插件可打包性 | 用 lint/构建规则禁止 `core/` import node 内置模块与 puppeteer/playwright（CI 守门） |
 
 ---
 
 ## 12. 下一步
 
-M0 脚手架（package.json / tsconfig / IR 类型 / 捕获管线骨架 / 视觉回归 harness）已随本规划落地，见 `src/` 与 `test/`。批准后即可从 **M1 盒子向量化** 开始迭代。
+M0 脚手架（package.json / tsconfig / IR 类型 / 公共 API 签名）已随本规划落地，见 `src/`。捕获/发射/后端为按里程碑落地的骨架。批准后即可从 **M1 捕获核心（纯 DOM walk + 自实现 paint order）** 开始迭代。
