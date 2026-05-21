@@ -163,6 +163,36 @@ describe('emitSvg', () => {
     expect(svg).not.toContain('font-style');
   });
 
+  it('dedupes repeated inline-svg icons via defs + use', () => {
+    const icon = (id: string, x: number, y: number): Scene['nodes'][number] => ({
+      kind: 'inline-svg',
+      id,
+      rect: { x, y, width: 10, height: 10 },
+      opacity: 1,
+      markup: `<svg x="${x}" y="${y}" width="10" height="10" viewBox="0 0 16 16"><path d="M0 0h16v16H0z"/></svg>`,
+    });
+    const svg = emitSvg(base([icon('a', 0, 0), icon('b', 20, 0), icon('c', 40, 0)]));
+    expect(svg.match(/<use /g)?.length).toBe(3);
+    // the symbol is defined once in defs
+    expect(svg.match(/M0 0h16v16H0z/g)?.length).toBe(1);
+  });
+
+  it('keeps a single inline-svg icon inline (no use)', () => {
+    const svg = emitSvg(
+      base([
+        {
+          kind: 'inline-svg',
+          id: 'a',
+          rect: { x: 0, y: 0, width: 10, height: 10 },
+          opacity: 1,
+          markup: `<svg x="0" y="0" width="10" height="10"><path d="M1 1"/></svg>`,
+        },
+      ]),
+    );
+    expect(svg).not.toContain('<use');
+    expect(svg).toContain('<path d="M1 1"');
+  });
+
   it('wraps low-opacity nodes in a group', () => {
     const svg = emitSvg(
       base([{ kind: 'box', id: 'a', rect: { x: 0, y: 0, width: 10, height: 10 }, opacity: 0.5, radii: [0, 0, 0, 0], fill: 'red' }]),

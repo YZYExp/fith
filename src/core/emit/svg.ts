@@ -256,8 +256,22 @@ function emitRaster(node: RasterNode): string {
   )}" preserveAspectRatio="none" href="${node.href}"/>`;
 }
 
-function emitInlineSvg(node: InlineSvgNode): string {
-  return node.markup;
+function splitInlineSvg(markup: string): { open: string; rest: string; x: string; y: string } {
+  const gt = markup.indexOf('>');
+  let open = markup.slice(0, gt + 1);
+  const rest = markup.slice(gt + 1);
+  const x = (open.match(/\sx="([^"]*)"/) || [])[1] ?? '0';
+  const y = (open.match(/\sy="([^"]*)"/) || [])[1] ?? '0';
+  open = open.replace(/\sx="[^"]*"/, '').replace(/\sy="[^"]*"/, '');
+  return { open, rest, x, y };
+}
+
+function emitInlineSvg(node: InlineSvgNode, defs: Defs, dedupe: boolean): string {
+  if (!dedupe) return node.markup;
+  const { open, rest, x, y } = splitInlineSvg(node.markup);
+  const symbol = open.replace(/^<svg/, '<svg id="{ID}"') + rest;
+  const id = defs.add(symbol);
+  return `<use href="#${id}" x="${x}" y="${y}"/>`;
 }
 
 function wrap(node: PaintNode, inner: string, defs: Defs): string {
@@ -279,6 +293,15 @@ export function emitSvg(scene: Scene, opts: EmitOptions = {}): string {
   const defs = new Defs();
   const body: string[] = [];
 
+  // count repeated icons (position-independent) so only repeats go to defs+use
+  const iconCounts = new Map<string, number>();
+  for (const node of scene.nodes) {
+    if (node.kind !== 'inline-svg') continue;
+    const { open, rest } = splitInlineSvg(node.markup);
+    const key = open + rest;
+    iconCounts.set(key, (iconCounts.get(key) || 0) + 1);
+  }
+
   for (const node of scene.nodes) {
     let inner = '';
     switch (node.kind) {
@@ -291,9 +314,11 @@ export function emitSvg(scene: Scene, opts: EmitOptions = {}): string {
       case 'image':
         inner = emitImage(node);
         break;
-      case 'inline-svg':
-        inner = emitInlineSvg(node);
+      case 'inline-svg': {
+        const { open, rest } = splitInlineSvg(node.markup);
+        inner = emitInlineSvg(node, defs, (iconCounts.get(open + rest) || 0) >= 2);
         break;
+      }
       case 'raster':
         inner = emitRaster(node);
         break;
