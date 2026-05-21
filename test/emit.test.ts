@@ -9,6 +9,7 @@ const base = (nodes: Scene['nodes']): Scene => ({
   background: '#fff',
   nodes,
   rasterTargets: [],
+  fonts: [],
 });
 
 describe('emitSvg', () => {

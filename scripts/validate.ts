@@ -3,8 +3,9 @@
  * same Chromium, then pixel-diff them. Reports the fraction of differing pixels
  * and writes expected/actual/diff PNGs.
  */
-import { writeFileSync, mkdirSync } from 'node:fs';
-import { resolve, dirname, basename } from 'node:path';
+import { writeFileSync, mkdirSync, createReadStream, existsSync, statSync } from 'node:fs';
+import { resolve, join, extname } from 'node:path';
+import { createServer, type Server } from 'node:http';
 import { pathToFileURL } from 'node:url';
 import { chromium, type Browser } from 'playwright';
 import { PNG } from 'pngjs';
@@ -15,6 +16,44 @@ import { emitSvg } from '../src/core/emit/svg.js';
 import type { Scene } from '../src/core/ir/types.js';
 
 const ARGS = ['--no-sandbox', '--disable-setuid-sandbox', '--disable-gpu', '--single-process'];
+
+const MIME: Record<string, string> = {
+  '.html': 'text/html',
+  '.js': 'text/javascript',
+  '.css': 'text/css',
+  '.ttf': 'font/ttf',
+  '.otf': 'font/otf',
+  '.woff': 'font/woff',
+  '.woff2': 'font/woff2',
+  '.png': 'image/png',
+  '.svg': 'image/svg+xml',
+};
+
+/** Serve a directory over http for fixtures that need a real origin (webfonts, ES modules). */
+export function serveDir(dir: string): Promise<{ url: string; close: () => Promise<void> }> {
+  const server: Server = createServer((req, res) => {
+    const rel = decodeURIComponent((req.url || '/').split('?')[0]);
+    let file = join(dir, rel);
+    if (existsSync(file) && statSync(file).isDirectory()) file = join(file, 'index.html');
+    if (!existsSync(file)) {
+      res.statusCode = 404;
+      res.end('not found');
+      return;
+    }
+    res.setHeader('Content-Type', MIME[extname(file)] || 'application/octet-stream');
+    createReadStream(file).pipe(res);
+  });
+  return new Promise((res) => {
+    server.listen(0, '127.0.0.1', () => {
+      const addr = server.address();
+      const port = typeof addr === 'object' && addr ? addr.port : 0;
+      res({
+        url: `http://127.0.0.1:${port}/`,
+        close: () => new Promise<void>((r) => server.close(() => r())),
+      });
+    });
+  });
+}
 
 export interface ValidateResult {
   width: number;
@@ -27,7 +66,7 @@ export interface ValidateResult {
 
 export async function validate(
   target: { url: string } | { html: string },
-  opts: { width: number; height?: number; name: string; outDir: string },
+  opts: { width: number; height?: number; name: string; outDir: string; fontMode?: 'embed' | 'none' },
 ): Promise<ValidateResult> {
   const execPath = process.env.CHROMIUM_PATH || (await sparticuz.executablePath());
   const browser: Browser = await chromium.launch({ executablePath: execPath, args: ARGS });
@@ -62,6 +101,7 @@ export async function validate(
       width: opts.width,
       height,
       deviceScaleFactor: 2,
+      fontMode: opts.fontMode ?? 'embed',
     });
     const byId = new Map(scene.rasterTargets.map((t) => [t.id, t]));
     for (const node of scene.nodes) {

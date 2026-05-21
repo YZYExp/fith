@@ -17,6 +17,17 @@ export interface Scene {
   nodes: PaintNode[];
   /** Regions the emitter renders as <image>; filled in by the backend screenshotter. */
   rasterTargets: RasterTarget[];
+  /** @font-face fonts used by text nodes, inlined as base64 in `embed` mode. */
+  fonts: FontFace[];
+}
+
+export interface FontFace {
+  family: string;
+  weight: string;
+  style: string;
+  /** base64 data URI of the font file. */
+  src: string;
+  format: string;
 }
 
 export interface RasterTarget {
@@ -123,4 +134,6 @@ export interface CaptureOptions {
   width: number;
   height?: number;
   deviceScaleFactor?: number;
+  /** 'embed' inlines @font-face files as base64; 'none' references families by name. */
+  fontMode?: 'embed' | 'none';
 }

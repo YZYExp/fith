@@ -12,6 +12,8 @@ export interface RenderOptions {
   launchArgs?: string[];
   /** Extra wait (ms) after load for late layout/fonts. */
   settleMs?: number;
+  /** 'embed' (default) inlines @font-face fonts as base64; 'none' references families by name. */
+  fontMode?: 'embed' | 'none';
 }
 
 export type RenderInput = { html: string } | { url: string } | { page: Page };
@@ -45,6 +47,7 @@ async function captureAndEmit(page: Page, opts: RenderOptions): Promise<string> 
     width: opts.width,
     height: opts.height,
     deviceScaleFactor: dsr,
+    fontMode: opts.fontMode ?? 'embed',
   });
 
   // Resolve raster targets via screenshots.

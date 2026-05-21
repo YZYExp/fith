@@ -237,9 +237,23 @@ export function emitSvg(scene: Scene): string {
     `<svg xmlns="http://www.w3.org/2000/svg" width="${n(scene.width)}" height="${n(
       scene.height,
     )}" viewBox="0 0 ${n(scene.width)} ${n(scene.height)}">` +
+    emitFonts(scene.fonts) +
     defs.render() +
     bg +
     body.join('') +
     `</svg>`
   );
+}
+
+function emitFonts(fonts: Scene['fonts']): string {
+  if (!fonts || fonts.length === 0) return '';
+  const faces = fonts
+    .map(
+      (f) =>
+        `@font-face{font-family:'${f.family.replace(/'/g, '')}';` +
+        `font-weight:${f.weight};font-style:${f.style};` +
+        `src:url(${f.src}) format('${f.format}');}`,
+    )
+    .join('');
+  return `<style>${faces}</style>`;
 }

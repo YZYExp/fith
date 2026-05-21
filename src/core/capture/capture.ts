@@ -351,6 +351,8 @@ export async function captureScene(opts: CaptureOptions): Promise<Scene> {
   await walk(document.documentElement, null, 1);
   await Promise.all(imgTasks);
 
+  const fonts = (opts.fontMode ?? 'embed') === 'embed' ? await collectFonts(nodes) : [];
+
   return {
     width: W,
     height: H,
@@ -358,5 +360,67 @@ export async function captureScene(opts: CaptureOptions): Promise<Scene> {
     background: rootBg,
     nodes,
     rasterTargets,
+    fonts,
   };
+
+  async function collectFonts(painted: PaintNode[]) {
+    // families actually referenced by text nodes
+    const used = new Set<string>();
+    for (const node of painted) {
+      if (node.kind !== 'text') continue;
+      for (const fam of node.fontFamily.split(',')) {
+        used.add(fam.trim().replace(/^["']|["']$/g, '').toLowerCase());
+      }
+    }
+
+    const fmtFromUrl = (url: string, hint?: string) => {
+      const h = (hint || '').toLowerCase();
+      if (h.includes('woff2')) return 'woff2';
+      if (h.includes('woff')) return 'woff';
+      if (h.includes('truetype')) return 'truetype';
+      if (h.includes('opentype')) return 'opentype';
+      if (/\.woff2(\?|$)/i.test(url)) return 'woff2';
+      if (/\.woff(\?|$)/i.test(url)) return 'woff';
+      if (/\.otf(\?|$)/i.test(url)) return 'opentype';
+      return 'truetype';
+    };
+
+    const out: { family: string; weight: string; style: string; src: string; format: string }[] = [];
+    const seen = new Set<string>();
+
+    for (const sheet of Array.from(document.styleSheets)) {
+      let rules: CSSRuleList;
+      try {
+        rules = (sheet as CSSStyleSheet).cssRules;
+        if (!rules) continue;
+      } catch {
+        continue; // cross-origin sheet
+      }
+      for (const rule of Array.from(rules)) {
+        if (rule.constructor.name !== 'CSSFontFaceRule' && (rule as any).type !== 5) continue;
+        const style = (rule as CSSFontFaceRule).style;
+        const family = style.getPropertyValue('font-family').trim().replace(/^["']|["']$/g, '');
+        if (!family || !used.has(family.toLowerCase())) continue;
+        const weight = style.getPropertyValue('font-weight') || '400';
+        const fstyle = style.getPropertyValue('font-style') || 'normal';
+        const src = style.getPropertyValue('src');
+        if (!src) continue;
+        const key = family + '|' + weight + '|' + fstyle;
+        if (seen.has(key)) continue;
+
+        // pick first url() src (prefer woff2)
+        const entries = Array.from(src.matchAll(/url\(([^)]+)\)(?:\s*format\(([^)]+)\))?/g)).map((m) => ({
+          url: m[1].trim().replace(/^["']|["']$/g, ''),
+          hint: (m[2] || '').replace(/["']/g, ''),
+        }));
+        if (entries.length === 0) continue;
+        const pick = entries.find((e) => /woff2/i.test(e.hint) || /\.woff2/i.test(e.url)) || entries[0];
+        const dataUrl = await fetchDataURL(new URL(pick.url, document.baseURI).href);
+        if (!dataUrl) continue;
+        seen.add(key);
+        out.push({ family, weight, style: fstyle, src: dataUrl, format: fmtFromUrl(pick.url, pick.hint) });
+      }
+    }
+    return out;
+  }
 }
