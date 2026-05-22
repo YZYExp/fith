@@ -236,7 +236,12 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
     return Boolean(hasText || hasBg || hasBorder);
   };
 
-  const needsRaster = (el: Element, cs: CSSStyleDeclaration) => {
+  // Reasons that require rendering the WHOLE element as one image (children
+  // included). Returning one of these stops descent — so it must only be used
+  // for genuinely subtree-wide effects, never for box-level ones, otherwise a
+  // <body>/wrapper carrying the property would collapse the entire page to a
+  // single raster (and a blank SVG if that raster can't be produced).
+  const needsSubtreeRaster = (el: Element, cs: CSSStyleDeclaration) => {
     const tag = el.tagName.toUpperCase();
     if (['CANVAS', 'VIDEO', 'IFRAME', 'OBJECT', 'EMBED'].includes(tag)) return 'media:' + tag;
     if (['INPUT', 'SELECT', 'TEXTAREA', 'PROGRESS', 'METER'].includes(tag)) return 'form-control';
@@ -248,6 +253,14 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
     if (cs.clipPath && cs.clipPath !== 'none') return 'clip-path';
     const m = parseMatrix(cs.transform);
     if (m && (Math.abs(m.b) > 1e-3 || Math.abs(m.c) > 1e-3)) return 'transform-rotate';
+    return null;
+  };
+
+  // Box-level effects we can't vectorize. Safe to raster only on a LEAF element
+  // (no element children), where rastering the box loses nothing. On containers
+  // we skip these (keep descending, vectorize the content) rather than nuke the
+  // subtree.
+  const needsBoxRaster = (el: Element, cs: CSSStyleDeclaration) => {
     if (cs.backgroundImage && cs.backgroundImage !== 'none' && !parseLinearGradient(cs.backgroundImage))
       return 'background-image';
     if (cs.boxShadow && cs.boxShadow.includes('inset')) return 'inset-shadow';
@@ -458,10 +471,20 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
     const opacity = inheritedOpacity * num(cs.opacity || '1');
     const r = el.getBoundingClientRect();
 
-    const reason = needsRaster(el, cs);
-    if (reason) {
-      pushRaster(r, clip, opacity, reason);
+    const subtreeReason = needsSubtreeRaster(el, cs);
+    if (subtreeReason) {
+      pushRaster(r, clip, opacity, subtreeReason);
       return;
+    }
+
+    // box-level effects we can't vectorize: raster only when this is a leaf, so
+    // containers (incl. <html>/<body>) keep descending instead of nuking content
+    if (el.childElementCount === 0) {
+      const boxReason = needsBoxRaster(el, cs);
+      if (boxReason) {
+        pushRaster(r, clip, opacity, boxReason);
+        return;
+      }
     }
 
     if (el.tagName.toLowerCase() === 'svg') {
