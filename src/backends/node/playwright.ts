@@ -19,6 +19,13 @@ export interface RenderOptions {
    * to glyph <path>s (no font dependency); 'none' references families by name.
    */
   fontMode?: 'embed' | 'outline' | 'none';
+  /**
+   * When true, a full-page screenshot is embedded as a base layer (z-order 0)
+   * beneath all vector content. Any CSS that the DOM walk fails to vectorize
+   * remains visible via the screenshot rather than silently disappearing.
+   * Increases file size by ~150–800 KB (one embedded PNG). Default false.
+   */
+  guaranteeFloor?: boolean;
 }
 
 export type RenderInput = { html: string } | { url: string } | { page: Page };
@@ -56,6 +63,16 @@ async function captureAndEmit(page: Page, opts: RenderOptions): Promise<string> 
     fontMode: (opts.fontMode === 'none' ? 'none' : 'embed') as 'embed' | 'none',
     collectGlyphX: opts.fontMode === 'outline',
   });
+
+  // Full-page base-layer screenshot (guarantees visual floor; optional).
+  if (opts.guaranteeFloor) {
+    const vp = page.viewportSize()!;
+    const buf = await page.screenshot({
+      clip: { x: 0, y: 0, width: vp.width, height: vp.height },
+      type: 'png',
+    });
+    scene.baseLayer = 'data:image/png;base64,' + buf.toString('base64');
+  }
 
   // Resolve raster targets via screenshots.
   const byId = new Map(scene.rasterTargets.map((t) => [t.id, t]));

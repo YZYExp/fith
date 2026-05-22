@@ -22,6 +22,12 @@ export interface Scene {
   rasterTargets: RasterTarget[];
   /** @font-face fonts used by text nodes, inlined as base64 in `embed` mode. */
   fonts: FontFace[];
+  /**
+   * Full-page screenshot embedded as a base layer at z-order 0, painted before
+   * all nodes. Filled by the Node backend when `guaranteeFloor: true`. Null/absent
+   * means no base layer (default, backward-compatible behaviour).
+   */
+  baseLayer?: string | null;
 }
 
 export interface FontFace {

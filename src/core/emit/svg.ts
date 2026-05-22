@@ -379,11 +379,21 @@ export function emitSvg(scene: Scene, opts: EmitOptions = {}): string {
 
   const ox = scene.originX ?? 0;
   const oy = scene.originY ?? 0;
-  const bg = scene.background
-    ? `<rect x="${n(ox)}" y="${n(oy)}" width="${n(scene.width)}" height="${n(scene.height)}" fill="${esc(
-        scene.background,
-      )}"/>`
+
+  // Base layer: full-page screenshot painted before everything else.
+  // When present it acts as a visual floor — content the DOM walk missed stays visible.
+  const baseLayerEl = scene.baseLayer
+    ? `<image x="${n(ox)}" y="${n(oy)}" width="${n(scene.width)}" height="${n(scene.height)}" preserveAspectRatio="none" href="${scene.baseLayer}"/>`
     : '';
+
+  // Skip the solid background rect when a base layer is present — the screenshot
+  // already contains the page background at pixel-perfect quality.
+  const bg =
+    !scene.baseLayer && scene.background
+      ? `<rect x="${n(ox)}" y="${n(oy)}" width="${n(scene.width)}" height="${n(scene.height)}" fill="${esc(
+          scene.background,
+        )}"/>`
+      : '';
 
   return (
     `<svg xmlns="http://www.w3.org/2000/svg" width="${n(scene.width)}" height="${n(
@@ -391,6 +401,7 @@ export function emitSvg(scene: Scene, opts: EmitOptions = {}): string {
     )}" viewBox="${n(ox)} ${n(oy)} ${n(scene.width)} ${n(scene.height)}">` +
     emitFonts(scene.fonts) +
     defs.render() +
+    baseLayerEl +
     bg +
     body.join('') +
     `</svg>`
