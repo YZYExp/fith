@@ -1,0 +1,33 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>fitting-html · SVG preview</title>
+    <style>
+      body { margin: 0; font: 14px system-ui, sans-serif; background: #f0f2f5; color: #222; }
+      header {
+        display: flex; align-items: center; gap: 12px;
+        padding: 10px 16px; background: #fff; border-bottom: 1px solid #e5e7eb; position: sticky; top: 0;
+      }
+      header .title { font-weight: 600; }
+      header .spacer { flex: 1; }
+      button {
+        font: inherit; padding: 6px 14px; border-radius: 6px; border: 1px solid #1677ff;
+        background: #1677ff; color: #fff; cursor: pointer;
+      }
+      #stage { padding: 24px; }
+      #stage svg { background: #fff; box-shadow: 0 1px 8px rgba(0,0,0,0.12); max-width: 100%; height: auto; }
+      #empty { padding: 40px; color: #888; }
+    </style>
+  </head>
+  <body>
+    <header>
+      <span class="title">fitting-html</span>
+      <span id="meta"></span>
+      <span class="spacer"></span>
+      <button id="download">Download .svg</button>
+    </header>
+    <div id="stage"><div id="empty">Loading…</div></div>
+    <script type="module" src="viewer.js"></script>
+  </body>
+</html>

@@ -326,8 +326,10 @@ export function emitSvg(scene: Scene, opts: EmitOptions = {}): string {
     body.push(wrap(node, inner, defs));
   }
 
+  const ox = scene.originX ?? 0;
+  const oy = scene.originY ?? 0;
   const bg = scene.background
-    ? `<rect x="0" y="0" width="${n(scene.width)}" height="${n(scene.height)}" fill="${esc(
+    ? `<rect x="${n(ox)}" y="${n(oy)}" width="${n(scene.width)}" height="${n(scene.height)}" fill="${esc(
         scene.background,
       )}"/>`
     : '';
@@ -335,7 +337,7 @@ export function emitSvg(scene: Scene, opts: EmitOptions = {}): string {
   return (
     `<svg xmlns="http://www.w3.org/2000/svg" width="${n(scene.width)}" height="${n(
       scene.height,
-    )}" viewBox="0 0 ${n(scene.width)} ${n(scene.height)}">` +
+    )}" viewBox="${n(ox)} ${n(oy)} ${n(scene.width)} ${n(scene.height)}">` +
     emitFonts(scene.fonts) +
     defs.render() +
     bg +

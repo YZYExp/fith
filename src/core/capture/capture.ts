@@ -6,15 +6,21 @@ import type { Scene, PaintNode, Clip, CornerRadii, CaptureOptions } from '../ir/
  * Playwright `page.evaluate`. The same function is reused by the extension and
  * in-page-library backends, where it is simply called directly.
  */
-export async function captureScene(opts: CaptureOptions): Promise<Scene> {
+export async function captureScene(opts: CaptureOptions, root?: Element): Promise<Scene> {
   const dpr = opts.deviceScaleFactor || 1;
-  const W = opts.width;
-  const H =
-    opts.height ||
-    Math.max(
-      document.documentElement.scrollHeight,
-      document.body ? document.body.scrollHeight : 0,
-    );
+  const rootEl = root ?? document.documentElement;
+  const subtree = rootEl !== document.documentElement;
+  const rootRect = rootEl.getBoundingClientRect();
+  const W = subtree ? rootRect.width : opts.width;
+  const H = subtree
+    ? rootRect.height
+    : opts.height ||
+      Math.max(
+        document.documentElement.scrollHeight,
+        document.body ? document.body.scrollHeight : 0,
+      );
+  const originX = subtree ? rootRect.left : 0;
+  const originY = subtree ? rootRect.top : 0;
 
   const nodes: PaintNode[] = [];
   const rasterTargets: { id: string; x: number; y: number; width: number; height: number }[] = [];
@@ -170,13 +176,20 @@ export async function captureScene(opts: CaptureOptions): Promise<Scene> {
     ['hidden', 'clip', 'scroll', 'auto'].includes(cs.overflowX) ||
     ['hidden', 'clip', 'scroll', 'auto'].includes(cs.overflowY);
 
+  // cull against the captured region: the document box for full-page, the root
+  // element's box for a subtree (coords are absolute viewport px in both cases)
+  const cullRight = subtree ? originX + W : W;
+  const cullBottom = subtree ? originY + H : H;
+  const cullLeft = subtree ? originX : 0;
+  const cullTop = subtree ? originY : 0;
   const isVisible = (el: Element, cs: CSSStyleDeclaration) => {
     if (cs.display === 'none' || cs.visibility === 'hidden' || cs.visibility === 'collapse')
       return false;
     if (num(cs.opacity) === 0) return false;
     const r = el.getBoundingClientRect();
     if (r.width === 0 && r.height === 0) return false;
-    if (r.bottom < 0 || r.right < 0 || r.top > H || r.left > W) return false;
+    if (r.bottom < cullTop || r.right < cullLeft || r.top > cullBottom || r.left > cullRight)
+      return false;
     return true;
   };
 
@@ -490,14 +503,20 @@ export async function captureScene(opts: CaptureOptions): Promise<Scene> {
   };
 
   const body = document.body;
-  const rootBg =
-    !transparent(getComputedStyle(document.documentElement).backgroundColor)
+  let background: string;
+  if (subtree) {
+    // a subtree export is just the element: use its own opaque bg, else transparent
+    const ebg = getComputedStyle(rootEl).backgroundColor;
+    background = transparent(ebg) ? '' : ebg;
+  } else {
+    background = !transparent(getComputedStyle(document.documentElement).backgroundColor)
       ? getComputedStyle(document.documentElement).backgroundColor
       : body && !transparent(getComputedStyle(body).backgroundColor)
         ? getComputedStyle(body).backgroundColor
         : '#ffffff';
+  }
 
-  await walk(document.documentElement, null, 1);
+  await walk(rootEl, null, 1);
   await Promise.all(imgTasks);
 
   const fonts = (opts.fontMode ?? 'embed') === 'embed' ? await collectFonts(nodes) : [];
@@ -505,8 +524,10 @@ export async function captureScene(opts: CaptureOptions): Promise<Scene> {
   return {
     width: W,
     height: H,
+    originX,
+    originY,
     deviceScaleFactor: dpr,
-    background: rootBg,
+    background,
     nodes,
     rasterTargets,
     fonts,

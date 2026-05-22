@@ -10,6 +10,7 @@ await build({
   entryPoints: {
     content: resolve('src/backends/extension/content.ts'),
     background: resolve('src/backends/extension/background.ts'),
+    viewer: resolve('src/backends/extension/viewer.ts'),
   },
   bundle: true,
   format: 'esm',
@@ -19,4 +20,5 @@ await build({
 });
 
 copyFileSync(resolve('src/backends/extension/manifest.json'), resolve(outdir, 'manifest.json'));
+copyFileSync(resolve('src/backends/extension/viewer.html'), resolve(outdir, 'viewer.html'));
 console.error('extension bundled to', outdir);

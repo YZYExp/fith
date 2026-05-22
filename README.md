@@ -23,15 +23,24 @@ fitting-html input.html -o out.svg --width 1280 --scale 2
 fitting-html https://example.com -o out.svg
 ```
 
-页内 / 浏览器插件（同一核心，纯 DOM，无 Node）：
+页内 / 浏览器库（同一核心，纯 DOM，无 Node）—— 整页或单个元素子树：
 
 ```ts
-import { captureCurrentPage } from 'fitting-html/browser';
-const svg = await captureCurrentPage({ fontMode: 'embed' });
-// 插件中由 content script 调用，栅格回退经 service worker 的 captureVisibleTab 提供
+import { captureCurrentPage, captureElement } from 'fitting-html/browser';
+const pageSvg = await captureCurrentPage({ fontMode: 'embed' });
+const elSvg = await captureElement(document.querySelector('.card')!); // 裁剪到该元素
 ```
 
-构建 MV3 插件：`npm run build:extension` → `dist/extension/`（`chrome://extensions` 加载）。
+### Chrome 插件（MV3）
+
+构建：`npm run build:extension` → 在 `chrome://extensions` 以「加载已解压的扩展程序」加载 `dist/extension/`。
+
+- **点击工具栏图标** → 整页转为 SVG。
+- **`Alt+Shift+S` 或右键菜单「Convert element to SVG…」** → 进入 inspect 模式：鼠标悬停高亮元素，点击即转换该元素子树，`Esc` 取消。
+- 每次转换都会**下载 `.svg`** 并在**新标签页预览**。
+- 栅格回退（canvas/视频/滤镜/表单控件等）由 service worker 的 `captureVisibleTab` 提供；inspect 选区裁剪由核心的子树捕获支持。
+
+> 在支持扩展的浏览器里可用 `tsx scripts/verify-extension.ts` 做端到端冒烟（无头沙箱通常不支持加载扩展）。
 
 ## 工作原理
 
