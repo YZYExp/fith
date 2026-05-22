@@ -1,0 +1,343 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <style>
+      *, *::before, *::after { box-sizing: border-box; }
+      body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; font-size: 14px; line-height: 1.5; color: #1f2328; background: #ffffff; }
+      a { color: #0969da; text-decoration: none; }
+      a:hover { text-decoration: underline; }
+      code, pre { font-family: ui-monospace, SFMono-Regular, "SF Mono", Consolas, monospace; font-size: 85%; }
+
+      /* GitHub-style header */
+      .gh-header { background: #24292f; color: #e6edf3; padding: 0 16px; height: 62px; display: flex; align-items: center; gap: 16px; position: sticky; top: 0; z-index: 100; }
+      .gh-logo { color: #e6edf3; font-size: 24px; line-height: 1; }
+      .gh-nav { display: flex; align-items: center; gap: 4px; font-size: 14px; color: #e6edf3; }
+      .gh-nav a { color: #e6edf3; padding: 6px 8px; border-radius: 6px; }
+      .gh-nav a:hover { background: rgba(255,255,255,0.125); text-decoration: none; }
+      .gh-search { flex: 1; max-width: 272px; background: rgba(255,255,255,0.125); border: 1px solid rgba(255,255,255,0.2); border-radius: 6px; padding: 5px 12px; color: #e6edf3; font-size: 14px; }
+
+      /* Sub-nav tabs */
+      .repo-tabs { border-bottom: 1px solid #d0d7de; padding: 0 24px; display: flex; gap: 0; background: #fff; overflow-x: auto; }
+      .repo-tab { display: flex; align-items: center; gap: 6px; padding: 8px 16px; border-bottom: 2px solid transparent; font-size: 14px; color: #57606a; cursor: pointer; white-space: nowrap; }
+      .repo-tab.active { border-bottom-color: #fd7c33; color: #1f2328; font-weight: 600; }
+      .repo-tab .badge { background: #818b981f; border-radius: 20px; padding: 2px 8px; font-size: 12px; }
+
+      /* Main layout */
+      .container { max-width: 1280px; margin: 0 auto; padding: 24px; display: grid; grid-template-columns: 1fr 296px; gap: 24px; }
+
+      /* Repo name row */
+      .repo-title { display: flex; align-items: center; gap: 8px; margin-bottom: 16px; }
+      .repo-name { font-size: 20px; font-weight: 400; }
+      .repo-name a { color: #0969da; font-weight: 600; }
+      .repo-badge { display: inline-block; border: 1px solid #d0d7de; border-radius: 20px; padding: 2px 10px; font-size: 12px; color: #57606a; }
+
+      /* Branch row */
+      .branch-row { display: flex; align-items: center; gap: 8px; margin-bottom: 16px; }
+      .branch-selector { border: 1px solid #d0d7de; border-radius: 6px; padding: 5px 12px; font-size: 14px; background: #f6f8fa; }
+      .stat-buttons { display: flex; gap: 8px; margin-left: auto; }
+      .stat-btn { display: flex; align-items: center; gap: 4px; border: 1px solid #d0d7de; border-radius: 6px; padding: 4px 10px; font-size: 14px; background: #f6f8fa; color: #1f2328; }
+      .stat-btn .count { font-weight: 600; }
+
+      /* File tree */
+      .file-tree { border: 1px solid #d0d7de; border-radius: 6px; overflow: hidden; margin-bottom: 24px; }
+      .file-tree-header { background: #f6f8fa; padding: 8px 16px; border-bottom: 1px solid #d0d7de; display: flex; align-items: center; gap: 8px; font-size: 14px; }
+      .file-tree-header .avatar { width: 20px; height: 20px; border-radius: 50%; background: #0969da; display: inline-flex; align-items: center; justify-content: center; color: #fff; font-size: 10px; font-weight: 700; }
+      .commit-msg { font-weight: 600; }
+      .commit-time { color: #57606a; margin-left: auto; }
+      .file-row { display: flex; align-items: center; gap: 8px; padding: 8px 16px; border-top: 1px solid #d0d7de; font-size: 14px; }
+      .file-row:hover { background: #f6f8fa; }
+      .file-icon { color: #57606a; width: 16px; }
+      .dir-icon { color: #54aeff; }
+      .file-name { color: #1f2328; }
+      .file-name a { color: #1f2328; }
+      .file-note { color: #57606a; margin-left: auto; font-size: 12px; }
+
+      /* README */
+      .readme { border: 1px solid #d0d7de; border-radius: 6px; overflow: hidden; }
+      .readme-header { background: #f6f8fa; padding: 8px 16px; border-bottom: 1px solid #d0d7de; font-size: 14px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
+      .readme-body { padding: 32px; }
+      .readme-body h1 { font-size: 2em; border-bottom: 1px solid #d0d7de; padding-bottom: .3em; margin-top: 0; }
+      .readme-body h2 { font-size: 1.5em; border-bottom: 1px solid #d0d7de; padding-bottom: .3em; margin-top: 24px; }
+      .readme-body h3 { font-size: 1.25em; margin-top: 16px; }
+      .readme-body p { margin: 16px 0; }
+      .readme-body ul, .readme-body ol { padding-left: 2em; margin: 16px 0; }
+      .readme-body li { margin: 4px 0; }
+      .readme-body code { background: rgba(175, 184, 193, 0.2); padding: 2px 6px; border-radius: 6px; font-size: 85%; }
+      .readme-body pre { background: #f6f8fa; border: 1px solid #d0d7de; border-radius: 6px; padding: 16px; overflow: auto; }
+      .readme-body pre code { background: transparent; padding: 0; font-size: 100%; }
+      .readme-body blockquote { border-left: 4px solid #d0d7de; padding: 0 16px; color: #57606a; margin: 0; }
+      .readme-body table { border-collapse: collapse; width: 100%; }
+      .readme-body th, .readme-body td { border: 1px solid #d0d7de; padding: 8px 12px; }
+      .readme-body th { background: #f6f8fa; font-weight: 600; }
+      .readme-body img { max-width: 100%; }
+
+      /* Sidebar */
+      .sidebar { font-size: 14px; }
+      .sidebar-section { margin-bottom: 24px; padding-bottom: 24px; border-bottom: 1px solid #d0d7de; }
+      .sidebar-section:last-child { border-bottom: none; }
+      .sidebar-heading { font-weight: 600; color: #1f2328; margin-bottom: 8px; display: flex; align-items: center; justify-content: space-between; }
+      .sidebar-text { color: #57606a; margin-bottom: 8px; }
+      .topic-tag { display: inline-block; background: #ddf4ff; color: #0969da; border-radius: 20px; padding: 2px 10px; font-size: 12px; margin: 2px; }
+      .lang-bar { height: 8px; border-radius: 6px; overflow: hidden; display: flex; margin: 8px 0; }
+      .lang-bar-js { background: #f1e05a; flex: 68; }
+      .lang-bar-ts { background: #3178c6; flex: 29; }
+      .lang-bar-html { background: #e34c26; flex: 2; }
+      .lang-bar-css { background: #563d7c; flex: 1; }
+      .lang-item { display: flex; align-items: center; gap: 8px; margin: 4px 0; color: #57606a; }
+      .lang-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+      .contributor-row { display: flex; flex-wrap: wrap; gap: 4px; }
+      .contributor-avatar { width: 32px; height: 32px; border-radius: 50%; overflow: hidden; background: #0969da; display: flex; align-items: center; justify-content: center; color: #fff; font-size: 12px; font-weight: 700; }
+
+      /* visibility:hidden pattern GitHub uses for screen-reader helpers */
+      .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; visibility: hidden; }
+      /* Note-style alert */
+      .gh-alert { background: #ddf4ff; border: 1px solid #54aeff; border-radius: 6px; padding: 12px 16px; margin: 16px 0; display: flex; gap: 8px; }
+      .gh-alert-icon { color: #0969da; font-weight: 700; font-size: 14px; }
+
+      /* Overlay button pattern (same as our lost-content fixture) */
+      .btn-group { position: relative; display: inline-flex; margin-top: 8px; }
+      .btn-label { position: absolute; left: 0; right: 0; top: 0; bottom: 0; display: flex; align-items: center; justify-content: center; color: #fff; font-size: 14px; font-weight: 600; pointer-events: none; z-index: 2; }
+      .btn-bg { background: #1f883d; border: none; border-radius: 6px; padding: 8px 16px; cursor: pointer; min-width: 120px; min-height: 36px; z-index: 1; }
+    </style>
+  </head>
+  <body>
+
+    <!-- Sticky header -->
+    <header class="gh-header">
+      <span class="gh-logo">&#9671;</span>
+      <input class="gh-search" placeholder="Search or jump to..." readonly />
+      <nav class="gh-nav">
+        <a href="#">Pull requests</a>
+        <a href="#">Issues</a>
+        <a href="#">Codespaces</a>
+        <a href="#">Marketplace</a>
+        <a href="#">Explore</a>
+      </nav>
+    </header>
+
+    <!-- Sub-nav -->
+    <div class="repo-tabs">
+      <div class="repo-tab active">&#128196; Code</div>
+      <div class="repo-tab">&#x26A0;&#xFE0F; Issues <span class="badge">828</span></div>
+      <div class="repo-tab">&#x1F501; Pull requests <span class="badge">485</span></div>
+      <div class="repo-tab">&#x2699;&#xFE0F; Actions</div>
+      <div class="repo-tab">&#x1F512; Security</div>
+      <div class="repo-tab">&#x1F4CA; Insights</div>
+    </div>
+
+    <div class="container">
+      <main>
+        <!-- Repo title -->
+        <div class="repo-title">
+          <span class="repo-name">
+            <a href="#">facebook</a> / <a href="#">react</a>
+          </span>
+          <span class="repo-badge">Public</span>
+          <!-- Screen reader helper — visibility:hidden but no visible child override -->
+          <span class="sr-only">Repository</span>
+        </div>
+
+        <!-- Branch row -->
+        <div class="branch-row">
+          <div class="branch-selector">&#x1F4C2; main &#x25BE;</div>
+          <span style="color:#57606a;font-size:13px;"><strong>5</strong> Branches &nbsp; <strong>117</strong> Tags</span>
+          <div class="stat-buttons">
+            <button class="stat-btn">&#x2605; Star <span class="count">245k</span></button>
+            <button class="stat-btn">&#x1F374; Fork <span class="count">51.1k</span></button>
+          </div>
+        </div>
+
+        <!-- File tree -->
+        <div class="file-tree">
+          <div class="file-tree-header">
+            <span class="avatar">gA</span>
+            <span class="commit-msg">chore: release v19.1.0</span>
+            <span class="commit-time">3 days ago</span>
+          </div>
+          <div class="file-row">
+            <span class="file-icon dir-icon">&#128193;</span>
+            <span class="file-name"><a href="#">compiler</a></span>
+            <span class="file-note">v19.1.0-rc.1</span>
+          </div>
+          <div class="file-row">
+            <span class="file-icon dir-icon">&#128193;</span>
+            <span class="file-name"><a href="#">packages</a></span>
+            <span class="file-note">chore: release v19.1.0</span>
+          </div>
+          <div class="file-row">
+            <span class="file-icon dir-icon">&#128193;</span>
+            <span class="file-name"><a href="#">scripts</a></span>
+            <span class="file-note">build: update scripts</span>
+          </div>
+          <div class="file-row">
+            <span class="file-icon" style="color:#57606a">&#128196;</span>
+            <span class="file-name"><a href="#">README.md</a></span>
+            <span class="file-note">v19.1.0 docs update</span>
+          </div>
+          <div class="file-row">
+            <span class="file-icon" style="color:#57606a">&#128196;</span>
+            <span class="file-name"><a href="#">package.json</a></span>
+            <span class="file-note">chore: release v19.1.0</span>
+          </div>
+          <div class="file-row">
+            <span class="file-icon" style="color:#57606a">&#128196;</span>
+            <span class="file-name"><a href="#">LICENSE</a></span>
+            <span class="file-note">MIT License</span>
+          </div>
+        </div>
+
+        <!-- README -->
+        <div class="readme">
+          <div class="readme-header">
+            &#128196; README.md
+          </div>
+          <div class="readme-body">
+            <h1>React</h1>
+            <p>React is the library for web and native user interfaces. Build user interfaces out of individual pieces called <strong>components</strong> written in JavaScript.</p>
+
+            <div class="gh-alert">
+              <span class="gh-alert-icon">&#x2139;</span>
+              <div>React v19 is now stable! Check the <a href="#">React 19 release post</a> for details.</div>
+            </div>
+
+            <h2>Installation</h2>
+            <p>React has been designed for gradual adoption from the start, and <strong>you can use as little or as much React as you need:</strong></p>
+            <ul>
+              <li>Use <a href="#">Online Playgrounds</a> to get a taste of React.</li>
+              <li>Add React to an existing HTML page with a <code>&lt;script&gt;</code> tag in <strong>one minute</strong>.</li>
+              <li>Create a <strong>new React app</strong> using <code>create-react-app</code> or <code>vite</code>.</li>
+            </ul>
+
+            <h2>Documentation</h2>
+            <p>You can find the React documentation <a href="#">on the website</a>. Check out the <a href="#">Getting Started</a> page for a quick overview.</p>
+            <p>The documentation is divided into several sections:</p>
+            <ul>
+              <li><a href="#">Quick Start</a></li>
+              <li><a href="#">Tutorial: Tic-Tac-Toe</a></li>
+              <li><a href="#">Thinking in React</a></li>
+              <li><a href="#">Installation</a></li>
+              <li><a href="#">Describing the UI</a></li>
+              <li><a href="#">Adding Interactivity</a></li>
+              <li><a href="#">Managing State</a></li>
+              <li><a href="#">Escape Hatches</a></li>
+            </ul>
+
+            <h2>Examples</h2>
+            <p>We have several examples <a href="#">on the website</a>. Here is the first one to get you started:</p>
+            <pre><code>import { createRoot } from 'react-dom/client';
+
+function HelloMessage({ name }) {
+  return &lt;div&gt;Hello {name}&lt;/div&gt;;
+}
+
+const root = createRoot(document.getElementById('container'));
+root.render(&lt;HelloMessage name="Taylor" /&gt;);</code></pre>
+            <p>This example will render &quot;Hello Taylor&quot; into a container on the page.</p>
+            <p>You'll notice that we used an HTML-like syntax; <a href="#">we call it JSX</a>. JSX is not required to use React, but it makes code more readable, and writing it feels like writing HTML. If you're using React as a <code>&lt;script&gt;</code> tag, read <a href="#">this section</a> on integrating JSX.</p>
+
+            <h2>Contributing</h2>
+            <p>The main purpose of this repository is to continue evolving React core, making it faster and easier to use. Development of React happens in the open on GitHub, and we are grateful to the community for contributing bugfixes and improvements. Read below to learn how you can take part in improving React.</p>
+
+            <h3>Code of Conduct</h3>
+            <p>Facebook has adopted a <a href="#">Code of Conduct</a> that we expect project participants to adhere to. Please read <a href="#">the full text</a> so that you can understand what actions will and will not be tolerated.</p>
+
+            <h3>Contributing Guide</h3>
+            <p>Read our <a href="#">contributing guide</a> to learn about our development process, how to propose bugfixes and improvements, and how to build and test your changes to React.</p>
+
+            <h3>Good First Issues</h3>
+            <p>To help you get your feet wet and get you familiar with our contribution process, we have a list of <a href="#">good first issues</a> that contain bugs which have a relatively limited scope. This is a great place to get started.</p>
+
+            <h2>License</h2>
+            <p>React is <a href="#">MIT licensed</a>.</p>
+
+            <!-- Overlay button pattern like in lost-content.html -->
+            <div class="btn-group">
+              <span class="btn-label">Star on GitHub</span>
+              <button class="btn-bg"></button>
+            </div>
+          </div>
+        </div>
+      </main>
+
+      <!-- Sidebar -->
+      <aside class="sidebar">
+        <div class="sidebar-section">
+          <div class="sidebar-heading">About</div>
+          <div class="sidebar-text">The library for web and native user interfaces.</div>
+          <div><a href="#">https://react.dev</a></div>
+          <div style="margin-top:8px; display:flex; flex-wrap:wrap; gap:4px;">
+            <span class="topic-tag">react</span>
+            <span class="topic-tag">javascript</span>
+            <span class="topic-tag">library</span>
+            <span class="topic-tag">ui</span>
+            <span class="topic-tag">frontend</span>
+            <span class="topic-tag">declarative</span>
+          </div>
+        </div>
+
+        <div class="sidebar-section">
+          <div class="sidebar-heading">
+            <span>&#x2605; Stars</span>
+          </div>
+          <div style="font-size:18px;font-weight:600;">245,000</div>
+        </div>
+
+        <div class="sidebar-section">
+          <div class="sidebar-heading">Releases</div>
+          <div style="margin:8px 0;">
+            <a href="#">&#x1F3F7; v19.1.0</a>
+            <span style="color:#57606a;font-size:12px;"> — Latest</span>
+          </div>
+          <div style="color:#57606a;font-size:13px;"><a href="#">+ 117 releases</a></div>
+        </div>
+
+        <div class="sidebar-section">
+          <div class="sidebar-heading">Languages</div>
+          <div class="lang-bar">
+            <div class="lang-bar-js"></div>
+            <div class="lang-bar-ts"></div>
+            <div class="lang-bar-html"></div>
+            <div class="lang-bar-css"></div>
+          </div>
+          <div class="lang-item">
+            <span class="lang-dot" style="background:#f1e05a"></span>
+            <span>JavaScript</span>
+            <span style="margin-left:auto;">68.2%</span>
+          </div>
+          <div class="lang-item">
+            <span class="lang-dot" style="background:#3178c6"></span>
+            <span>TypeScript</span>
+            <span style="margin-left:auto;">28.9%</span>
+          </div>
+          <div class="lang-item">
+            <span class="lang-dot" style="background:#e34c26"></span>
+            <span>HTML</span>
+            <span style="margin-left:auto;">1.5%</span>
+          </div>
+          <div class="lang-item">
+            <span class="lang-dot" style="background:#563d7c"></span>
+            <span>CSS</span>
+            <span style="margin-left:auto;">1.1%</span>
+          </div>
+        </div>
+
+        <div class="sidebar-section">
+          <div class="sidebar-heading">Contributors</div>
+          <div class="contributor-row">
+            <div class="contributor-avatar">gA</div>
+            <div class="contributor-avatar">sS</div>
+            <div class="contributor-avatar">aP</div>
+            <div class="contributor-avatar">dA</div>
+            <div class="contributor-avatar">sM</div>
+            <div class="contributor-avatar">jL</div>
+            <div class="contributor-avatar">bB</div>
+            <div class="contributor-avatar">yV</div>
+          </div>
+          <div style="margin-top:8px;color:#57606a;font-size:13px;"><a href="#">+ 1,612 contributors</a></div>
+        </div>
+      </aside>
+    </div>
+  </body>
+</html>
