@@ -199,4 +199,80 @@ describe('emitSvg', () => {
     );
     expect(svg).toContain('opacity="0.5"');
   });
+
+  it('emits outline as a stroked rect outside the border box', () => {
+    const svg = emitSvg(
+      base([
+        {
+          kind: 'box',
+          id: 'a',
+          rect: { x: 10, y: 10, width: 80, height: 40 },
+          opacity: 1,
+          radii: [0, 0, 0, 0],
+          fill: 'white',
+          outline: { width: 2, color: 'blue', style: 'solid', offset: 0 },
+        },
+      ]),
+    );
+    // outline stroke center is 1px (width/2) outside the border box
+    expect(svg).toContain('stroke="blue"');
+    expect(svg).toContain('stroke-width="2"');
+    // rect is expanded by exp = offset + width/2 = 1 on each side
+    expect(svg).toContain('x="9"');
+    expect(svg).toContain('y="9"');
+    expect(svg).toContain('width="82"');
+    expect(svg).toContain('height="42"');
+    expect(svg).toContain('fill="none"');
+  });
+
+  it('emits gradient fill for background-clip:text text nodes', () => {
+    const svg = emitSvg(
+      base([
+        {
+          kind: 'text',
+          id: 't',
+          rect: { x: 0, y: 0, width: 200, height: 40 },
+          opacity: 1,
+          lines: [{ text: 'Gradient', x: 0, baseline: 30 }],
+          fontFamily: 'sans-serif',
+          fontSize: 24,
+          fontWeight: '700',
+          fontStyle: 'normal',
+          color: 'rgba(0,0,0,0)',  // transparent — would be invisible without gradientFill
+          letterSpacing: 0,
+          wordSpacing: 0,
+          gradientFill: {
+            type: 'linear-gradient',
+            angle: 90,
+            stops: [
+              { offset: 0, color: 'rgb(255,0,0)' },
+              { offset: 1, color: 'rgb(0,0,255)' },
+            ],
+          },
+        },
+      ]),
+    );
+    // text should reference a linearGradient in defs, not be filled with the transparent color
+    expect(svg).toContain('<linearGradient');
+    expect(svg).toContain('fill="url(#');
+    expect(svg).not.toContain('fill="rgba(0,0,0,0)"');
+  });
+
+  it('emits dashed outline', () => {
+    const svg = emitSvg(
+      base([
+        {
+          kind: 'box',
+          id: 'a',
+          rect: { x: 0, y: 0, width: 100, height: 50 },
+          opacity: 1,
+          radii: [0, 0, 0, 0],
+          fill: null,
+          outline: { width: 3, color: 'red', style: 'dashed', offset: 2 },
+        },
+      ]),
+    );
+    expect(svg).toContain('stroke="red"');
+    expect(svg).toContain('stroke-dasharray');
+  });
 });

@@ -90,6 +90,8 @@ export interface BoxNode extends NodeBase {
   radii: CornerRadii;
   border?: BorderEdges | null;
   shadows?: BoxShadow[];
+  /** CSS outline rendered outside the border box. */
+  outline?: { width: number; color: string; style: string; offset: number } | null;
 }
 
 export interface BorderEdge {
@@ -134,6 +136,8 @@ export interface TextNode extends NodeBase {
   decoration?: string | null;
   decorationColor?: string;
   textAnchor?: 'start' | 'middle' | 'end';
+  /** Gradient fill from background-clip:text pattern; overrides color when set. */
+  gradientFill?: LinearGradientFill | null;
 }
 
 export interface ImageNode extends NodeBase {
@@ -164,4 +168,19 @@ export interface CaptureOptions {
   fontMode?: 'embed' | 'none';
   /** Capture per-glyph x positions for outline mode (slower). */
   collectGlyphX?: boolean;
+  /**
+   * When true, non-leaf containers with un-vectorizable box effects (pseudo-elements,
+   * complex background images) are rasterized as a base layer while their children
+   * are still vectorized on top. Set to true only when a rasterize backend is
+   * available; defaults to false to avoid empty raster placeholders in pure-DOM contexts.
+   */
+  containerRasterFallback?: boolean;
+  /**
+   * When true, all scroll positions (page and overflow containers) are reset to 0
+   * before capture so that scrolled-out content is included in the output. Overflow
+   * containers (scroll/auto) have their clip expanded to scrollWidth × scrollHeight
+   * so every item in a sidebar tree-list, scrollable panel, etc. appears in the SVG.
+   * Scroll positions are restored after capture. Default false.
+   */
+  captureScrollableContent?: boolean;
 }

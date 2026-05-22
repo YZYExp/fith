@@ -40,6 +40,14 @@ async function run(opts: InPageOptions, root?: Element): Promise<string> {
       deviceScaleFactor: opts.deviceScaleFactor ?? window.devicePixelRatio ?? 1,
       fontMode: opts.fontMode === 'none' ? 'none' : 'embed',
       collectGlyphX: opts.fontMode === 'outline',
+      // Rasterize non-leaf containers that have un-vectorizable box effects
+      // (pseudo-elements, complex background images) only when a rasterize
+      // backend is available; otherwise silently emit what can be vectorized.
+      containerRasterFallback: !!opts.rasterize,
+      // Always capture the full scrollable content for design export: resets
+      // all scroll positions to 0 and expands overflow-container clips to their
+      // full scrollHeight × scrollWidth, then restores scroll state afterward.
+      captureScrollableContent: true,
     },
     root,
   );

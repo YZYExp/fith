@@ -263,6 +263,25 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
     if (cs.clipPath && cs.clipPath !== 'none') return 'clip-path';
     const m = parseMatrix(cs.transform);
     if (m && (Math.abs(m.b) > 1e-3 || Math.abs(m.c) > 1e-3)) return 'transform-rotate';
+    // Custom elements (hyphenated tag) with no light-DOM children and no accessible
+    // shadow root are likely using closed shadow DOM — raster to capture their rendering.
+    if (el.tagName.includes('-') && el.childElementCount === 0 && !(el as HTMLElement).shadowRoot)
+      return 'custom-element';
+    return null;
+  };
+
+  // Try to parse a linear-gradient from a background-image value that may contain
+  // multiple comma-separated layers. Returns the first vectorizable layer found,
+  // so "url(…), linear-gradient(…)" still yields a gradient instead of falling back.
+  const parseFirstLinearGradient = (value: string) => {
+    const single = parseLinearGradient(value);
+    if (single) return single;
+    const layers = splitTopLevel(value);
+    if (layers.length <= 1) return null;
+    for (const layer of layers) {
+      const g = parseLinearGradient(layer.trim());
+      if (g) return g;
+    }
     return null;
   };
 
@@ -271,7 +290,7 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
   // we skip these (keep descending, vectorize the content) rather than nuke the
   // subtree.
   const needsBoxRaster = (el: Element, cs: CSSStyleDeclaration) => {
-    if (cs.backgroundImage && cs.backgroundImage !== 'none' && !parseLinearGradient(cs.backgroundImage))
+    if (cs.backgroundImage && cs.backgroundImage !== 'none' && !parseFirstLinearGradient(cs.backgroundImage))
       return 'background-image';
     if (cs.boxShadow && cs.boxShadow.includes('inset')) return 'inset-shadow';
     if (cs.borderTopStyle === 'double' || cs.borderTopStyle === 'groove' || cs.borderTopStyle === 'ridge')
@@ -449,6 +468,27 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
         }
       }
       if (lines.length === 0) continue;
+
+      // Detect background-clip:text gradient pattern (e.g. gradient headings).
+      // When color is transparent and the background is clipped to text shape,
+      // use the gradient as the SVG text fill instead of rendering invisible text.
+      let textColor = normColor(cs.color);
+      let gradientFill = null;
+      const bgClip = cs.backgroundClip || (cs as any).webkitBackgroundClip;
+      if (
+        transparent(textColor) &&
+        (bgClip === 'text' || bgClip === '-webkit-text') &&
+        cs.backgroundImage &&
+        cs.backgroundImage !== 'none'
+      ) {
+        const grad = parseFirstLinearGradient(cs.backgroundImage);
+        if (grad) {
+          gradientFill = grad;
+          // Solid fallback: midpoint stop color for renderers that ignore gradientFill.
+          textColor = grad.stops[Math.floor(grad.stops.length / 2)].color;
+        }
+      }
+
       nodes.push({
         kind: 'text',
         id: nid(),
@@ -460,11 +500,12 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
         fontSize,
         fontWeight: cs.fontWeight,
         fontStyle: cs.fontStyle,
-        color: normColor(cs.color),
+        color: textColor,
         letterSpacing: ls,
         wordSpacing: ws,
         decoration,
         decorationColor: normColor(cs.textDecorationColor || cs.color),
+        gradientFill,
       });
     }
   };
@@ -489,8 +530,14 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
       : null;
     const shadows = parseShadows(cs.boxShadow);
     const gradient =
-      cs.backgroundImage && cs.backgroundImage !== 'none' ? parseLinearGradient(cs.backgroundImage) : null;
-    if (!fill && !gradient && !border && shadows.length === 0) return;
+      cs.backgroundImage && cs.backgroundImage !== 'none' ? parseFirstLinearGradient(cs.backgroundImage) : null;
+    const outlineW = num(cs.outlineWidth);
+    const outlineStyle = cs.outlineStyle;
+    const outline =
+      outlineW > 0 && outlineStyle !== 'none' && !transparent(cs.outlineColor)
+        ? { width: outlineW, color: normColor(cs.outlineColor), style: outlineStyle, offset: num(cs.outlineOffset) }
+        : null;
+    if (!fill && !gradient && !border && shadows.length === 0 && !outline) return;
     nodes.push({
       kind: 'box',
       id: nid(),
@@ -502,6 +549,7 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
       radii: radiiOf(cs),
       border,
       shadows,
+      outline,
     });
   };
 
@@ -550,8 +598,22 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
 
   const imgTasks: Promise<void>[] = [];
 
+  const containerRasterFallback = !!(opts as any).containerRasterFallback;
+
   const walk = async (el: Element, clip: Clip | null, inheritedOpacity: number) => {
     const cs = getComputedStyle(el);
+
+    // display:contents has no box of its own but its children (and direct text)
+    // render normally in the parent's formatting context.
+    if (cs.display === 'contents') {
+      if (cs.visibility === 'hidden' || cs.visibility === 'collapse') return;
+      const contOpacity = inheritedOpacity * num(cs.opacity || '1');
+      if (contOpacity === 0) return;
+      captureText(el, cs, clip, contOpacity);
+      for (const kid of Array.from(el.children)) await walk(kid as Element, clip, contOpacity);
+      return;
+    }
+
     if (!isVisible(el, cs)) return;
     const opacity = inheritedOpacity * num(cs.opacity || '1');
     const r = el.getBoundingClientRect();
@@ -560,16 +622,6 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
     if (subtreeReason) {
       pushRaster(r, clip, opacity, subtreeReason);
       return;
-    }
-
-    // box-level effects we can't vectorize: raster only when this is a leaf, so
-    // containers (incl. <html>/<body>) keep descending instead of nuking content
-    if (el.childElementCount === 0) {
-      const boxReason = needsBoxRaster(el, cs);
-      if (boxReason) {
-        pushRaster(r, clip, opacity, boxReason);
-        return;
-      }
     }
 
     if (el.tagName.toLowerCase() === 'svg') {
@@ -598,6 +650,13 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
 
     if (el.tagName.toUpperCase() === 'IMG') {
       const img = el as HTMLImageElement;
+      const objFit = cs.objectFit || 'fill';
+      const preserveAspectRatio =
+        objFit === 'contain' || objFit === 'scale-down'
+          ? 'xMidYMid meet'
+          : objFit === 'cover'
+            ? 'xMidYMid slice'
+            : 'none';
       const id = nid();
       const node: any = {
         kind: 'image',
@@ -606,7 +665,7 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
         opacity,
         clip,
         href: null,
-        preserveAspectRatio: 'none',
+        preserveAspectRatio,
       };
       nodes.push(node);
       imgTasks.push(
@@ -618,16 +677,55 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
       return;
     }
 
-    emitBox(el, cs, clip, opacity);
-    captureText(el, cs, clip, opacity);
+    // Box-level effects we can't vectorize:
+    //   • Leaf element  → rasterize and done (no children to miss)
+    //   • Non-leaf with raster backend → rasterize as base layer so pseudo-elements
+    //     and complex backgrounds appear, then vectorize children on top.  Children
+    //     paint over the raster so the visual result is correct where vectorization
+    //     is faithful; the raster fills the gaps (pseudo-elements, bg images, etc.).
+    //   • Non-leaf without raster backend → emit what we can vectorize and continue.
+    const boxReason = needsBoxRaster(el, cs);
+    if (boxReason) {
+      if (el.childElementCount === 0) {
+        pushRaster(r, clip, opacity, boxReason);
+        return;
+      }
+      if (containerRasterFallback) {
+        pushRaster(r, clip, opacity, boxReason);
+        // skip emitBox/captureText — the raster already captures them
+      } else {
+        emitBox(el, cs, clip, opacity);
+        captureText(el, cs, clip, opacity);
+      }
+    } else {
+      emitBox(el, cs, clip, opacity);
+      captureText(el, cs, clip, opacity);
+    }
 
     let childClip = clip;
     if (clipsContent(cs)) {
+      // For scrollable containers (overflow:auto/scroll) in full-content mode,
+      // expand the clip to scrollWidth × scrollHeight so items that are outside
+      // the container's current visible area are still included in the output.
+      // For overflow:hidden/clip the CSS dimensions are intentional — keep them.
+      const htmlEl = el as HTMLElement;
+      const isScrollContainer =
+        cs.overflowX === 'scroll' || cs.overflowX === 'auto' ||
+        cs.overflowY === 'scroll' || cs.overflowY === 'auto';
+      const captureScrollable = !!(opts as any).captureScrollableContent;
+      const clipW =
+        captureScrollable && isScrollContainer
+          ? Math.max(r.width, htmlEl.scrollWidth || 0)
+          : r.width;
+      const clipH =
+        captureScrollable && isScrollContainer
+          ? Math.max(r.height, htmlEl.scrollHeight || 0)
+          : r.height;
       childClip = intersect(clip, {
         x: r.left,
         y: r.top,
-        width: r.width,
-        height: r.height,
+        width: clipW,
+        height: clipH,
         radii: radiiOf(cs),
       });
     }
@@ -636,16 +734,35 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
     const meta = kids.map((k) => {
       const kcs = getComputedStyle(k);
       const positioned = kcs.position !== 'static';
-      const z = kcs.zIndex === 'auto' ? 0 : parseInt(kcs.zIndex, 10) || 0;
+      const zRaw = kcs.zIndex;
+      const z = zRaw === 'auto' ? 0 : parseInt(zRaw, 10) || 0;
       return { k, positioned, z };
     });
-    const neg = meta.filter((x) => x.positioned && x.z < 0).sort((a, b) => a.z - b.z);
-    const mid = meta.filter((x) => !(x.positioned && x.z < 0) && !(x.positioned && x.z > 0));
-    const pos = meta.filter((x) => x.positioned && x.z > 0).sort((a, b) => a.z - b.z);
+    // CSS paint order within a stacking context:
+    //   1. negative z-index positioned descendants (lowest first)
+    //   2. block/inline flow (non-positioned) in DOM order
+    //   3. positioned with z-index:auto or z-index:0 in DOM order (above flow)
+    //   4. positive z-index positioned (lowest first)
+    const neg   = meta.filter((x) => x.positioned && x.z < 0).sort((a, b) => a.z - b.z);
+    const flow  = meta.filter((x) => !x.positioned);
+    const autoZ = meta.filter((x) => x.positioned && x.z === 0);
+    const pos   = meta.filter((x) => x.positioned && x.z > 0).sort((a, b) => a.z - b.z);
 
-    for (const m of neg) await walk(m.k, childClip, opacity);
-    for (const m of mid) await walk(m.k, childClip, opacity);
-    for (const m of pos) await walk(m.k, childClip, opacity);
+    for (const m of neg)   await walk(m.k, childClip, opacity);
+    for (const m of flow)  await walk(m.k, childClip, opacity);
+    for (const m of autoZ) await walk(m.k, childClip, opacity);
+    for (const m of pos)   await walk(m.k, childClip, opacity);
+
+    // Walk open shadow roots after light-DOM children. Shadow DOM content renders
+    // on top of the host's light-DOM background; placing it last preserves that
+    // order. Slotted light-DOM elements are captured by their light-DOM walk
+    // (range.getClientRects() returns their visual slot position), so no doubling.
+    const shadow = (el as HTMLElement).shadowRoot;
+    if (shadow) {
+      for (const child of Array.from(shadow.children)) {
+        await walk(child as Element, childClip, opacity);
+      }
+    }
   };
 
   const body = document.body;
@@ -662,8 +779,39 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
         : '#ffffff';
   }
 
+  // Reset all scroll positions so scrolled-out content is at its natural position
+  // during capture. getBoundingClientRect() forces a synchronous layout flush, so
+  // positions are correct even though the reset is synchronous.
+  // Restored after capture to avoid disrupting the user's scroll state.
+  const scrollSaved: { el: HTMLElement; top: number; left: number }[] = [];
+  if ((opts as any).captureScrollableContent) {
+    const docEl = document.documentElement as HTMLElement;
+    const bodyEl = document.body as HTMLElement | null;
+    for (const el of [docEl, bodyEl]) {
+      if (!el) continue;
+      if (el.scrollTop || el.scrollLeft) {
+        scrollSaved.push({ el, top: el.scrollTop, left: el.scrollLeft });
+        el.scrollTop = 0;
+        el.scrollLeft = 0;
+      }
+    }
+    for (const el of Array.from(document.querySelectorAll('*'))) {
+      const h = el as HTMLElement;
+      if (h.scrollTop || h.scrollLeft) {
+        scrollSaved.push({ el: h, top: h.scrollTop, left: h.scrollLeft });
+        h.scrollTop = 0;
+        h.scrollLeft = 0;
+      }
+    }
+  }
+
   await walk(rootEl, null, 1);
   await Promise.all(imgTasks);
+
+  for (const { el, top, left } of scrollSaved) {
+    el.scrollTop = top;
+    el.scrollLeft = left;
+  }
 
   const fonts = (opts.fontMode ?? 'embed') === 'embed' ? await collectFonts(nodes) : [];
 
