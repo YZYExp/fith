@@ -7,40 +7,78 @@
 - 输出单个自包含 `.svg`：`@font-face` 字体 base64 内联（`embed`），或字形轮廓化为 `<path>` 彻底去字体依赖（`outline`）；图片、回退图全部内联。
 - **捕获层用纯 DOM API 实现、与环境解耦**：同一核心可在 Node（headless Chrome）、浏览器插件、页内库三种形态运行。
 
+## 安装与准备
+
+要求 Node.js ≥ 18，使用 [pnpm](https://pnpm.io)。
+
+```bash
+pnpm install                      # 安装依赖
+pnpm exec playwright install chromium  # Node 后端需要的 Chromium（运行时浏览器）
+pnpm build                        # 编译 TS 到 dist/
+```
+
+> 作为依赖使用时：`pnpm add fitting-html`，并确保目标机器有 Chromium（`pnpm exec playwright install chromium`）。
+
 ## 用法
+
+### 1. Node 库
 
 ```ts
 import { htmlToSvg } from 'fitting-html';
 
 const svg = await htmlToSvg('<h1>hello</h1>', { width: 1280 });
-// 或：await htmlToSvg({ url: 'https://example.com' }, { width: 1280 });
+// 也支持 URL / 已有 Playwright Page：
+await htmlToSvg({ url: 'https://example.com' }, { width: 1280, height: 720 });
 ```
 
-CLI：
+常用选项：
 
-```
-fitting-html input.html -o out.svg --width 1280 --scale 2
+| 选项 | 默认 | 说明 |
+|---|---|---|
+| `width` | 必填 | 视口宽（CSS px） |
+| `height` | 内容高度 | 视口高；省略则按整页高度 |
+| `deviceScaleFactor` | `1` | 栅格回退/图片清晰度 |
+| `fontMode` | `embed` | `embed` 内联字体 / `outline` 字形转 `<path>` / `none` 仅引用字体名 |
+| `executablePath` | Playwright 自带 | 指定 Chromium 路径 |
+
+### 2. CLI
+
+```bash
+pnpm build            # 先编译，生成 dist/backends/node/cli.js（bin: fitting-html）
+
+# 通过 bin 运行（pnpm link --global 或安装后）：
+fitting-html input.html -o out.svg --width 1280 --scale 2 --font-mode outline
 fitting-html https://example.com -o out.svg
+
+# 或开发期直接跑脚本（用仓库自带的 Chromium 源）：
+pnpm render input.html out.svg 1280
 ```
 
-页内 / 浏览器库（同一核心，纯 DOM，无 Node）—— 整页或单个元素子树：
+### 3. 页内库（浏览器内，纯 DOM，无 Node）
+
+整页或单个元素子树：
 
 ```ts
 import { captureCurrentPage, captureElement } from 'fitting-html/browser';
+
 const pageSvg = await captureCurrentPage({ fontMode: 'embed' });
 const elSvg = await captureElement(document.querySelector('.card')!); // 裁剪到该元素
 ```
 
-### Chrome 插件（MV3）
+### 4. Chrome 扩展（MV3）
 
-构建：`npm run build:extension` → 在 `chrome://extensions` 以「加载已解压的扩展程序」加载 `dist/extension/`。
+```bash
+pnpm build:extension   # 打包到 dist/extension/
+```
+
+在 `chrome://extensions` 打开「开发者模式」→「加载已解压的扩展程序」→ 选择 `dist/extension/`，然后：
 
 - **点击工具栏图标** → 整页转为 SVG。
 - **`Alt+Shift+S` 或右键菜单「Convert element to SVG…」** → 进入 inspect 模式：鼠标悬停高亮元素，点击即转换该元素子树，`Esc` 取消。
 - 每次转换都会**下载 `.svg`** 并在**新标签页预览**。
 - 栅格回退（canvas/视频/滤镜/表单控件等）由 service worker 的 `captureVisibleTab` 提供；inspect 选区裁剪由核心的子树捕获支持。
 
-> 在支持扩展的浏览器里可用 `tsx scripts/verify-extension.ts` 做端到端冒烟（无头沙箱通常不支持加载扩展）。
+> 在支持扩展的浏览器里可用 `pnpm tsx scripts/verify-extension.ts` 做端到端冒烟（无头沙箱通常不支持加载扩展）。
 
 ## 工作原理
 
@@ -60,23 +98,24 @@ const elSvg = await captureElement(document.querySelector('.card')!); // 裁剪�
 集中在抗锯齿边缘）。
 
 ```bash
-npm install
-npm run build
-npm test                 # 单元测试 + 视觉回归（smoke fixture）
+pnpm install
+pnpm build
+pnpm test                # 单元测试 + 视觉回归（emit / smoke / gradients / outline / 字体内嵌 / 子树 / 页内后端，共 19 项）
 
 # 复现 antd 端到端验证：
-cd examples/antd-app && npm install && npm run build
-npx vite preview --port 4173 &      # 在 examples/antd-app 目录
-npm run validate -- http://localhost:4173/ antd 1280   # 在仓库根目录
+cd examples/antd-app && pnpm install && pnpm build
+pnpm exec vite preview --port 4173 &    # 在 examples/antd-app 目录
+pnpm validate http://localhost:4173/ antd 1280   # 在仓库根目录
 # 产物在 test/visual/__out__/antd.{svg,expected,actual,diff}.png
 ```
 
 > **沙箱说明**：本仓库的开发环境屏蔽了 Playwright 的浏览器 CDN，因此用
 > `@sparticuz/chromium`（经 npm 分发的 Chromium 二进制）作为浏览器源。正常环境用
-> `npx playwright install chromium` 即可，运行时不依赖 `@sparticuz/chromium`。
+> `pnpm exec playwright install chromium` 即可，运行时不依赖 `@sparticuz/chromium`。
 
 ## 状态
 
-已实现 M1–M6 的核心：纯 DOM 捕获、层叠 paint order、盒子/边框/圆角/阴影、逐行文本、
-图片内联、overflow/圆角裁剪、不透明度、栅格回退（变换旋转 / 滤镜 / 渐变背景 / 表单控件 /
-内联 SVG 图标等）。设计与里程碑见 **[DESIGN.md](./DESIGN.md)**。
+已实现 M1–M8 的核心：纯 DOM 捕获、层叠 paint order、盒子/边框/圆角/阴影、逐行文本、
+线性渐变、内联 SVG 图标向量化、图片内联、overflow/圆角裁剪、不透明度、字体三模式
+（embed / outline / none）、子树捕获、栅格回退（变换旋转 / 滤镜 / 表单控件 / canvas 等），
+以及 Node / 页内库 / MV3 扩展三种后端。设计与里程碑见 **[DESIGN.md](./DESIGN.md)**。
