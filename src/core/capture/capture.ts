@@ -22,6 +22,17 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
   const originX = subtree ? rootRect.left : 0;
   const originY = subtree ? rootRect.top : 0;
 
+  // In subtree mode, collect all DOM ancestors of rootEl. walk() skips rendering
+  // for these elements (to suppress container backgrounds) but still descends into
+  // their children, so siblings and cousins that visually overlap the capture area
+  // are captured with correct paint order. We walk from document.documentElement
+  // instead of rootEl so those out-of-subtree elements are naturally visited.
+  const rootAncestors = new Set<Element>();
+  if (subtree) {
+    let a: Element | null = rootEl.parentElement;
+    while (a) { rootAncestors.add(a); a = a.parentElement; }
+  }
+
   const nodes: PaintNode[] = [];
   const rasterTargets: { id: string; x: number; y: number; width: number; height: number }[] = [];
   const collectGlyphX = !!opts.collectGlyphX;
@@ -226,14 +237,18 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
   const cullLeft = subtree ? originX : 0;
   const cullTop = subtree ? originY : 0;
   const isVisible = (el: Element, cs: CSSStyleDeclaration) => {
-    if (cs.display === 'none' || cs.visibility === 'hidden' || cs.visibility === 'collapse')
-      return false;
+    // display:none removes element from layout entirely — no descent possible
+    if (cs.display === 'none') return false;
+    // opacity:0 composites to invisible and cannot be overridden by children
     if (num(cs.opacity) === 0) return false;
     const r = el.getBoundingClientRect();
     if (r.width === 0 && r.height === 0) return false;
     if (r.bottom < cullTop || r.right < cullLeft || r.top > cullBottom || r.left > cullRight)
       return false;
     return true;
+    // NOTE: visibility:hidden is intentionally NOT checked here. Children can
+    // override it with visibility:visible, so descent must continue. The walk()
+    // function skips emitBox/captureText for the hidden element itself.
   };
 
   const pseudoVisible = (el: Element, sel: string) => {
@@ -356,6 +371,85 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
       out.push({ offsetX: v[0] || 0, offsetY: v[1] || 0, blur: v[2] || 0, spread: v[3] || 0, color });
     }
     return out;
+  };
+
+  // Synthesize a text node for the CSS ::marker pseudo-element on list items.
+  // Markers are pseudo-elements not in the DOM — getComputedStyle(el,'::marker')
+  // exposes their computed content and color in Chrome 86+/FF 68+/Safari 13.1+.
+  const captureListMarker = (el: Element, cs: CSSStyleDeclaration, clip: Clip | null, opacity: number) => {
+    if (cs.display !== 'list-item') return;
+    const ms = getComputedStyle(el, '::marker');
+    let markerText = ms.content || '';
+    if (!markerText || markerText === 'none' || markerText === 'normal') {
+      // Fallback: infer from list-style-type
+      const lstyle = cs.listStyleType || getComputedStyle(el.parentElement || el).listStyleType || '';
+      if (!lstyle || lstyle === 'none') return;
+      if (lstyle === 'disc') markerText = '•';
+      else if (lstyle === 'circle') markerText = '○';
+      else if (lstyle === 'square') markerText = '▪';
+      else if (lstyle === 'decimal') {
+        let n = 1;
+        let sib = el.previousElementSibling;
+        while (sib) { if (sib.tagName === el.tagName) n++; sib = sib.previousElementSibling; }
+        markerText = n + '.';
+      } else return;
+    } else {
+      // Computed content is a CSS quoted string like '"• "' — strip outer quotes
+      markerText = markerText.replace(/^"(.*)"$/, '$1').replace(/^'(.*)'$/, '$1');
+    }
+    markerText = markerText.trim();
+    if (!markerText) return;
+
+    const r = el.getBoundingClientRect();
+    const markerFontSize = num(ms.fontSize) || num(cs.fontSize);
+    mctx.font = `${ms.fontStyle || cs.fontStyle} ${ms.fontWeight || cs.fontWeight} ${markerFontSize}px ${ms.fontFamily || cs.fontFamily}`;
+    const mfm = mctx.measureText('Mg');
+    const masc = (mfm as any).fontBoundingBoxAscent || markerFontSize * 0.8;
+    const mdsc = (mfm as any).fontBoundingBoxDescent || markerFontSize * 0.2;
+    const markerW = mctx.measureText(markerText).width;
+
+    // Approximate baseline from the first text node in this li (or its first child element)
+    let baseline = r.top + (markerFontSize - (masc + mdsc)) / 2 + masc;
+    const firstTN = (() => {
+      for (const c of Array.from(el.childNodes))
+        if (c.nodeType === Node.TEXT_NODE && (c.textContent || '').trim()) return c;
+      const fc = el.firstElementChild;
+      if (fc) for (const c of Array.from(fc.childNodes))
+        if (c.nodeType === Node.TEXT_NODE && (c.textContent || '').trim()) return c;
+      return null;
+    })();
+    if (firstTN) {
+      const rng = document.createRange();
+      rng.setStart(firstTN, 0);
+      rng.setEnd(firstTN, Math.min(1, (firstTN.textContent || '').length));
+      const rs = rng.getClientRects();
+      if (rs.length > 0) baseline = rs[0].top + (rs[0].height - (masc + mdsc)) / 2 + masc;
+    }
+
+    // list-style-position:outside (default) → marker sits just left of the content box
+    const markerX = (cs.listStylePosition || 'outside') === 'inside'
+      ? r.left + num(cs.paddingLeft)
+      : r.left - markerW - 2;
+
+    const markerColor = normColor(ms.color || cs.color);
+    if (transparent(markerColor)) return;
+
+    nodes.push({
+      kind: 'text',
+      id: nid(),
+      rect: { x: markerX, y: r.top, width: markerW, height: markerFontSize },
+      opacity,
+      clip,
+      lines: [{ text: markerText, x: markerX, baseline }],
+      fontFamily: ms.fontFamily || cs.fontFamily,
+      fontSize: markerFontSize,
+      fontWeight: ms.fontWeight || cs.fontWeight,
+      fontStyle: ms.fontStyle || cs.fontStyle,
+      color: markerColor,
+      letterSpacing: 0,
+      wordSpacing: 0,
+      decoration: null,
+    });
   };
 
   const captureText = (el: Element, cs: CSSStyleDeclaration, clip: Clip | null, opacity: number) => {
@@ -617,38 +711,49 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
     if (!isVisible(el, cs)) return;
     const opacity = inheritedOpacity * num(cs.opacity || '1');
     const r = el.getBoundingClientRect();
+    // visibility:hidden hides the element's own rendering but children can override
+    // it with visibility:visible. We skip box/text for the hidden element itself
+    // but always continue descent so visible children are captured.
+    const visHidden = cs.visibility === 'hidden' || cs.visibility === 'collapse';
+    // In subtree mode, ancestor elements (between document root and the selected
+    // element) skip ALL rendering — we don't want container backgrounds appearing
+    // behind the selected content. We still descend to capture siblings/cousins
+    // that visually overlap the capture area with correct paint order.
+    const skipRender = rootAncestors.has(el);
 
-    const subtreeReason = needsSubtreeRaster(el, cs);
+    const subtreeReason = !skipRender && needsSubtreeRaster(el, cs);
     if (subtreeReason) {
-      pushRaster(r, clip, opacity, subtreeReason);
+      if (!visHidden) pushRaster(r, clip, opacity, subtreeReason);
       return;
     }
 
-    if (el.tagName.toLowerCase() === 'svg') {
-      const clone = el.cloneNode(true) as SVGElement;
-      clone.setAttribute('x', String(r.left));
-      clone.setAttribute('y', String(r.top));
-      clone.setAttribute('width', String(r.width));
-      clone.setAttribute('height', String(r.height));
-      // resolve currentColor used by icon fonts/icons
-      (clone as any).style.color = normColor(cs.color);
-      if (!clone.getAttribute('xmlns')) clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
-      // Inline computed presentation styles so CSS-class-styled SVG (e.g. MUI
-      // x-charts line strokes / bar fills) survives transplanting without the
-      // page's stylesheet. Walk original + clone in lockstep (same structure).
-      inlineSvgStyles(el, clone);
-      nodes.push({
-        kind: 'inline-svg',
-        id: nid(),
-        rect: { x: r.left, y: r.top, width: r.width, height: r.height },
-        opacity,
-        clip,
-        markup: clone.outerHTML,
-      });
+    if (!skipRender && el.tagName.toLowerCase() === 'svg') {
+      if (!visHidden) {
+        const clone = el.cloneNode(true) as SVGElement;
+        clone.setAttribute('x', String(r.left));
+        clone.setAttribute('y', String(r.top));
+        clone.setAttribute('width', String(r.width));
+        clone.setAttribute('height', String(r.height));
+        // resolve currentColor used by icon fonts/icons
+        (clone as any).style.color = normColor(cs.color);
+        if (!clone.getAttribute('xmlns')) clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+        // Inline computed presentation styles so CSS-class-styled SVG (e.g. MUI
+        // x-charts line strokes / bar fills) survives transplanting without the
+        // page's stylesheet. Walk original + clone in lockstep (same structure).
+        inlineSvgStyles(el, clone);
+        nodes.push({
+          kind: 'inline-svg',
+          id: nid(),
+          rect: { x: r.left, y: r.top, width: r.width, height: r.height },
+          opacity,
+          clip,
+          markup: clone.outerHTML,
+        });
+      }
       return;
     }
 
-    if (el.tagName.toUpperCase() === 'IMG') {
+    if (!skipRender && el.tagName.toUpperCase() === 'IMG') {
       const img = el as HTMLImageElement;
       const objFit = cs.objectFit || 'fill';
       const preserveAspectRatio =
@@ -684,7 +789,7 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
     //     paint over the raster so the visual result is correct where vectorization
     //     is faithful; the raster fills the gaps (pseudo-elements, bg images, etc.).
     //   • Non-leaf without raster backend → emit what we can vectorize and continue.
-    const boxReason = needsBoxRaster(el, cs);
+    const boxReason = !skipRender && !visHidden && needsBoxRaster(el, cs);
     if (boxReason) {
       if (el.childElementCount === 0) {
         pushRaster(r, clip, opacity, boxReason);
@@ -692,14 +797,16 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
       }
       if (containerRasterFallback) {
         pushRaster(r, clip, opacity, boxReason);
-        // skip emitBox/captureText — the raster already captures them
+        // skip emitBox/captureText — the raster already captures them including ::marker
       } else {
         emitBox(el, cs, clip, opacity);
         captureText(el, cs, clip, opacity);
+        captureListMarker(el, cs, clip, opacity);
       }
-    } else {
+    } else if (!skipRender && !visHidden) {
       emitBox(el, cs, clip, opacity);
       captureText(el, cs, clip, opacity);
+      captureListMarker(el, cs, clip, opacity);
     }
 
     let childClip = clip;
@@ -782,8 +889,12 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
   // Reset all scroll positions so scrolled-out content is at its natural position
   // during capture. getBoundingClientRect() forces a synchronous layout flush, so
   // positions are correct even though the reset is synchronous.
-  // Restored after capture to avoid disrupting the user's scroll state.
+  // Also override content-visibility:auto/hidden — browsers skip layout for
+  // off-screen content-visibility:auto elements, leaving their children with zero
+  // bounding rects that would be culled as invisible (GitHub issue feeds, etc.).
+  // Both states are restored after capture.
   const scrollSaved: { el: HTMLElement; top: number; left: number }[] = [];
+  const cvSaved: { el: HTMLElement; v: string }[] = [];
   if ((opts as any).captureScrollableContent) {
     const docEl = document.documentElement as HTMLElement;
     const bodyEl = document.body as HTMLElement | null;
@@ -802,12 +913,21 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
         h.scrollTop = 0;
         h.scrollLeft = 0;
       }
+      const cv = (getComputedStyle(h) as any).contentVisibility;
+      if (cv === 'auto' || cv === 'hidden') {
+        cvSaved.push({ el: h, v: h.style.contentVisibility });
+        h.style.contentVisibility = 'visible';
+      }
     }
   }
 
-  await walk(rootEl, null, 1);
+  // In subtree mode, walk from document root so siblings and cousins that
+  // visually overlap the selected element's bounding area are captured with
+  // correct paint order. rootAncestors guards suppress their own rendering.
+  await walk(subtree ? (document.documentElement as Element) : rootEl, null, 1);
   await Promise.all(imgTasks);
 
+  for (const { el, v } of cvSaved) el.style.contentVisibility = v;
   for (const { el, top, left } of scrollSaved) {
     el.scrollTop = top;
     el.scrollLeft = left;
