@@ -73,9 +73,13 @@ pnpm build:extension   # 打包到 dist/extension/
 
 在 `chrome://extensions` 打开「开发者模式」→「加载已解压的扩展程序」→ 选择 `dist/extension/`，然后：
 
-- **点击工具栏图标** → 整页转为 SVG。
-- **`Alt+Shift+S` 或右键菜单「Convert element to SVG…」** → 进入 inspect 模式：鼠标悬停高亮元素，点击即转换该元素子树，`Esc` 取消。
-- 每次转换都会**下载 `.svg`** 并在**新标签页预览**。
+- **点击工具栏图标弹出面板**，可选择：
+  - **输出方式**：下载 + 预览 / 仅下载 / 仅预览（即「是否自动下载」）；
+  - **字体模式**：embed（可选中文本）/ outline（字形路径）/ 仅引用字体名；
+  - **「整页」** 按钮转换整页；**「选择元素」** 按钮进入 inspect 模式。
+- **inspect 模式**：鼠标悬停高亮元素，点击即转换该元素子树，`Esc` 取消。也可用 **`Alt+Shift+S`** 或右键菜单「Convert element to SVG…」直接触发。
+- 偏好（输出/字体）记忆在 `chrome.storage`；预览在打包的 `viewer.html` 新标签页中显示。
+- 内容脚本按需注入（`chrome.scripting`），对扩展安装前已打开的标签页也生效。
 - 栅格回退（canvas/视频/滤镜/表单控件等）由 service worker 的 `captureVisibleTab` 提供；inspect 选区裁剪由核心的子树捕获支持。
 
 > 在支持扩展的浏览器里可用 `pnpm tsx scripts/verify-extension.ts` 做端到端冒烟（无头沙箱通常不支持加载扩展）。

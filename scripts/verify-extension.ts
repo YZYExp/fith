@@ -38,10 +38,13 @@ async function main() {
     const downloadP = page.waitForEvent('download', { timeout: 15000 });
     const newTabP = ctx.waitForEvent('page', { timeout: 15000 });
 
-    // trigger a full-page capture as if the toolbar was clicked
+    // trigger a full-page capture the way the popup does: inject content.js on
+    // demand, then message it
     await sw.evaluate(async () => {
       const [t] = await chrome.tabs.query({ active: true, currentWindow: true });
-      if (t?.id != null) await chrome.tabs.sendMessage(t.id, { type: 'fh:capture' });
+      if (t?.id == null) return;
+      await chrome.scripting.executeScript({ target: { tabId: t.id }, files: ['content.js'] });
+      await chrome.tabs.sendMessage(t.id, { type: 'fh:capture', output: 'both', fontMode: 'embed' });
     });
 
     const download = await downloadP;

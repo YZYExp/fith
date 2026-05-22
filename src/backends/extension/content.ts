@@ -1,10 +1,14 @@
 /**
  * Content script: builds the SVG in-page (full tab or a picked element), delegating
- * raster fallback to the service worker. Output is downloaded and opened in a
- * preview tab. A DevTools-style hover picker selects an element to convert.
+ * raster fallback to the service worker. Injected on demand by the popup/background
+ * (so it works on already-open tabs); guarded against double-injection. Output is
+ * downloaded and/or opened in a preview tab per the chosen mode.
  */
 import { captureCurrentPage, captureElement } from '../browser/index.js';
 import type { Rect } from '../../core/ir/types.js';
+
+type OutputMode = 'both' | 'download' | 'preview';
+type FontMode = 'embed' | 'outline' | 'none';
 
 function rasterize(rect: Rect): Promise<string | null> {
   return new Promise((resolve) => {
@@ -19,22 +23,24 @@ function safeName(base: string): string {
   return (base || 'page').replace(/[^\w.-]+/g, '_').slice(0, 60) + '.svg';
 }
 
-function output(svg: string, name: string) {
-  // 1) download
-  const blob = new Blob([svg], { type: 'image/svg+xml' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = name;
-  a.click();
-  URL.revokeObjectURL(url);
-  // 2) preview tab (handed to the service worker)
-  chrome.runtime.sendMessage({ type: 'fh:preview', svg, name });
+function output(svg: string, name: string, mode: OutputMode) {
+  if (mode !== 'preview') {
+    const blob = new Blob([svg], { type: 'image/svg+xml' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = name;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+  if (mode !== 'download') {
+    chrome.runtime.sendMessage({ type: 'fh:preview', svg, name });
+  }
 }
 
-async function capturePage(fontMode: 'embed' | 'outline' | 'none') {
+async function capturePage(fontMode: FontMode, mode: OutputMode) {
   const svg = await captureCurrentPage({ fontMode, rasterize });
-  output(svg, safeName(document.title));
+  output(svg, safeName(document.title), mode);
   return svg.length;
 }
 
@@ -42,7 +48,7 @@ async function capturePage(fontMode: 'embed' | 'outline' | 'none') {
 
 let pickerActive = false;
 
-function startPicker() {
+function startPicker(fontMode: FontMode, mode: OutputMode) {
   if (pickerActive) return;
   pickerActive = true;
 
@@ -115,8 +121,8 @@ function startPicker() {
     const chosen = current;
     cleanup();
     if (chosen) {
-      captureElement(chosen, { fontMode: 'embed', rasterize })
-        .then((svg) => output(svg, safeName((chosen as HTMLElement).id || chosen.tagName.toLowerCase())))
+      captureElement(chosen, { fontMode, rasterize })
+        .then((svg) => output(svg, safeName((chosen as HTMLElement).id || chosen.tagName.toLowerCase()), mode))
         .catch((err) => console.error('[fitting-html]', err));
     }
   };
@@ -133,15 +139,21 @@ function startPicker() {
   document.addEventListener('keydown', onKey, true);
 }
 
-chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
-  if (msg?.type === 'fh:capture') {
-    capturePage(msg.fontMode ?? 'embed')
-      .then((bytes) => sendResponse({ ok: true, bytes }))
-      .catch((e) => sendResponse({ ok: false, error: String(e) }));
-    return true; // async response
-  }
-  if (msg?.type === 'fh:pick') {
-    startPicker();
-    sendResponse({ ok: true });
-  }
-});
+// Guard so on-demand re-injection doesn't register duplicate listeners.
+if (!(window as any).__fhInstalled) {
+  (window as any).__fhInstalled = true;
+  chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+    const mode: OutputMode = msg?.output ?? 'both';
+    const fontMode: FontMode = msg?.fontMode ?? 'embed';
+    if (msg?.type === 'fh:capture') {
+      capturePage(fontMode, mode)
+        .then((bytes) => sendResponse({ ok: true, bytes }))
+        .catch((e) => sendResponse({ ok: false, error: String(e) }));
+      return true; // async response
+    }
+    if (msg?.type === 'fh:pick') {
+      startPicker(fontMode, mode);
+      sendResponse({ ok: true });
+    }
+  });
+}
