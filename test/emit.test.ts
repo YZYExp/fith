@@ -275,4 +275,43 @@ describe('emitSvg', () => {
     expect(svg).toContain('stroke="red"');
     expect(svg).toContain('stroke-dasharray');
   });
+
+  it('renders list marker text node like any other text', () => {
+    // captureListMarker() synthesizes a plain TextNode for ::marker — the emitter
+    // has no special knowledge of markers, so this just verifies the text path works.
+    const svg = emitSvg(
+      base([
+        {
+          kind: 'text',
+          id: 'm',
+          rect: { x: 8, y: 10, width: 8, height: 16 },
+          opacity: 1,
+          lines: [{ text: '•', x: 8, baseline: 24 }],
+          fontFamily: 'sans-serif',
+          fontSize: 16,
+          fontWeight: '400',
+          fontStyle: 'normal',
+          color: 'rgb(0, 0, 0)',
+          letterSpacing: 0,
+          wordSpacing: 0,
+        },
+        {
+          kind: 'text',
+          id: 't',
+          rect: { x: 18, y: 10, width: 100, height: 16 },
+          opacity: 1,
+          lines: [{ text: 'List item text', x: 18, baseline: 24 }],
+          fontFamily: 'sans-serif',
+          fontSize: 16,
+          fontWeight: '400',
+          fontStyle: 'normal',
+          color: 'rgb(0, 0, 0)',
+          letterSpacing: 0,
+          wordSpacing: 0,
+        },
+      ]),
+    );
+    expect(svg).toContain('>•<');
+    expect(svg).toContain('>List item text<');
+  });
 });

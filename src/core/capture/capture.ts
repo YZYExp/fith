@@ -358,6 +358,85 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
     return out;
   };
 
+  // Synthesize a text node for the CSS ::marker pseudo-element on list items.
+  // Markers are pseudo-elements not in the DOM — getComputedStyle(el,'::marker')
+  // exposes their computed content and color in Chrome 86+/FF 68+/Safari 13.1+.
+  const captureListMarker = (el: Element, cs: CSSStyleDeclaration, clip: Clip | null, opacity: number) => {
+    if (cs.display !== 'list-item') return;
+    const ms = getComputedStyle(el, '::marker');
+    let markerText = ms.content || '';
+    if (!markerText || markerText === 'none' || markerText === 'normal') {
+      // Fallback: infer from list-style-type
+      const lstyle = cs.listStyleType || getComputedStyle(el.parentElement || el).listStyleType || '';
+      if (!lstyle || lstyle === 'none') return;
+      if (lstyle === 'disc') markerText = '•';
+      else if (lstyle === 'circle') markerText = '○';
+      else if (lstyle === 'square') markerText = '▪';
+      else if (lstyle === 'decimal') {
+        let n = 1;
+        let sib = el.previousElementSibling;
+        while (sib) { if (sib.tagName === el.tagName) n++; sib = sib.previousElementSibling; }
+        markerText = n + '.';
+      } else return;
+    } else {
+      // Computed content is a CSS quoted string like '"• "' — strip outer quotes
+      markerText = markerText.replace(/^"(.*)"$/, '$1').replace(/^'(.*)'$/, '$1');
+    }
+    markerText = markerText.trim();
+    if (!markerText) return;
+
+    const r = el.getBoundingClientRect();
+    const markerFontSize = num(ms.fontSize) || num(cs.fontSize);
+    mctx.font = `${ms.fontStyle || cs.fontStyle} ${ms.fontWeight || cs.fontWeight} ${markerFontSize}px ${ms.fontFamily || cs.fontFamily}`;
+    const mfm = mctx.measureText('Mg');
+    const masc = (mfm as any).fontBoundingBoxAscent || markerFontSize * 0.8;
+    const mdsc = (mfm as any).fontBoundingBoxDescent || markerFontSize * 0.2;
+    const markerW = mctx.measureText(markerText).width;
+
+    // Approximate baseline from the first text node in this li (or its first child element)
+    let baseline = r.top + (markerFontSize - (masc + mdsc)) / 2 + masc;
+    const firstTN = (() => {
+      for (const c of Array.from(el.childNodes))
+        if (c.nodeType === Node.TEXT_NODE && (c.textContent || '').trim()) return c;
+      const fc = el.firstElementChild;
+      if (fc) for (const c of Array.from(fc.childNodes))
+        if (c.nodeType === Node.TEXT_NODE && (c.textContent || '').trim()) return c;
+      return null;
+    })();
+    if (firstTN) {
+      const rng = document.createRange();
+      rng.setStart(firstTN, 0);
+      rng.setEnd(firstTN, Math.min(1, (firstTN.textContent || '').length));
+      const rs = rng.getClientRects();
+      if (rs.length > 0) baseline = rs[0].top + (rs[0].height - (masc + mdsc)) / 2 + masc;
+    }
+
+    // list-style-position:outside (default) → marker sits just left of the content box
+    const markerX = (cs.listStylePosition || 'outside') === 'inside'
+      ? r.left + num(cs.paddingLeft)
+      : r.left - markerW - 2;
+
+    const markerColor = normColor(ms.color || cs.color);
+    if (transparent(markerColor)) return;
+
+    nodes.push({
+      kind: 'text',
+      id: nid(),
+      rect: { x: markerX, y: r.top, width: markerW, height: markerFontSize },
+      opacity,
+      clip,
+      lines: [{ text: markerText, x: markerX, baseline }],
+      fontFamily: ms.fontFamily || cs.fontFamily,
+      fontSize: markerFontSize,
+      fontWeight: ms.fontWeight || cs.fontWeight,
+      fontStyle: ms.fontStyle || cs.fontStyle,
+      color: markerColor,
+      letterSpacing: 0,
+      wordSpacing: 0,
+      decoration: null,
+    });
+  };
+
   const captureText = (el: Element, cs: CSSStyleDeclaration, clip: Clip | null, opacity: number) => {
     const fontSize = num(cs.fontSize);
     if (fontSize <= 0) return;
@@ -692,14 +771,16 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
       }
       if (containerRasterFallback) {
         pushRaster(r, clip, opacity, boxReason);
-        // skip emitBox/captureText — the raster already captures them
+        // skip emitBox/captureText — the raster already captures them including ::marker
       } else {
         emitBox(el, cs, clip, opacity);
         captureText(el, cs, clip, opacity);
+        captureListMarker(el, cs, clip, opacity);
       }
     } else {
       emitBox(el, cs, clip, opacity);
       captureText(el, cs, clip, opacity);
+      captureListMarker(el, cs, clip, opacity);
     }
 
     let childClip = clip;
