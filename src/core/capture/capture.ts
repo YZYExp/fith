@@ -31,6 +31,36 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
   const metricsCanvas = document.createElement('canvas');
   const mctx = metricsCanvas.getContext('2d')!;
 
+  // Normalize any computed color (oklch/oklab/lab/lch/color()/hwb/hsl/…) to plain
+  // sRGB rgb()/rgba(). getComputedStyle returns modern color functions verbatim
+  // (e.g. shadcn/Tailwind oklch), which SVG renderers without CSS Color 4 can't
+  // display — they must be converted for a portable, pure SVG.
+  const colorCanvas = document.createElement('canvas');
+  colorCanvas.width = colorCanvas.height = 1;
+  const cctx = colorCanvas.getContext('2d', { willReadFrequently: true })!;
+  const colorCache = new Map<string, string>();
+  const normColor = (c: string): string => {
+    if (!c) return c;
+    if (c === 'transparent' || c.charCodeAt(0) === 35 /* # */ || /^rgb/i.test(c)) return c;
+    const cached = colorCache.get(c);
+    if (cached !== undefined) return cached;
+    let out = c;
+    try {
+      cctx.clearRect(0, 0, 1, 1);
+      cctx.fillStyle = c;
+      cctx.fillRect(0, 0, 1, 1);
+      const d = cctx.getImageData(0, 0, 1, 1).data;
+      out =
+        d[3] === 255
+          ? `rgb(${d[0]}, ${d[1]}, ${d[2]})`
+          : `rgba(${d[0]}, ${d[1]}, ${d[2]}, ${Math.round((d[3] / 255) * 1000) / 1000})`;
+    } catch {
+      out = c;
+    }
+    colorCache.set(c, out);
+    return out;
+  };
+
   const num = (v: string | null | undefined) => {
     const n = parseFloat(v || '');
     return isFinite(n) ? n : 0;
@@ -109,14 +139,17 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
     const stops: { offset: number | null; color: string }[] = [];
     for (; i < parts.length; i++) {
       const seg = parts[i];
-      const colorMatch = seg.match(/^(rgba?\([^)]+\)|#[0-9a-fA-F]+|[a-zA-Z]+)/);
+      const colorMatch = seg.match(
+        /^((?:rgba?|hsla?|oklch|oklab|lab|lch|hwb|color)\([^)]+\)|#[0-9a-fA-F]+|[a-zA-Z]+)/,
+      );
       if (!colorMatch) return null;
-      const color = colorMatch[0];
+      const rawColor = colorMatch[0];
+      const color = normColor(rawColor);
       // SVG stop-opacity interpolation diverges from CSS when stop alphas differ;
       // raster gradients with any non-opaque stop to stay faithful.
       const alpha = color.match(/rgba\([^)]*,\s*([\d.]+)\s*\)$/);
-      if ((alpha && parseFloat(alpha[1]) < 1) || color === 'transparent') return null;
-      const rest = seg.slice(color.length).trim();
+      if ((alpha && parseFloat(alpha[1]) < 1) || rawColor === 'transparent') return null;
+      const rest = seg.slice(rawColor.length).trim();
       const positions = rest ? rest.split(/\s+/) : [];
       if (positions.length === 0) {
         stops.push({ offset: null, color });
@@ -272,10 +305,11 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
       } else cur += ch;
     }
     if (cur.trim()) parts.push(cur);
+    const COLOR_FN = /((?:rgba?|hsla?|oklch|oklab|lab|lch|hwb|color)\([^)]+\)|#[0-9a-fA-F]+|[a-z]+)/;
     for (const part of parts) {
-      const colorMatch = part.match(/(rgba?\([^)]+\)|#[0-9a-fA-F]+|[a-z]+)/);
-      const color = colorMatch ? colorMatch[0] : 'rgba(0,0,0,0.2)';
-      const nums = part.replace(/rgba?\([^)]+\)/, '').match(/-?\d*\.?\d+px/g) || [];
+      const colorMatch = part.match(COLOR_FN);
+      const color = normColor(colorMatch ? colorMatch[0] : 'rgba(0,0,0,0.2)');
+      const nums = part.replace(COLOR_FN, '').match(/-?\d*\.?\d+px/g) || [];
       const v = nums.map((s) => parseFloat(s));
       out.push({ offsetX: v[0] || 0, offsetY: v[1] || 0, blur: v[2] || 0, spread: v[3] || 0, color });
     }
@@ -371,18 +405,18 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
         fontSize,
         fontWeight: cs.fontWeight,
         fontStyle: cs.fontStyle,
-        color: cs.color,
+        color: normColor(cs.color),
         letterSpacing: ls,
         wordSpacing: ws,
         decoration,
-        decorationColor: cs.textDecorationColor || cs.color,
+        decorationColor: normColor(cs.textDecorationColor || cs.color),
       });
     }
   };
 
   const emitBox = (el: Element, cs: CSSStyleDeclaration, clip: Clip | null, opacity: number) => {
     const r = el.getBoundingClientRect();
-    const fill = transparent(cs.backgroundColor) ? null : cs.backgroundColor;
+    const fill = transparent(cs.backgroundColor) ? null : normColor(cs.backgroundColor);
     const bw = {
       top: num(cs.borderTopWidth),
       right: num(cs.borderRightWidth),
@@ -392,10 +426,10 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
     const hasBorder = bw.top + bw.right + bw.bottom + bw.left > 0;
     const border = hasBorder
       ? {
-          top: { width: bw.top, color: cs.borderTopColor, style: cs.borderTopStyle },
-          right: { width: bw.right, color: cs.borderRightColor, style: cs.borderRightStyle },
-          bottom: { width: bw.bottom, color: cs.borderBottomColor, style: cs.borderBottomStyle },
-          left: { width: bw.left, color: cs.borderLeftColor, style: cs.borderLeftStyle },
+          top: { width: bw.top, color: normColor(cs.borderTopColor), style: cs.borderTopStyle },
+          right: { width: bw.right, color: normColor(cs.borderRightColor), style: cs.borderRightStyle },
+          bottom: { width: bw.bottom, color: normColor(cs.borderBottomColor), style: cs.borderBottomStyle },
+          left: { width: bw.left, color: normColor(cs.borderLeftColor), style: cs.borderLeftStyle },
         }
       : null;
     const shadows = parseShadows(cs.boxShadow);
@@ -437,7 +471,7 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
       clone.setAttribute('width', String(r.width));
       clone.setAttribute('height', String(r.height));
       // resolve currentColor used by icon fonts/icons
-      (clone as any).style.color = cs.color;
+      (clone as any).style.color = normColor(cs.color);
       if (!clone.getAttribute('xmlns')) clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
       nodes.push({
         kind: 'inline-svg',
@@ -507,12 +541,12 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
   if (subtree) {
     // a subtree export is just the element: use its own opaque bg, else transparent
     const ebg = getComputedStyle(rootEl).backgroundColor;
-    background = transparent(ebg) ? '' : ebg;
+    background = transparent(ebg) ? '' : normColor(ebg);
   } else {
     background = !transparent(getComputedStyle(document.documentElement).backgroundColor)
-      ? getComputedStyle(document.documentElement).backgroundColor
+      ? normColor(getComputedStyle(document.documentElement).backgroundColor)
       : body && !transparent(getComputedStyle(body).backgroundColor)
-        ? getComputedStyle(body).backgroundColor
+        ? normColor(getComputedStyle(body).backgroundColor)
         : '#ffffff';
   }
 

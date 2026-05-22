@@ -1,0 +1,38 @@
+<!doctype html>
+<html>
+  <head>
+    <style>
+      /* Modern (shadcn/Tailwind-style) UI using oklch() colors throughout —
+         getComputedStyle returns these verbatim, so they must be normalized. */
+      :root { --card: oklch(1 0 0); --border: oklch(0.92 0.004 286); }
+      body { margin: 0; background: oklch(0.985 0 0); font-family: sans-serif; padding: 24px; }
+      .card {
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        box-shadow: 0 1px 3px oklch(0 0 0 / 0.1);
+        padding: 16px;
+        width: 320px;
+      }
+      h1 { margin: 0 0 8px; font-size: 18px; color: oklch(0.21 0.006 286); }
+      p { margin: 0 0 12px; color: oklch(0.55 0.016 286); line-height: 1.5; }
+      .pill {
+        display: inline-block; padding: 4px 10px; border-radius: 999px;
+        background: oklch(0.93 0.05 25); color: oklch(0.5 0.2 25);
+        border: 1px solid oklch(0.8 0.1 25); font-size: 13px;
+      }
+      .btn {
+        display: inline-block; margin-left: 8px; padding: 6px 14px; border-radius: 8px;
+        background: oklch(0.55 0.22 264); color: oklch(1 0 0); font-size: 13px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="card">
+      <h1>Models and Forwarding Rules</h1>
+      <p>Claude Code profile — unified mode using modern oklch colors.</p>
+      <span class="pill">Anthropic Style</span>
+      <span class="btn">Logs</span>
+    </div>
+  </body>
+</html>

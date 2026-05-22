@@ -47,4 +47,19 @@ describe('visual regression', () => {
     },
     60_000,
   );
+
+  it(
+    'normalizes modern color functions (oklch/oklab/…) to sRGB so the SVG is portable',
+    async () => {
+      const r = await validate(
+        { url: pathToFileURL(resolve(FIXTURES, 'oklch.html')).href },
+        { width: 400, height: 220, name: 'oklch', outDir: OUT },
+      );
+      const svg = readFileSync(resolve(OUT, 'oklch.svg'), 'utf8');
+      // no color *values* (attributes or style) may use CSS Color 4 functions
+      expect(svg).not.toMatch(/(?:"|:)\s*(?:oklch|oklab|lab|lch|hwb|color)\(/);
+      expect(r.ratio).toBeLessThan(0.02);
+    },
+    60_000,
+  );
 });
