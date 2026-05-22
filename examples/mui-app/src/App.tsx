@@ -3,11 +3,13 @@ import {
   Toolbar,
   Typography,
   Box,
-  Container,
-  Grid,
+  Drawer,
+  List,
+  ListItemButton,
+  ListItemIcon,
+  ListItemText,
   Card,
   CardContent,
-  CardActions,
   Paper,
   Button,
   Chip,
@@ -17,10 +19,6 @@ import {
   LinearProgress,
   Alert,
   AlertTitle,
-  Tabs,
-  Tab,
-  Switch,
-  FormControlLabel,
   Table,
   TableHead,
   TableBody,
@@ -31,60 +29,101 @@ import {
 } from '@mui/material';
 import {
   Menu as MenuIcon,
+  Dashboard as DashboardIcon,
+  People as PeopleIcon,
+  ShoppingCart,
+  BarChart as BarChartIcon,
+  Settings,
   Notifications as NotificationsIcon,
   TrendingUp,
   TrendingDown,
   CheckCircle,
   Person,
 } from '@mui/icons-material';
+import { LineChart } from '@mui/x-charts/LineChart';
+import { BarChart } from '@mui/x-charts/BarChart';
+import { PieChart } from '@mui/x-charts/PieChart';
+
+const DRAWER = 240;
 
 const rows = [
   { name: 'Acme Corp', status: 'Active', amount: '$4,200', progress: 80 },
   { name: 'Globex', status: 'Pending', amount: '$1,800', progress: 45 },
   { name: 'Initech', status: 'Closed', amount: '$9,100', progress: 100 },
 ];
-
 const statColor: Record<string, 'success' | 'warning' | 'default'> = {
   Active: 'success',
   Pending: 'warning',
   Closed: 'default',
 };
 
+const nav = [
+  { label: 'Dashboard', icon: <DashboardIcon /> },
+  { label: 'Customers', icon: <PeopleIcon /> },
+  { label: 'Orders', icon: <ShoppingCart /> },
+  { label: 'Reports', icon: <BarChartIcon /> },
+  { label: 'Settings', icon: <Settings /> },
+];
+
 export default function App() {
   return (
-    <Box sx={{ bgcolor: 'grey.100', minHeight: '100vh', pb: 6 }}>
-      <AppBar position="static">
+    <Box sx={{ display: 'flex', bgcolor: 'grey.100', minHeight: '100vh' }}>
+      <Drawer
+        variant="permanent"
+        sx={{
+          width: DRAWER,
+          flexShrink: 0,
+          '& .MuiDrawer-paper': { width: DRAWER, boxSizing: 'border-box' },
+        }}
+      >
         <Toolbar>
-          <IconButton edge="start" color="inherit" sx={{ mr: 2 }}>
-            <MenuIcon />
-          </IconButton>
-          <Typography variant="h6" sx={{ flexGrow: 1 }}>
-            Sales Dashboard
+          <Typography variant="h6" noWrap fontWeight={700}>
+            fitting-html
           </Typography>
-          <Badge badgeContent={5} color="error" sx={{ mr: 2 }}>
-            <NotificationsIcon />
-          </Badge>
-          <Button color="inherit" variant="outlined">
-            New Report
-          </Button>
         </Toolbar>
-      </AppBar>
+        <Divider />
+        <List>
+          {nav.map((n, i) => (
+            <ListItemButton key={n.label} selected={i === 0}>
+              <ListItemIcon>{n.icon}</ListItemIcon>
+              <ListItemText primary={n.label} />
+            </ListItemButton>
+          ))}
+        </List>
+      </Drawer>
 
-      <Container maxWidth="lg" sx={{ mt: 4 }}>
-        <Alert severity="success" sx={{ mb: 3 }}>
-          <AlertTitle>On track</AlertTitle>
-          Revenue grew 18% compared to the previous quarter.
-        </Alert>
+      <Box sx={{ flexGrow: 1 }}>
+        <AppBar position="static">
+          <Toolbar>
+            <IconButton edge="start" color="inherit" sx={{ mr: 2 }}>
+              <MenuIcon />
+            </IconButton>
+            <Typography variant="h6" sx={{ flexGrow: 1 }}>
+              Sales Dashboard
+            </Typography>
+            <Badge badgeContent={5} color="error" sx={{ mr: 2 }}>
+              <NotificationsIcon />
+            </Badge>
+            <Button color="inherit" variant="outlined">
+              New Report
+            </Button>
+          </Toolbar>
+        </AppBar>
 
-        <Grid container spacing={3}>
-          {[
-            { label: 'Active Users', value: '11,280', icon: <TrendingUp color="success" /> },
-            { label: 'Revenue', value: '$93.4K', icon: <TrendingUp color="success" /> },
-            { label: 'Churn', value: '2.8%', icon: <TrendingDown color="error" /> },
-            { label: 'Satisfaction', value: '4.6/5', icon: <CheckCircle color="primary" /> },
-          ].map((s) => (
-            <Grid item xs={12} sm={6} md={3} key={s.label}>
-              <Card>
+        <Box sx={{ p: 3 }}>
+          <Alert severity="success" sx={{ mb: 3 }}>
+            <AlertTitle>On track</AlertTitle>
+            Revenue grew 18% compared to the previous quarter.
+          </Alert>
+
+          <Stack direction={{ xs: 'column', md: 'row' }} spacing={3} sx={{ mb: 3 }}>
+            {[
+              { label: 'Active Users', value: '11,280', icon: <TrendingUp color="success" /> },
+              { label: 'Revenue', value: '$93.4K', icon: <TrendingUp color="success" /> },
+              { label: 'Churn', value: '2.8%', icon: <TrendingDown color="error" /> },
+              { label: 'Satisfaction', value: '4.6/5', icon: <CheckCircle color="primary" /> },
+            ].map((s) => (
+              <Card key={s.label} sx={{ flex: 1 }}>
                 <CardContent>
                   <Stack direction="row" justifyContent="space-between" alignItems="center">
                     <Box>
@@ -97,13 +136,44 @@ export default function App() {
                   </Stack>
                 </CardContent>
               </Card>
-            </Grid>
-          ))}
-        </Grid>
+            ))}
+          </Stack>
 
-        <Grid container spacing={3} sx={{ mt: 0 }}>
-          <Grid item xs={12} md={8}>
-            <Paper sx={{ p: 2 }} elevation={3}>
+          <Stack direction={{ xs: 'column', md: 'row' }} spacing={3} sx={{ mb: 3 }}>
+            <Paper sx={{ p: 2, flex: 2 }} elevation={3}>
+              <Typography variant="h6" gutterBottom>
+                Revenue trend
+              </Typography>
+              <LineChart
+                height={240}
+                series={[
+                  { data: [12, 19, 14, 23, 28, 26, 32], label: 'This year', color: '#1976d2' },
+                  { data: [8, 11, 13, 15, 18, 17, 21], label: 'Last year', color: '#9c27b0' },
+                ]}
+                xAxis={[{ scaleType: 'point', data: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'] }]}
+              />
+            </Paper>
+            <Paper sx={{ p: 2, flex: 1 }} elevation={3}>
+              <Typography variant="h6" gutterBottom>
+                By channel
+              </Typography>
+              <PieChart
+                height={240}
+                series={[
+                  {
+                    data: [
+                      { id: 0, value: 40, label: 'Direct', color: '#1976d2' },
+                      { id: 1, value: 30, label: 'Organic', color: '#2e7d32' },
+                      { id: 2, value: 30, label: 'Referral', color: '#ed6c02' },
+                    ],
+                  },
+                ]}
+              />
+            </Paper>
+          </Stack>
+
+          <Stack direction={{ xs: 'column', md: 'row' }} spacing={3}>
+            <Paper sx={{ p: 2, flex: 2 }} elevation={3}>
               <Typography variant="h6" gutterBottom>
                 Accounts
               </Typography>
@@ -132,57 +202,34 @@ export default function App() {
                 </TableBody>
               </Table>
             </Paper>
-          </Grid>
 
-          <Grid item xs={12} md={4}>
-            <Card>
-              <CardContent>
-                <Tabs value={0} sx={{ mb: 2 }}>
-                  <Tab label="Members" />
-                  <Tab label="Invites" />
-                </Tabs>
-                <Stack spacing={2}>
-                  {['Alice Chen', 'Bob Liu', 'Carol Wang'].map((n) => (
-                    <Stack key={n} direction="row" spacing={2} alignItems="center">
-                      <Avatar sx={{ bgcolor: 'primary.main', width: 32, height: 32 }}>
-                        <Person fontSize="small" />
-                      </Avatar>
-                      <Box sx={{ flexGrow: 1 }}>
-                        <Typography variant="body2">{n}</Typography>
-                        <Typography variant="caption" color="text.secondary">
-                          Editor
-                        </Typography>
-                      </Box>
-                      <CheckCircle color="success" fontSize="small" />
-                    </Stack>
-                  ))}
-                </Stack>
-                <Divider sx={{ my: 2 }} />
-                <FormControlLabel control={<Switch defaultChecked />} label="Email alerts" />
-              </CardContent>
-              <CardActions>
-                <Button size="small">Manage</Button>
-                <Button size="small" variant="contained">
-                  Invite
-                </Button>
-              </CardActions>
-            </Card>
-          </Grid>
-        </Grid>
-
-        <Paper sx={{ p: 3, mt: 3 }}>
-          <Typography variant="h6" gutterBottom>
-            Tags
-          </Typography>
-          <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
-            <Chip label="design" color="secondary" />
-            <Chip label="urgent" color="error" />
-            <Chip label="review" color="warning" variant="outlined" />
-            <Chip label="backend" color="primary" variant="outlined" />
-            <Chip label="qa" color="info" />
+            <Paper sx={{ p: 2, flex: 1 }} elevation={3}>
+              <Typography variant="h6" gutterBottom>
+                Weekly orders
+              </Typography>
+              <BarChart
+                height={200}
+                series={[{ data: [42, 55, 38, 61, 47], color: '#2e7d32' }]}
+                xAxis={[{ scaleType: 'band', data: ['W1', 'W2', 'W3', 'W4', 'W5'] }]}
+              />
+              <Divider sx={{ my: 2 }} />
+              <Stack spacing={1.5}>
+                {['Alice Chen', 'Bob Liu'].map((n) => (
+                  <Stack key={n} direction="row" spacing={2} alignItems="center">
+                    <Avatar sx={{ bgcolor: 'primary.main', width: 28, height: 28 }}>
+                      <Person fontSize="small" />
+                    </Avatar>
+                    <Typography variant="body2" sx={{ flexGrow: 1 }}>
+                      {n}
+                    </Typography>
+                    <CheckCircle color="success" fontSize="small" />
+                  </Stack>
+                ))}
+              </Stack>
+            </Paper>
           </Stack>
-        </Paper>
-      </Container>
+        </Box>
+      </Box>
     </Box>
   );
 }

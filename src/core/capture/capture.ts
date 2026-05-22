@@ -39,15 +39,25 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
   colorCanvas.width = colorCanvas.height = 1;
   const cctx = colorCanvas.getContext('2d', { willReadFrequently: true })!;
   const colorCache = new Map<string, string>();
+  // non-color paint keywords (valid for fill/stroke) must pass through untouched
+  const NON_COLOR = new Set(['none', 'currentcolor', 'context-fill', 'context-stroke', 'inherit', 'initial', 'unset']);
+  const SENTINEL = 'rgba(1, 2, 3, 0.5)';
   const normColor = (c: string): string => {
     if (!c) return c;
     if (c === 'transparent' || c.charCodeAt(0) === 35 /* # */ || /^rgb/i.test(c)) return c;
+    if (NON_COLOR.has(c.toLowerCase())) return c;
     const cached = colorCache.get(c);
     if (cached !== undefined) return cached;
     let out = c;
     try {
-      cctx.clearRect(0, 0, 1, 1);
+      // detect invalid color: fillStyle keeps its prior value when assigned junk
+      cctx.fillStyle = SENTINEL;
       cctx.fillStyle = c;
+      if (cctx.fillStyle === SENTINEL) {
+        colorCache.set(c, c);
+        return c;
+      }
+      cctx.clearRect(0, 0, 1, 1);
       cctx.fillRect(0, 0, 1, 1);
       const d = cctx.getImageData(0, 0, 1, 1).data;
       out =
@@ -474,6 +484,49 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
     });
   };
 
+  // SVG presentation properties to inline onto transplanted inline-svg nodes.
+  const SVG_PAINT = [
+    'fill',
+    'fill-opacity',
+    'fill-rule',
+    'stroke',
+    'stroke-width',
+    'stroke-opacity',
+    'stroke-linecap',
+    'stroke-linejoin',
+    'stroke-dasharray',
+    'stroke-dashoffset',
+    'stroke-miterlimit',
+    'opacity',
+    'paint-order',
+    'stop-color',
+    'stop-opacity',
+    'text-anchor',
+    'dominant-baseline',
+    'font-family',
+    'font-size',
+    'font-weight',
+    'font-style',
+    'letter-spacing',
+  ];
+  const COLOR_PROPS = new Set(['fill', 'stroke', 'stop-color']);
+  const inlineSvgStyles = (srcRoot: Element, cloneRoot: Element) => {
+    const src = [srcRoot, ...Array.from(srcRoot.querySelectorAll('*'))];
+    const dst = [cloneRoot, ...Array.from(cloneRoot.querySelectorAll('*'))];
+    for (let i = 0; i < src.length && i < dst.length; i++) {
+      const scs = getComputedStyle(src[i]);
+      if (scs.display === 'none') {
+        dst[i].setAttribute('display', 'none');
+        continue;
+      }
+      for (const prop of SVG_PAINT) {
+        const v = scs.getPropertyValue(prop);
+        if (!v || v === 'normal') continue;
+        dst[i].setAttribute(prop, COLOR_PROPS.has(prop) ? normColor(v) : v);
+      }
+    }
+  };
+
   const imgTasks: Promise<void>[] = [];
 
   const walk = async (el: Element, clip: Clip | null, inheritedOpacity: number) => {
@@ -507,6 +560,10 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
       // resolve currentColor used by icon fonts/icons
       (clone as any).style.color = normColor(cs.color);
       if (!clone.getAttribute('xmlns')) clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+      // Inline computed presentation styles so CSS-class-styled SVG (e.g. MUI
+      // x-charts line strokes / bar fills) survives transplanting without the
+      // page's stylesheet. Walk original + clone in lockstep (same structure).
+      inlineSvgStyles(el, clone);
       nodes.push({
         kind: 'inline-svg',
         id: nid(),

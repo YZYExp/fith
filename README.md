@@ -91,22 +91,42 @@ pnpm build:extension   # 打包到 dist/extension/
 `src/core/` 是零 Node 依赖的纯 TS（捕获 + IR + SVG 发射），可直接打包进浏览器插件；
 `src/backends/node/` 用 Playwright 启动 Chromium、注入捕获脚本、为回退区域截图。
 
-## 验证
+## 验证方案
 
-`examples/antd-app/` 是一个复杂的 Vite + React + Ant Design 仪表盘，用作端到端保真度验证：
-渲染原页面与生成的 SVG，逐像素对比。在该示例上**差异 < 0.01%**（约 50 / 1.75M 像素，
-集中在抗锯齿边缘）。
+保真度的唯一可信度量是**像素对比**：在同一个 Chromium 里分别渲染「原页面」和「生成的 SVG」，
+用 `pixelmatch` 逐像素求差异比例。整套方案分三层，全部固化为脚本：
+
+**1. 单元 + 视觉回归（CI，`pnpm test`）** — `test/visual/*.test.ts` + `test/fixtures/*.html`：
+发射器单测，以及 smoke / gradients / outline / 字体内嵌 / 子树捕获 / 页内后端 / **oklch 颜色** /
+**容器栅格回退（不空白）** / **text-transform** 等回归。新特性必须先加 fixture。
+
+**2. 示例应用端到端（`pnpm validate:example <name>`）** — 一条命令完成「构建 → 起静态服务 →
+渲染对比 → 写产物 → 超阈值则非零退出」：
+
+```bash
+pnpm validate:example antd-app 1280     # examples/antd-app，差异 ~0.003%
+pnpm validate:example mui-app  1280     # examples/mui-app（MUI Dashboard：Drawer + x-charts 折线/柱/饼 + 表格），~0.34%
+# 字体模式与阈值可调：
+pnpm validate:example mui-app 1280 "" outline
+FH_THRESHOLD=0.01 pnpm validate:example antd-app
+```
+
+**3. 任意 URL / HTML 即席验证（`pnpm validate`）**：
+
+```bash
+pnpm validate https://example.com mypage 1280 720
+pnpm validate ./some.html mypage 800 600 outline
+```
+
+产物统一写到 `test/visual/__out__/<name>.{svg,expected,actual,diff}.png`，可直接肉眼比对。
+实现上：`scripts/validate.ts` 是核心 harness（含静态服务 `serveDir`），`scripts/validate-example.ts`
+在其上封装示例的构建 / serve / 退出码。
 
 ```bash
 pnpm install
+pnpm exec playwright install chromium    # 浏览器（运行时/验证都需要）
 pnpm build
-pnpm test                # 单元测试 + 视觉回归（emit / smoke / gradients / outline / 字体内嵌 / 子树 / 页内后端，共 19 项）
-
-# 复现 antd 端到端验证：
-cd examples/antd-app && pnpm install && pnpm build
-pnpm exec vite preview --port 4173 &    # 在 examples/antd-app 目录
-pnpm validate http://localhost:4173/ antd 1280   # 在仓库根目录
-# 产物在 test/visual/__out__/antd.{svg,expected,actual,diff}.png
+pnpm test
 ```
 
 > **沙箱说明**：本仓库的开发环境屏蔽了 Playwright 的浏览器 CDN，因此用
