@@ -1,0 +1,42 @@
+<!doctype html>
+<html>
+  <head>
+    <style>
+      body { margin: 0; font-family: sans-serif; background: #fff; }
+
+      /*
+        conic-gradient on a NON-LEAF element (has a child span).
+        needsBoxRaster fires, but containerRasterFallback is false in renderToSvg,
+        so the gradient background is silently dropped — the circle renders blank.
+        diff-patch should detect this and insert a raster patch.
+      */
+      .ring {
+        position: relative;
+        width: 160px; height: 160px; border-radius: 50%;
+        background: conic-gradient(red 0deg, orange 60deg, yellow 120deg, green 180deg, blue 240deg, violet 300deg, red 360deg);
+        margin: 32px;
+        display: flex; align-items: center; justify-content: center;
+      }
+      .ring-label {
+        color: #fff; font-weight: 700; font-size: 13px;
+        text-shadow: 0 1px 2px rgba(0,0,0,0.5);
+      }
+
+      .title { font-size: 18px; font-weight: 600; color: #1f2328; padding: 8px 32px; }
+      .text { padding: 0 32px 24px; font-size: 14px; line-height: 1.6; color: #57606a; max-width: 520px; }
+    </style>
+  </head>
+  <body>
+    <div class="title">Diff-patch demo</div>
+    <!-- Non-leaf with conic-gradient: child span makes childElementCount > 0 -->
+    <div class="ring">
+      <span class="ring-label">Color wheel</span>
+    </div>
+    <p class="text">
+      The colour wheel above uses a <code>conic-gradient</code> on a non-leaf
+      element. Without diff-patch the gradient is silently dropped (blank circle).
+      With <code>diffPatch: true</code> the pass detects the divergent region and
+      inserts a raster patch restoring it at pixel-perfect quality.
+    </p>
+  </body>
+</html>

@@ -1,8 +1,14 @@
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+import { writeFileSync, unlinkSync } from 'node:fs';
+import { randomUUID } from 'node:crypto';
+import { pathToFileURL } from 'node:url';
 import { chromium, type Browser, type Page } from 'playwright';
 import { captureScene } from '../../core/capture/capture.js';
-import { emitSvg } from '../../core/emit/svg.js';
+import { emitSvg, type EmitOptions } from '../../core/emit/svg.js';
 import { createOutliner } from '../../core/emit/outline.js';
 import { systemFontLoader } from './fonts.js';
+import { findDiffRegions } from './diff-patch.js';
 import type { Scene } from '../../core/ir/types.js';
 
 export interface RenderOptions {
@@ -26,6 +32,15 @@ export interface RenderOptions {
    * Increases file size by ~150–800 KB (one embedded PNG). Default false.
    */
   guaranteeFloor?: boolean;
+  /**
+   * When true, performs a single diff pass after SVG generation: renders the SVG
+   * back in Chromium, pixel-diffs it against the original page screenshot, and
+   * patches regions that diverge beyond 5% with a raster screenshot of the original.
+   * Eliminates most visual mismatches without a full screenshot base layer.
+   * Works best with fontMode 'embed' or 'outline'; may produce false positives
+   * with 'none' if system fonts differ between the two renders. Default false.
+   */
+  diffPatch?: boolean;
 }
 
 export type RenderInput = { html: string } | { url: string } | { page: Page };
@@ -41,6 +56,70 @@ async function withinViewport(page: Page, width: number, height: number | undefi
     );
     await page.setViewportSize({ width, height: full });
   }
+}
+
+/**
+ * Renders the SVG into a fresh browser page, pixel-diffs against the original
+ * screenshot, and inserts raster patches for regions that diverge beyond 5%.
+ * Mutates `scene.nodes` and returns the re-emitted SVG (or the original if
+ * no patches were needed).
+ */
+async function applyDiffPatch(
+  page: Page,
+  scene: Scene,
+  svg: string,
+  emitOpts: EmitOptions,
+): Promise<string> {
+  // Reuse the base layer screenshot when available; otherwise take a fresh one.
+  const originalBuf = scene.baseLayer
+    ? Buffer.from(scene.baseLayer.split(',')[1], 'base64')
+    : await page.screenshot({ clip: { x: 0, y: 0, width: scene.width, height: scene.height }, type: 'png' });
+
+  // Write SVG to a temp file so the browser can load it via file:// URL (avoids
+  // data-URI size limits and encoding issues with complex SVGs).
+  const tmp = join(tmpdir(), `fh-${randomUUID()}.svg`);
+  writeFileSync(tmp, svg);
+
+  const svgPage = await page.context().newPage();
+  let svgBuf: Buffer;
+  try {
+    await svgPage.setViewportSize({ width: scene.width, height: scene.height });
+    await svgPage.goto(pathToFileURL(tmp).href, { waitUntil: 'networkidle' });
+    await svgPage.evaluate(async () => {
+      if (document.fonts) await document.fonts.ready;
+    });
+    svgBuf = await svgPage.screenshot({
+      clip: { x: 0, y: 0, width: scene.width, height: scene.height },
+      type: 'png',
+    });
+  } finally {
+    await svgPage.close();
+    try { unlinkSync(tmp); } catch { /* ignore cleanup failure */ }
+  }
+
+  const badRects = findDiffRegions(originalBuf, svgBuf, scene.width, scene.height);
+  if (badRects.length === 0) return svg;
+
+  // Screenshot the original page at each bad region and push as raster patches.
+  // Patches are appended to scene.nodes so they paint on top of everything.
+  let patched = 0;
+  for (const rect of badRects) {
+    if (rect.width <= 0 || rect.height <= 0) continue;
+    try {
+      const buf = await page.screenshot({ clip: rect, type: 'png' });
+      scene.nodes.push({
+        kind: 'raster',
+        id: `dp${patched}`,
+        rect,
+        opacity: 1,
+        href: 'data:image/png;base64,' + buf.toString('base64'),
+        reason: 'diff-patch',
+      });
+      patched++;
+    } catch { /* skip failed patch regions */ }
+  }
+
+  return patched > 0 ? emitSvg(scene, emitOpts) : svg;
 }
 
 async function captureAndEmit(page: Page, opts: RenderOptions): Promise<string> {
@@ -91,12 +170,22 @@ async function captureAndEmit(page: Page, opts: RenderOptions): Promise<string> 
     }
   }
 
+  // Build emit options (outline mode converts text to glyph paths).
+  const emitOpts: EmitOptions = {};
   if (opts.fontMode === 'outline') {
-    const outline = createOutliner(scene.fonts, systemFontLoader());
+    emitOpts.outline = createOutliner(scene.fonts, systemFontLoader());
     scene.fonts = []; // glyphs become paths; no @font-face <style> needed
-    return emitSvg(scene, { outline });
   }
-  return emitSvg(scene);
+
+  let svg = emitSvg(scene, emitOpts);
+
+  // Single-pass diff patch: render SVG back in Chromium, find divergent regions,
+  // patch them with screenshots of the original page.
+  if (opts.diffPatch) {
+    svg = await applyDiffPatch(page, scene, svg, emitOpts);
+  }
+
+  return svg;
 }
 
 export async function renderToSvg(input: RenderInput, opts: RenderOptions): Promise<string> {
