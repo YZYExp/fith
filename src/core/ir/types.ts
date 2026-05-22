@@ -175,4 +175,12 @@ export interface CaptureOptions {
    * available; defaults to false to avoid empty raster placeholders in pure-DOM contexts.
    */
   containerRasterFallback?: boolean;
+  /**
+   * When true, all scroll positions (page and overflow containers) are reset to 0
+   * before capture so that scrolled-out content is included in the output. Overflow
+   * containers (scroll/auto) have their clip expanded to scrollWidth × scrollHeight
+   * so every item in a sidebar tree-list, scrollable panel, etc. appears in the SVG.
+   * Scroll positions are restored after capture. Default false.
+   */
+  captureScrollableContent?: boolean;
 }

@@ -44,6 +44,10 @@ async function run(opts: InPageOptions, root?: Element): Promise<string> {
       // (pseudo-elements, complex background images) only when a rasterize
       // backend is available; otherwise silently emit what can be vectorized.
       containerRasterFallback: !!opts.rasterize,
+      // Always capture the full scrollable content for design export: resets
+      // all scroll positions to 0 and expands overflow-container clips to their
+      // full scrollHeight × scrollWidth, then restores scroll state afterward.
+      captureScrollableContent: true,
     },
     root,
   );

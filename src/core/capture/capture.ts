@@ -704,11 +704,28 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
 
     let childClip = clip;
     if (clipsContent(cs)) {
+      // For scrollable containers (overflow:auto/scroll) in full-content mode,
+      // expand the clip to scrollWidth × scrollHeight so items that are outside
+      // the container's current visible area are still included in the output.
+      // For overflow:hidden/clip the CSS dimensions are intentional — keep them.
+      const htmlEl = el as HTMLElement;
+      const isScrollContainer =
+        cs.overflowX === 'scroll' || cs.overflowX === 'auto' ||
+        cs.overflowY === 'scroll' || cs.overflowY === 'auto';
+      const captureScrollable = !!(opts as any).captureScrollableContent;
+      const clipW =
+        captureScrollable && isScrollContainer
+          ? Math.max(r.width, htmlEl.scrollWidth || 0)
+          : r.width;
+      const clipH =
+        captureScrollable && isScrollContainer
+          ? Math.max(r.height, htmlEl.scrollHeight || 0)
+          : r.height;
       childClip = intersect(clip, {
         x: r.left,
         y: r.top,
-        width: r.width,
-        height: r.height,
+        width: clipW,
+        height: clipH,
         radii: radiiOf(cs),
       });
     }
@@ -762,8 +779,39 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
         : '#ffffff';
   }
 
+  // Reset all scroll positions so scrolled-out content is at its natural position
+  // during capture. getBoundingClientRect() forces a synchronous layout flush, so
+  // positions are correct even though the reset is synchronous.
+  // Restored after capture to avoid disrupting the user's scroll state.
+  const scrollSaved: { el: HTMLElement; top: number; left: number }[] = [];
+  if ((opts as any).captureScrollableContent) {
+    const docEl = document.documentElement as HTMLElement;
+    const bodyEl = document.body as HTMLElement | null;
+    for (const el of [docEl, bodyEl]) {
+      if (!el) continue;
+      if (el.scrollTop || el.scrollLeft) {
+        scrollSaved.push({ el, top: el.scrollTop, left: el.scrollLeft });
+        el.scrollTop = 0;
+        el.scrollLeft = 0;
+      }
+    }
+    for (const el of Array.from(document.querySelectorAll('*'))) {
+      const h = el as HTMLElement;
+      if (h.scrollTop || h.scrollLeft) {
+        scrollSaved.push({ el: h, top: h.scrollTop, left: h.scrollLeft });
+        h.scrollTop = 0;
+        h.scrollLeft = 0;
+      }
+    }
+  }
+
   await walk(rootEl, null, 1);
   await Promise.all(imgTasks);
+
+  for (const { el, top, left } of scrollSaved) {
+    el.scrollTop = top;
+    el.scrollLeft = left;
+  }
 
   const fonts = (opts.fontMode ?? 'embed') === 'embed' ? await collectFonts(nodes) : [];
 
