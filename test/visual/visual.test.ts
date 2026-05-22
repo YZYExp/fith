@@ -47,4 +47,52 @@ describe('visual regression', () => {
     },
     60_000,
   );
+
+  it(
+    'keeps vectorizing content when containers carry box-level effects (no blank page)',
+    async () => {
+      const r = await validate(
+        { url: pathToFileURL(resolve(FIXTURES, 'container-fallback.html')).href },
+        { width: 420, height: 260, name: 'container-fallback', outDir: OUT },
+      );
+      const svg = readFileSync(resolve(OUT, 'container-fallback.svg'), 'utf8');
+      // content must be present as vector text, not collapsed into one raster
+      expect(svg).toContain('Container Fallback');
+      expect((svg.match(/<text/g) || []).length).toBeGreaterThan(2);
+      void r;
+    },
+    60_000,
+  );
+
+  it(
+    'normalizes modern color functions (oklch/oklab/…) to sRGB so the SVG is portable',
+    async () => {
+      const r = await validate(
+        { url: pathToFileURL(resolve(FIXTURES, 'oklch.html')).href },
+        { width: 400, height: 220, name: 'oklch', outDir: OUT },
+      );
+      const svg = readFileSync(resolve(OUT, 'oklch.svg'), 'utf8');
+      // no color *values* (attributes or style) may use CSS Color 4 functions
+      expect(svg).not.toMatch(/(?:"|:)\s*(?:oklch|oklab|lab|lch|hwb|color)\(/);
+      expect(r.ratio).toBeLessThan(0.02);
+    },
+    60_000,
+  );
+
+  it(
+    'applies text-transform so rendered text matches (MUI uppercase buttons/tabs)',
+    async () => {
+      const r = await validate(
+        { url: pathToFileURL(resolve(FIXTURES, 'text-transform.html')).href },
+        { width: 360, height: 140, name: 'text-transform', outDir: OUT },
+      );
+      const svg = readFileSync(resolve(OUT, 'text-transform.svg'), 'utf8');
+      expect(svg).toContain('NEW REPORT');
+      expect(svg).toContain('shouting text');
+      expect(svg).toContain('Hello World Title');
+      expect(svg).toContain('Normal Case');
+      expect(r.ratio).toBeLessThan(0.02);
+    },
+    60_000,
+  );
 });

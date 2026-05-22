@@ -31,6 +31,46 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
   const metricsCanvas = document.createElement('canvas');
   const mctx = metricsCanvas.getContext('2d')!;
 
+  // Normalize any computed color (oklch/oklab/lab/lch/color()/hwb/hsl/…) to plain
+  // sRGB rgb()/rgba(). getComputedStyle returns modern color functions verbatim
+  // (e.g. shadcn/Tailwind oklch), which SVG renderers without CSS Color 4 can't
+  // display — they must be converted for a portable, pure SVG.
+  const colorCanvas = document.createElement('canvas');
+  colorCanvas.width = colorCanvas.height = 1;
+  const cctx = colorCanvas.getContext('2d', { willReadFrequently: true })!;
+  const colorCache = new Map<string, string>();
+  // non-color paint keywords (valid for fill/stroke) must pass through untouched
+  const NON_COLOR = new Set(['none', 'currentcolor', 'context-fill', 'context-stroke', 'inherit', 'initial', 'unset']);
+  const SENTINEL = 'rgba(1, 2, 3, 0.5)';
+  const normColor = (c: string): string => {
+    if (!c) return c;
+    if (c === 'transparent' || c.charCodeAt(0) === 35 /* # */ || /^rgb/i.test(c)) return c;
+    if (NON_COLOR.has(c.toLowerCase())) return c;
+    const cached = colorCache.get(c);
+    if (cached !== undefined) return cached;
+    let out = c;
+    try {
+      // detect invalid color: fillStyle keeps its prior value when assigned junk
+      cctx.fillStyle = SENTINEL;
+      cctx.fillStyle = c;
+      if (cctx.fillStyle === SENTINEL) {
+        colorCache.set(c, c);
+        return c;
+      }
+      cctx.clearRect(0, 0, 1, 1);
+      cctx.fillRect(0, 0, 1, 1);
+      const d = cctx.getImageData(0, 0, 1, 1).data;
+      out =
+        d[3] === 255
+          ? `rgb(${d[0]}, ${d[1]}, ${d[2]})`
+          : `rgba(${d[0]}, ${d[1]}, ${d[2]}, ${Math.round((d[3] / 255) * 1000) / 1000})`;
+    } catch {
+      out = c;
+    }
+    colorCache.set(c, out);
+    return out;
+  };
+
   const num = (v: string | null | undefined) => {
     const n = parseFloat(v || '');
     return isFinite(n) ? n : 0;
@@ -109,14 +149,17 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
     const stops: { offset: number | null; color: string }[] = [];
     for (; i < parts.length; i++) {
       const seg = parts[i];
-      const colorMatch = seg.match(/^(rgba?\([^)]+\)|#[0-9a-fA-F]+|[a-zA-Z]+)/);
+      const colorMatch = seg.match(
+        /^((?:rgba?|hsla?|oklch|oklab|lab|lch|hwb|color)\([^)]+\)|#[0-9a-fA-F]+|[a-zA-Z]+)/,
+      );
       if (!colorMatch) return null;
-      const color = colorMatch[0];
+      const rawColor = colorMatch[0];
+      const color = normColor(rawColor);
       // SVG stop-opacity interpolation diverges from CSS when stop alphas differ;
       // raster gradients with any non-opaque stop to stay faithful.
       const alpha = color.match(/rgba\([^)]*,\s*([\d.]+)\s*\)$/);
-      if ((alpha && parseFloat(alpha[1]) < 1) || color === 'transparent') return null;
-      const rest = seg.slice(color.length).trim();
+      if ((alpha && parseFloat(alpha[1]) < 1) || rawColor === 'transparent') return null;
+      const rest = seg.slice(rawColor.length).trim();
       const positions = rest ? rest.split(/\s+/) : [];
       if (positions.length === 0) {
         stops.push({ offset: null, color });
@@ -203,7 +246,12 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
     return Boolean(hasText || hasBg || hasBorder);
   };
 
-  const needsRaster = (el: Element, cs: CSSStyleDeclaration) => {
+  // Reasons that require rendering the WHOLE element as one image (children
+  // included). Returning one of these stops descent — so it must only be used
+  // for genuinely subtree-wide effects, never for box-level ones, otherwise a
+  // <body>/wrapper carrying the property would collapse the entire page to a
+  // single raster (and a blank SVG if that raster can't be produced).
+  const needsSubtreeRaster = (el: Element, cs: CSSStyleDeclaration) => {
     const tag = el.tagName.toUpperCase();
     if (['CANVAS', 'VIDEO', 'IFRAME', 'OBJECT', 'EMBED'].includes(tag)) return 'media:' + tag;
     if (['INPUT', 'SELECT', 'TEXTAREA', 'PROGRESS', 'METER'].includes(tag)) return 'form-control';
@@ -215,6 +263,14 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
     if (cs.clipPath && cs.clipPath !== 'none') return 'clip-path';
     const m = parseMatrix(cs.transform);
     if (m && (Math.abs(m.b) > 1e-3 || Math.abs(m.c) > 1e-3)) return 'transform-rotate';
+    return null;
+  };
+
+  // Box-level effects we can't vectorize. Safe to raster only on a LEAF element
+  // (no element children), where rastering the box loses nothing. On containers
+  // we skip these (keep descending, vectorize the content) rather than nuke the
+  // subtree.
+  const needsBoxRaster = (el: Element, cs: CSSStyleDeclaration) => {
     if (cs.backgroundImage && cs.backgroundImage !== 'none' && !parseLinearGradient(cs.backgroundImage))
       return 'background-image';
     if (cs.boxShadow && cs.boxShadow.includes('inset')) return 'inset-shadow';
@@ -272,10 +328,11 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
       } else cur += ch;
     }
     if (cur.trim()) parts.push(cur);
+    const COLOR_FN = /((?:rgba?|hsla?|oklch|oklab|lab|lch|hwb|color)\([^)]+\)|#[0-9a-fA-F]+|[a-z]+)/;
     for (const part of parts) {
-      const colorMatch = part.match(/(rgba?\([^)]+\)|#[0-9a-fA-F]+|[a-z]+)/);
-      const color = colorMatch ? colorMatch[0] : 'rgba(0,0,0,0.2)';
-      const nums = part.replace(/rgba?\([^)]+\)/, '').match(/-?\d*\.?\d+px/g) || [];
+      const colorMatch = part.match(COLOR_FN);
+      const color = normColor(colorMatch ? colorMatch[0] : 'rgba(0,0,0,0.2)');
+      const nums = part.replace(COLOR_FN, '').match(/-?\d*\.?\d+px/g) || [];
       const v = nums.map((s) => parseFloat(s));
       out.push({ offsetX: v[0] || 0, offsetY: v[1] || 0, blur: v[2] || 0, spread: v[3] || 0, color });
     }
@@ -293,6 +350,17 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
     const ws = cs.wordSpacing === 'normal' ? 0 : num(cs.wordSpacing);
     const decoration =
       cs.textDecorationLine && cs.textDecorationLine !== 'none' ? cs.textDecorationLine : null;
+    // glyphs are measured from the rendered (transformed) text, so the stored
+    // string must be transformed too (MUI buttons/tabs use text-transform:uppercase)
+    const tt = cs.textTransform;
+    const xform = (s: string) =>
+      tt === 'uppercase'
+        ? s.toUpperCase()
+        : tt === 'lowercase'
+          ? s.toLowerCase()
+          : tt === 'capitalize'
+            ? s.replace(/(^|\s)(\S)/g, (_m, p, c) => p + c.toUpperCase())
+            : s;
 
     for (const child of Array.from(el.childNodes)) {
       if (child.nodeType !== Node.TEXT_NODE) continue;
@@ -326,11 +394,11 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
         for (const b of Array.from(buckets.values()).sort((a, c) => a.top - c.top)) {
           if (b.chars.length === 0) continue;
           const baseline = b.top + (b.height - (ascent + descent)) / 2 + ascent;
-          lines.push({ text: b.chars.join(''), x: b.xs[0], baseline, glyphX: b.xs });
+          lines.push({ text: xform(b.chars.join('')), x: b.xs[0], baseline, glyphX: b.xs });
         }
       } else if (rects.length === 1) {
         const r = rects[0];
-        const text = raw.replace(/\s+/g, ' ').trim();
+        const text = xform(raw.replace(/\s+/g, ' ').trim());
         const baseline = r.top + (r.height - (ascent + descent)) / 2 + ascent;
         lines.push({ text, x: r.left, baseline });
       } else {
@@ -353,7 +421,7 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
           b.chars.push(raw[i]);
         }
         for (const b of Array.from(buckets.values()).sort((a, c) => a.top - c.top)) {
-          const text = b.chars.join('').replace(/\s+/g, ' ').trim();
+          const text = xform(b.chars.join('').replace(/\s+/g, ' ').trim());
           if (!text) continue;
           const baseline = b.top + (b.height - (ascent + descent)) / 2 + ascent;
           lines.push({ text, x: b.left, baseline });
@@ -371,18 +439,18 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
         fontSize,
         fontWeight: cs.fontWeight,
         fontStyle: cs.fontStyle,
-        color: cs.color,
+        color: normColor(cs.color),
         letterSpacing: ls,
         wordSpacing: ws,
         decoration,
-        decorationColor: cs.textDecorationColor || cs.color,
+        decorationColor: normColor(cs.textDecorationColor || cs.color),
       });
     }
   };
 
   const emitBox = (el: Element, cs: CSSStyleDeclaration, clip: Clip | null, opacity: number) => {
     const r = el.getBoundingClientRect();
-    const fill = transparent(cs.backgroundColor) ? null : cs.backgroundColor;
+    const fill = transparent(cs.backgroundColor) ? null : normColor(cs.backgroundColor);
     const bw = {
       top: num(cs.borderTopWidth),
       right: num(cs.borderRightWidth),
@@ -392,10 +460,10 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
     const hasBorder = bw.top + bw.right + bw.bottom + bw.left > 0;
     const border = hasBorder
       ? {
-          top: { width: bw.top, color: cs.borderTopColor, style: cs.borderTopStyle },
-          right: { width: bw.right, color: cs.borderRightColor, style: cs.borderRightStyle },
-          bottom: { width: bw.bottom, color: cs.borderBottomColor, style: cs.borderBottomStyle },
-          left: { width: bw.left, color: cs.borderLeftColor, style: cs.borderLeftStyle },
+          top: { width: bw.top, color: normColor(cs.borderTopColor), style: cs.borderTopStyle },
+          right: { width: bw.right, color: normColor(cs.borderRightColor), style: cs.borderRightStyle },
+          bottom: { width: bw.bottom, color: normColor(cs.borderBottomColor), style: cs.borderBottomStyle },
+          left: { width: bw.left, color: normColor(cs.borderLeftColor), style: cs.borderLeftStyle },
         }
       : null;
     const shadows = parseShadows(cs.boxShadow);
@@ -416,6 +484,49 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
     });
   };
 
+  // SVG presentation properties to inline onto transplanted inline-svg nodes.
+  const SVG_PAINT = [
+    'fill',
+    'fill-opacity',
+    'fill-rule',
+    'stroke',
+    'stroke-width',
+    'stroke-opacity',
+    'stroke-linecap',
+    'stroke-linejoin',
+    'stroke-dasharray',
+    'stroke-dashoffset',
+    'stroke-miterlimit',
+    'opacity',
+    'paint-order',
+    'stop-color',
+    'stop-opacity',
+    'text-anchor',
+    'dominant-baseline',
+    'font-family',
+    'font-size',
+    'font-weight',
+    'font-style',
+    'letter-spacing',
+  ];
+  const COLOR_PROPS = new Set(['fill', 'stroke', 'stop-color']);
+  const inlineSvgStyles = (srcRoot: Element, cloneRoot: Element) => {
+    const src = [srcRoot, ...Array.from(srcRoot.querySelectorAll('*'))];
+    const dst = [cloneRoot, ...Array.from(cloneRoot.querySelectorAll('*'))];
+    for (let i = 0; i < src.length && i < dst.length; i++) {
+      const scs = getComputedStyle(src[i]);
+      if (scs.display === 'none') {
+        dst[i].setAttribute('display', 'none');
+        continue;
+      }
+      for (const prop of SVG_PAINT) {
+        const v = scs.getPropertyValue(prop);
+        if (!v || v === 'normal') continue;
+        dst[i].setAttribute(prop, COLOR_PROPS.has(prop) ? normColor(v) : v);
+      }
+    }
+  };
+
   const imgTasks: Promise<void>[] = [];
 
   const walk = async (el: Element, clip: Clip | null, inheritedOpacity: number) => {
@@ -424,10 +535,20 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
     const opacity = inheritedOpacity * num(cs.opacity || '1');
     const r = el.getBoundingClientRect();
 
-    const reason = needsRaster(el, cs);
-    if (reason) {
-      pushRaster(r, clip, opacity, reason);
+    const subtreeReason = needsSubtreeRaster(el, cs);
+    if (subtreeReason) {
+      pushRaster(r, clip, opacity, subtreeReason);
       return;
+    }
+
+    // box-level effects we can't vectorize: raster only when this is a leaf, so
+    // containers (incl. <html>/<body>) keep descending instead of nuking content
+    if (el.childElementCount === 0) {
+      const boxReason = needsBoxRaster(el, cs);
+      if (boxReason) {
+        pushRaster(r, clip, opacity, boxReason);
+        return;
+      }
     }
 
     if (el.tagName.toLowerCase() === 'svg') {
@@ -437,8 +558,12 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
       clone.setAttribute('width', String(r.width));
       clone.setAttribute('height', String(r.height));
       // resolve currentColor used by icon fonts/icons
-      (clone as any).style.color = cs.color;
+      (clone as any).style.color = normColor(cs.color);
       if (!clone.getAttribute('xmlns')) clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+      // Inline computed presentation styles so CSS-class-styled SVG (e.g. MUI
+      // x-charts line strokes / bar fills) survives transplanting without the
+      // page's stylesheet. Walk original + clone in lockstep (same structure).
+      inlineSvgStyles(el, clone);
       nodes.push({
         kind: 'inline-svg',
         id: nid(),
@@ -507,12 +632,12 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
   if (subtree) {
     // a subtree export is just the element: use its own opaque bg, else transparent
     const ebg = getComputedStyle(rootEl).backgroundColor;
-    background = transparent(ebg) ? '' : ebg;
+    background = transparent(ebg) ? '' : normColor(ebg);
   } else {
     background = !transparent(getComputedStyle(document.documentElement).backgroundColor)
-      ? getComputedStyle(document.documentElement).backgroundColor
+      ? normColor(getComputedStyle(document.documentElement).backgroundColor)
       : body && !transparent(getComputedStyle(body).backgroundColor)
-        ? getComputedStyle(body).backgroundColor
+        ? normColor(getComputedStyle(body).backgroundColor)
         : '#ffffff';
   }
 
