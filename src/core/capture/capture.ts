@@ -263,6 +263,25 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
     if (cs.clipPath && cs.clipPath !== 'none') return 'clip-path';
     const m = parseMatrix(cs.transform);
     if (m && (Math.abs(m.b) > 1e-3 || Math.abs(m.c) > 1e-3)) return 'transform-rotate';
+    // Custom elements (hyphenated tag) with no light-DOM children and no accessible
+    // shadow root are likely using closed shadow DOM — raster to capture their rendering.
+    if (el.tagName.includes('-') && el.childElementCount === 0 && !(el as HTMLElement).shadowRoot)
+      return 'custom-element';
+    return null;
+  };
+
+  // Try to parse a linear-gradient from a background-image value that may contain
+  // multiple comma-separated layers. Returns the first vectorizable layer found,
+  // so "url(…), linear-gradient(…)" still yields a gradient instead of falling back.
+  const parseFirstLinearGradient = (value: string) => {
+    const single = parseLinearGradient(value);
+    if (single) return single;
+    const layers = splitTopLevel(value);
+    if (layers.length <= 1) return null;
+    for (const layer of layers) {
+      const g = parseLinearGradient(layer.trim());
+      if (g) return g;
+    }
     return null;
   };
 
@@ -271,7 +290,7 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
   // we skip these (keep descending, vectorize the content) rather than nuke the
   // subtree.
   const needsBoxRaster = (el: Element, cs: CSSStyleDeclaration) => {
-    if (cs.backgroundImage && cs.backgroundImage !== 'none' && !parseLinearGradient(cs.backgroundImage))
+    if (cs.backgroundImage && cs.backgroundImage !== 'none' && !parseFirstLinearGradient(cs.backgroundImage))
       return 'background-image';
     if (cs.boxShadow && cs.boxShadow.includes('inset')) return 'inset-shadow';
     if (cs.borderTopStyle === 'double' || cs.borderTopStyle === 'groove' || cs.borderTopStyle === 'ridge')
@@ -449,6 +468,27 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
         }
       }
       if (lines.length === 0) continue;
+
+      // Detect background-clip:text gradient pattern (e.g. gradient headings).
+      // When color is transparent and the background is clipped to text shape,
+      // use the gradient as the SVG text fill instead of rendering invisible text.
+      let textColor = normColor(cs.color);
+      let gradientFill = null;
+      const bgClip = cs.backgroundClip || (cs as any).webkitBackgroundClip;
+      if (
+        transparent(textColor) &&
+        (bgClip === 'text' || bgClip === '-webkit-text') &&
+        cs.backgroundImage &&
+        cs.backgroundImage !== 'none'
+      ) {
+        const grad = parseFirstLinearGradient(cs.backgroundImage);
+        if (grad) {
+          gradientFill = grad;
+          // Solid fallback: midpoint stop color for renderers that ignore gradientFill.
+          textColor = grad.stops[Math.floor(grad.stops.length / 2)].color;
+        }
+      }
+
       nodes.push({
         kind: 'text',
         id: nid(),
@@ -460,11 +500,12 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
         fontSize,
         fontWeight: cs.fontWeight,
         fontStyle: cs.fontStyle,
-        color: normColor(cs.color),
+        color: textColor,
         letterSpacing: ls,
         wordSpacing: ws,
         decoration,
         decorationColor: normColor(cs.textDecorationColor || cs.color),
+        gradientFill,
       });
     }
   };
@@ -489,7 +530,7 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
       : null;
     const shadows = parseShadows(cs.boxShadow);
     const gradient =
-      cs.backgroundImage && cs.backgroundImage !== 'none' ? parseLinearGradient(cs.backgroundImage) : null;
+      cs.backgroundImage && cs.backgroundImage !== 'none' ? parseFirstLinearGradient(cs.backgroundImage) : null;
     const outlineW = num(cs.outlineWidth);
     const outlineStyle = cs.outlineStyle;
     const outline =
@@ -676,16 +717,24 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
     const meta = kids.map((k) => {
       const kcs = getComputedStyle(k);
       const positioned = kcs.position !== 'static';
-      const z = kcs.zIndex === 'auto' ? 0 : parseInt(kcs.zIndex, 10) || 0;
+      const zRaw = kcs.zIndex;
+      const z = zRaw === 'auto' ? 0 : parseInt(zRaw, 10) || 0;
       return { k, positioned, z };
     });
-    const neg = meta.filter((x) => x.positioned && x.z < 0).sort((a, b) => a.z - b.z);
-    const mid = meta.filter((x) => !(x.positioned && x.z < 0) && !(x.positioned && x.z > 0));
-    const pos = meta.filter((x) => x.positioned && x.z > 0).sort((a, b) => a.z - b.z);
+    // CSS paint order within a stacking context:
+    //   1. negative z-index positioned descendants (lowest first)
+    //   2. block/inline flow (non-positioned) in DOM order
+    //   3. positioned with z-index:auto or z-index:0 in DOM order (above flow)
+    //   4. positive z-index positioned (lowest first)
+    const neg   = meta.filter((x) => x.positioned && x.z < 0).sort((a, b) => a.z - b.z);
+    const flow  = meta.filter((x) => !x.positioned);
+    const autoZ = meta.filter((x) => x.positioned && x.z === 0);
+    const pos   = meta.filter((x) => x.positioned && x.z > 0).sort((a, b) => a.z - b.z);
 
-    for (const m of neg) await walk(m.k, childClip, opacity);
-    for (const m of mid) await walk(m.k, childClip, opacity);
-    for (const m of pos) await walk(m.k, childClip, opacity);
+    for (const m of neg)   await walk(m.k, childClip, opacity);
+    for (const m of flow)  await walk(m.k, childClip, opacity);
+    for (const m of autoZ) await walk(m.k, childClip, opacity);
+    for (const m of pos)   await walk(m.k, childClip, opacity);
 
     // Walk open shadow roots after light-DOM children. Shadow DOM content renders
     // on top of the host's light-DOM background; placing it last preserves that

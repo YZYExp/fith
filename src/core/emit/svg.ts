@@ -259,8 +259,12 @@ function emitBorder(b: BorderEdges, rect: { x: number; y: number; width: number;
   return out;
 }
 
-function emitText(node: TextNode, outline?: Outliner): string {
-  if (outline) {
+function emitText(node: TextNode, defs: Defs, outline?: Outliner): string {
+  const fill = node.gradientFill
+    ? `url(#${gradientId(defs, node.gradientFill, node.rect)})`
+    : esc(node.color);
+
+  if (outline && !node.gradientFill) {
     const paths: string[] = [];
     let allOutlined = true;
     for (const l of node.lines) {
@@ -277,9 +281,7 @@ function emitText(node: TextNode, outline?: Outliner): string {
   const weightAttr = node.fontWeight === '400' || node.fontWeight === 'normal' ? '' : ` font-weight="${esc(node.fontWeight)}"`;
   const styleAttr = node.fontStyle === 'normal' ? '' : ` font-style="${esc(node.fontStyle)}"`;
   const attrs =
-    `font-family="${esc(node.fontFamily)}" font-size="${n(node.fontSize)}"${weightAttr}${styleAttr} fill="${esc(
-      node.color,
-    )}"` +
+    `font-family="${esc(node.fontFamily)}" font-size="${n(node.fontSize)}"${weightAttr}${styleAttr} fill="${fill}"` +
     (node.letterSpacing ? ` letter-spacing="${n(node.letterSpacing)}"` : '') +
     (node.wordSpacing ? ` word-spacing="${n(node.wordSpacing)}"` : '') +
     (node.decoration ? ` text-decoration="${esc(node.decoration)}"` : '') +
@@ -358,7 +360,7 @@ export function emitSvg(scene: Scene, opts: EmitOptions = {}): string {
         inner = emitBox(node, defs);
         break;
       case 'text':
-        inner = emitText(node, opts.outline);
+        inner = emitText(node, defs, opts.outline);
         break;
       case 'image':
         inner = emitImage(node);

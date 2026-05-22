@@ -136,6 +136,8 @@ export interface TextNode extends NodeBase {
   decoration?: string | null;
   decorationColor?: string;
   textAnchor?: 'start' | 'middle' | 'end';
+  /** Gradient fill from background-clip:text pattern; overrides color when set. */
+  gradientFill?: LinearGradientFill | null;
 }
 
 export interface ImageNode extends NodeBase {
