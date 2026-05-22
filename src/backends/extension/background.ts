@@ -7,25 +7,39 @@
  */
 import type { Rect } from '../../core/ir/types.js';
 
-chrome.action.onClicked.addListener((tab) => {
-  if (tab.id != null) chrome.tabs.sendMessage(tab.id, { type: 'fh:capture' });
-});
+// The toolbar action opens the popup (default_popup in the manifest), so there's
+// no action.onClicked here. Context menus and the keyboard command still work and
+// inject the content script on demand (so they run on already-open tabs).
 
 chrome.runtime.onInstalled.addListener(() => {
   chrome.contextMenus.create({ id: 'fh-page', title: 'Convert page to SVG', contexts: ['page'] });
   chrome.contextMenus.create({ id: 'fh-pick', title: 'Convert element to SVG…', contexts: ['all'] });
 });
 
+async function send(tabId: number, type: 'fh:capture' | 'fh:pick') {
+  try {
+    await chrome.scripting.executeScript({ target: { tabId }, files: ['content.js'] });
+    const prefs = await chrome.storage.local.get(['fhOutput', 'fhFont']);
+    await chrome.tabs.sendMessage(tabId, {
+      type,
+      output: prefs.fhOutput ?? 'both',
+      fontMode: prefs.fhFont ?? 'embed',
+    });
+  } catch (e) {
+    console.error('[fitting-html]', e);
+  }
+}
+
 chrome.contextMenus.onClicked.addListener((info, tab) => {
   if (tab?.id == null) return;
-  if (info.menuItemId === 'fh-pick') chrome.tabs.sendMessage(tab.id, { type: 'fh:pick' });
-  else if (info.menuItemId === 'fh-page') chrome.tabs.sendMessage(tab.id, { type: 'fh:capture' });
+  if (info.menuItemId === 'fh-pick') send(tab.id, 'fh:pick');
+  else if (info.menuItemId === 'fh-page') send(tab.id, 'fh:capture');
 });
 
 chrome.commands.onCommand.addListener(async (command) => {
   if (command !== 'pick-element') return;
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-  if (tab?.id != null) chrome.tabs.sendMessage(tab.id, { type: 'fh:pick' });
+  if (tab?.id != null) send(tab.id, 'fh:pick');
 });
 
 let cache: { time: number; dataUrl: string } | null = null;

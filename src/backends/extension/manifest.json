@@ -3,21 +3,14 @@
   "name": "fitting-html",
   "version": "0.1.0",
   "description": "Capture the current tab — or a picked element — as a self-contained, vector-first SVG.",
-  "permissions": ["activeTab", "tabs", "contextMenus", "storage"],
+  "permissions": ["activeTab", "tabs", "scripting", "contextMenus", "storage"],
   "host_permissions": ["<all_urls>"],
   "background": { "service_worker": "background.js", "type": "module" },
-  "action": { "default_title": "Convert page to SVG" },
+  "action": { "default_title": "fitting-html", "default_popup": "popup.html" },
   "commands": {
     "pick-element": {
       "suggested_key": { "default": "Alt+Shift+S" },
       "description": "Pick an element to convert to SVG"
     }
-  },
-  "content_scripts": [
-    {
-      "matches": ["<all_urls>"],
-      "js": ["content.js"],
-      "run_at": "document_idle"
-    }
-  ]
+  }
 }
