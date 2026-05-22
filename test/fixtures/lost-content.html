@@ -1,0 +1,53 @@
+<!doctype html>
+<html>
+  <head>
+    <style>
+      body { margin: 0; font-family: sans-serif; background: #fff; color: #1f2328; }
+      .md { padding: 24px; max-width: 600px; }
+      .md p { line-height: 1.6; }
+      .md code {
+        background: rgba(175, 184, 193, 0.2); padding: 2px 6px;
+        border-radius: 4px; font-family: monospace; font-size: 0.9em;
+      }
+      .md a { color: #0969da; text-decoration: none; }
+      .md ul { padding-left: 2em; }
+      .md li { margin: 4px 0; }
+
+      /* visibility:hidden parent with a visibility:visible child */
+      .vis-parent { visibility: hidden; padding: 8px; background: #eee; }
+      .vis-child { visibility: visible; color: #cf222e; }
+
+      /* a button with a sibling label that overlaps its visual area */
+      .overlay-group { position: relative; width: 200px; height: 48px; margin-top: 16px; }
+      .overlay-label {
+        position: absolute; left: 12px; top: 14px; z-index: 2;
+        color: #fff; font-weight: 600; pointer-events: none;
+      }
+      .overlay-btn {
+        position: absolute; inset: 0; z-index: 1;
+        background: #1f883d; border: none; border-radius: 6px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="md">
+      <p>PR <a href="#">#8</a> is updated. Here is what is in:</p>
+      <p><strong>MUI DevBoard</strong> (<code>examples/mui-app/</code>):</p>
+      <ul>
+        <li><code>SimpleTreeView</code> with 55+ nodes in a scrollable sidebar</li>
+        <li>Gradient text header (<code>background-clip: text</code>)</li>
+        <li>Image gallery with <code>object-fit: cover</code></li>
+      </ul>
+
+      <div class="vis-parent">
+        hidden container text
+        <span class="vis-child">but this child is visible</span>
+      </div>
+
+      <div class="overlay-group">
+        <span class="overlay-label">Save changes</span>
+        <button class="overlay-btn"></button>
+      </div>
+    </div>
+  </body>
+</html>
