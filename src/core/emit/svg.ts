@@ -81,21 +81,51 @@ function shadowFilterId(defs: Defs, blur: number): string {
   );
 }
 
+// CSS box-shadow is always drawn OUTSIDE the element's border box (the element
+// acts as a "cutout"). We replicate this with an SVG mask: white everywhere
+// (show shadow), but black inside the element box (hide shadow).
+function shadowMaskId(
+  defs: Defs,
+  rect: { x: number; y: number; width: number; height: number },
+  radii: CornerRadii,
+): string {
+  const innerPath = noRadii(radii)
+    ? `M${n(rect.x)},${n(rect.y)} H${n(rect.x + rect.width)} V${n(rect.y + rect.height)} H${n(rect.x)} Z`
+    : roundedRectPath(rect.x, rect.y, rect.width, rect.height, radii);
+  // Large white rect (show everything), then black path inside element box (hide shadow there).
+  return defs.add(
+    `<mask id="{ID}" maskContentUnits="userSpaceOnUse">` +
+      `<rect x="-9999" y="-9999" width="99999" height="99999" fill="white"/>` +
+      `<path d="${innerPath}" fill="black"/>` +
+      `</mask>`,
+  );
+}
+
 function emitBox(node: BoxNode, defs: Defs): string {
   const { rect, radii } = node;
   let out = '';
 
-  for (const sh of node.shadows || []) {
-    const sx = rect.x + sh.offsetX - sh.spread;
-    const sy = rect.y + sh.offsetY - sh.spread;
-    const sw = rect.width + sh.spread * 2;
-    const sh2 = rect.height + sh.spread * 2;
-    if (sw <= 0 || sh2 <= 0) continue;
-    const shape = noRadii(radii)
-      ? `<rect x="${n(sx)}" y="${n(sy)}" width="${n(sw)}" height="${n(sh2)}" fill="${esc(sh.color)}"/>`
-      : `<path d="${roundedRectPath(sx, sy, sw, sh2, radii)}" fill="${esc(sh.color)}"/>`;
-    const filt = sh.blur > 0 ? ` filter="url(#${shadowFilterId(defs, sh.blur)})"` : '';
-    out += `<g${filt}>${shape}</g>`;
+  const shadows = node.shadows || [];
+  if (shadows.length > 0) {
+    // All shadow layers share the same mask (they all mask to the same element box).
+    const mask = shadowMaskId(defs, rect, radii);
+    for (const sh of shadows) {
+      const sx = rect.x + sh.offsetX - sh.spread;
+      const sy = rect.y + sh.offsetY - sh.spread;
+      const sw = rect.width + sh.spread * 2;
+      const sh2 = rect.height + sh.spread * 2;
+      if (sw <= 0 || sh2 <= 0) continue;
+      const shape = noRadii(radii)
+        ? `<rect x="${n(sx)}" y="${n(sy)}" width="${n(sw)}" height="${n(sh2)}" fill="${esc(sh.color)}"/>`
+        : `<path d="${roundedRectPath(sx, sy, sw, sh2, radii)}" fill="${esc(sh.color)}"/>`;
+      // Apply mask to prevent shadow from appearing inside the element box.
+      // Use nested groups: outer group has the mask, inner group applies the blur filter.
+      if (sh.blur > 0) {
+        out += `<g mask="url(#${mask})"><g filter="url(#${shadowFilterId(defs, sh.blur)})">${shape}</g></g>`;
+      } else {
+        out += `<g mask="url(#${mask})">${shape}</g>`;
+      }
+    }
   }
 
   if (node.fill) out += fillShape(rect, radii, esc(node.fill));

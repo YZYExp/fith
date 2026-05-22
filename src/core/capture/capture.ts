@@ -398,7 +398,28 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
         }
       } else if (rects.length === 1) {
         const r = rects[0];
-        const text = xform(raw.replace(/\s+/g, ' ').trim());
+        let text = xform(raw.replace(/\s+/g, ' ').trim());
+        // Reproduce CSS text-overflow:ellipsis — the DOM always contains the full text
+        // but the browser visually truncates it with "..." when overflow is hidden.
+        if (
+          cs.textOverflow === 'ellipsis' &&
+          (cs.overflow === 'hidden' || cs.overflowX === 'hidden') &&
+          (el as HTMLElement).scrollWidth > (el as HTMLElement).clientWidth
+        ) {
+          const maxW = (el as HTMLElement).clientWidth - num(cs.paddingLeft) - num(cs.paddingRight);
+          const ellipsis = '...';
+          const ellipsisW = mctx.measureText(ellipsis).width + ls * Math.max(0, ellipsis.length - 1);
+          // Binary search for the longest prefix that fits alongside the ellipsis.
+          let lo = 0;
+          let hi = text.length;
+          while (lo < hi) {
+            const mid = Math.ceil((lo + hi) / 2);
+            const w = mctx.measureText(text.slice(0, mid)).width + ls * Math.max(0, mid - 1);
+            if (w + ellipsisW <= maxW) lo = mid;
+            else hi = mid - 1;
+          }
+          text = text.slice(0, lo) + ellipsis;
+        }
         const baseline = r.top + (r.height - (ascent + descent)) / 2 + ascent;
         lines.push({ text, x: r.left, baseline });
       } else {
