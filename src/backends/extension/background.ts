@@ -11,6 +11,23 @@ chrome.action.onClicked.addListener((tab) => {
   if (tab.id != null) chrome.tabs.sendMessage(tab.id, { type: 'fh:capture' });
 });
 
+chrome.runtime.onInstalled.addListener(() => {
+  chrome.contextMenus.create({ id: 'fh-page', title: 'Convert page to SVG', contexts: ['page'] });
+  chrome.contextMenus.create({ id: 'fh-pick', title: 'Convert element to SVG…', contexts: ['all'] });
+});
+
+chrome.contextMenus.onClicked.addListener((info, tab) => {
+  if (tab?.id == null) return;
+  if (info.menuItemId === 'fh-pick') chrome.tabs.sendMessage(tab.id, { type: 'fh:pick' });
+  else if (info.menuItemId === 'fh-page') chrome.tabs.sendMessage(tab.id, { type: 'fh:capture' });
+});
+
+chrome.commands.onCommand.addListener(async (command) => {
+  if (command !== 'pick-element') return;
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  if (tab?.id != null) chrome.tabs.sendMessage(tab.id, { type: 'fh:pick' });
+});
+
 let cache: { time: number; dataUrl: string } | null = null;
 
 async function captureViewport(): Promise<string> {
@@ -44,8 +61,19 @@ async function rasterize(rect: Rect, dpr: number): Promise<string | null> {
   }
 }
 
+let previewSeq = 0;
+
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
-  if (msg?.type !== 'fh:rasterize') return;
-  rasterize(msg.rect, msg.dpr || 1).then((dataUrl) => sendResponse({ dataUrl }));
-  return true; // async response
+  if (msg?.type === 'fh:rasterize') {
+    rasterize(msg.rect, msg.dpr || 1).then((dataUrl) => sendResponse({ dataUrl }));
+    return true; // async response
+  }
+  if (msg?.type === 'fh:preview') {
+    const id = 'svg' + Date.now() + '_' + previewSeq++;
+    chrome.storage.session.set({ [id]: { svg: msg.svg, name: msg.name } }).then(() => {
+      chrome.tabs.create({ url: chrome.runtime.getURL('viewer.html?id=' + id) });
+      sendResponse({ ok: true });
+    });
+    return true; // async response
+  }
 });

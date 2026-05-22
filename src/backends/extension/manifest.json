@@ -2,11 +2,17 @@
   "manifest_version": 3,
   "name": "fitting-html",
   "version": "0.1.0",
-  "description": "Capture the current page as a self-contained, vector-first SVG.",
-  "permissions": ["activeTab", "tabs"],
+  "description": "Capture the current tab — or a picked element — as a self-contained, vector-first SVG.",
+  "permissions": ["activeTab", "tabs", "contextMenus", "storage"],
   "host_permissions": ["<all_urls>"],
   "background": { "service_worker": "background.js", "type": "module" },
-  "action": { "default_title": "Capture page as SVG" },
+  "action": { "default_title": "Convert page to SVG" },
+  "commands": {
+    "pick-element": {
+      "suggested_key": { "default": "Alt+Shift+S" },
+      "description": "Pick an element to convert to SVG"
+    }
+  },
   "content_scripts": [
     {
       "matches": ["<all_urls>"],

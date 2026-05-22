@@ -5,8 +5,8 @@
  */
 import { captureScene } from '../../core/capture/capture.js';
 import { emitSvg } from '../../core/emit/svg.js';
-import { createOutliner } from '../../core/emit/outline.js';
 import type { Rect, Scene } from '../../core/ir/types.js';
+import type { Outliner } from '../../core/emit/outline.js';
 
 export interface InPageOptions {
   /** Defaults to the current layout viewport width. */
@@ -14,8 +14,13 @@ export interface InPageOptions {
   /** Defaults to the full document height. */
   height?: number;
   deviceScaleFactor?: number;
-  /** 'outline' works for @font-face fonts in-page (no system-font access). */
   fontMode?: 'embed' | 'outline' | 'none';
+  /**
+   * Optional glyph outliner for `outline` mode. Supplied by the caller to keep
+   * opentype.js out of the default in-page bundle (so the content script stays
+   * small). Build one with `createOutliner` from `core/emit/outline`.
+   */
+  outline?: Outliner;
   /**
    * Optional rasterizer for regions the core cannot vectorize (canvas, video,
    * filters, native form controls, …). Pure in-page contexts can't screenshot
@@ -25,17 +30,19 @@ export interface InPageOptions {
   rasterize?: (rect: Rect, scale: number) => Promise<string | null>;
 }
 
-/** Capture the current page into a self-contained SVG string. */
-export async function captureCurrentPage(opts: InPageOptions = {}): Promise<string> {
-  const scene: Scene = await captureScene({
-    width: opts.width ?? document.documentElement.clientWidth,
-    height:
-      opts.height ??
-      Math.max(document.documentElement.scrollHeight, document.body ? document.body.scrollHeight : 0),
-    deviceScaleFactor: opts.deviceScaleFactor ?? window.devicePixelRatio ?? 1,
-    fontMode: opts.fontMode === 'none' ? 'none' : 'embed',
-    collectGlyphX: opts.fontMode === 'outline',
-  });
+async function run(opts: InPageOptions, root?: Element): Promise<string> {
+  const scene: Scene = await captureScene(
+    {
+      width: opts.width ?? document.documentElement.clientWidth,
+      height:
+        opts.height ??
+        Math.max(document.documentElement.scrollHeight, document.body ? document.body.scrollHeight : 0),
+      deviceScaleFactor: opts.deviceScaleFactor ?? window.devicePixelRatio ?? 1,
+      fontMode: opts.fontMode === 'none' ? 'none' : 'embed',
+      collectGlyphX: opts.fontMode === 'outline',
+    },
+    root,
+  );
 
   if (opts.rasterize) {
     const byId = new Map(scene.rasterTargets.map((t) => [t.id, t]));
@@ -50,12 +57,21 @@ export async function captureCurrentPage(opts: InPageOptions = {}): Promise<stri
     }
   }
 
-  if (opts.fontMode === 'outline') {
-    const outline = createOutliner(scene.fonts);
+  if (opts.fontMode === 'outline' && opts.outline) {
     scene.fonts = [];
-    return emitSvg(scene, { outline });
+    return emitSvg(scene, { outline: opts.outline });
   }
   return emitSvg(scene);
+}
+
+/** Capture the current page into a self-contained SVG string. */
+export function captureCurrentPage(opts: InPageOptions = {}): Promise<string> {
+  return run(opts);
+}
+
+/** Capture a single element subtree into a self-contained SVG cropped to it. */
+export function captureElement(el: Element, opts: InPageOptions = {}): Promise<string> {
+  return run(opts, el);
 }
 
 export { captureScene, emitSvg };

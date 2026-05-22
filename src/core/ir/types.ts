@@ -12,6 +12,9 @@
 export interface Scene {
   width: number;
   height: number;
+  /** viewBox origin (defaults to 0,0). Non-zero when capturing a subtree. */
+  originX?: number;
+  originY?: number;
   deviceScaleFactor: number;
   background: string;
   nodes: PaintNode[];
