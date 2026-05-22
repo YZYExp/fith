@@ -340,6 +340,17 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
     const ws = cs.wordSpacing === 'normal' ? 0 : num(cs.wordSpacing);
     const decoration =
       cs.textDecorationLine && cs.textDecorationLine !== 'none' ? cs.textDecorationLine : null;
+    // glyphs are measured from the rendered (transformed) text, so the stored
+    // string must be transformed too (MUI buttons/tabs use text-transform:uppercase)
+    const tt = cs.textTransform;
+    const xform = (s: string) =>
+      tt === 'uppercase'
+        ? s.toUpperCase()
+        : tt === 'lowercase'
+          ? s.toLowerCase()
+          : tt === 'capitalize'
+            ? s.replace(/(^|\s)(\S)/g, (_m, p, c) => p + c.toUpperCase())
+            : s;
 
     for (const child of Array.from(el.childNodes)) {
       if (child.nodeType !== Node.TEXT_NODE) continue;
@@ -373,11 +384,11 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
         for (const b of Array.from(buckets.values()).sort((a, c) => a.top - c.top)) {
           if (b.chars.length === 0) continue;
           const baseline = b.top + (b.height - (ascent + descent)) / 2 + ascent;
-          lines.push({ text: b.chars.join(''), x: b.xs[0], baseline, glyphX: b.xs });
+          lines.push({ text: xform(b.chars.join('')), x: b.xs[0], baseline, glyphX: b.xs });
         }
       } else if (rects.length === 1) {
         const r = rects[0];
-        const text = raw.replace(/\s+/g, ' ').trim();
+        const text = xform(raw.replace(/\s+/g, ' ').trim());
         const baseline = r.top + (r.height - (ascent + descent)) / 2 + ascent;
         lines.push({ text, x: r.left, baseline });
       } else {
@@ -400,7 +411,7 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
           b.chars.push(raw[i]);
         }
         for (const b of Array.from(buckets.values()).sort((a, c) => a.top - c.top)) {
-          const text = b.chars.join('').replace(/\s+/g, ' ').trim();
+          const text = xform(b.chars.join('').replace(/\s+/g, ' ').trim());
           if (!text) continue;
           const baseline = b.top + (b.height - (ascent + descent)) / 2 + ascent;
           lines.push({ text, x: b.left, baseline });

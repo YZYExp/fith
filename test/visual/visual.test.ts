@@ -78,4 +78,21 @@ describe('visual regression', () => {
     },
     60_000,
   );
+
+  it(
+    'applies text-transform so rendered text matches (MUI uppercase buttons/tabs)',
+    async () => {
+      const r = await validate(
+        { url: pathToFileURL(resolve(FIXTURES, 'text-transform.html')).href },
+        { width: 360, height: 140, name: 'text-transform', outDir: OUT },
+      );
+      const svg = readFileSync(resolve(OUT, 'text-transform.svg'), 'utf8');
+      expect(svg).toContain('NEW REPORT');
+      expect(svg).toContain('shouting text');
+      expect(svg).toContain('Hello World Title');
+      expect(svg).toContain('Normal Case');
+      expect(r.ratio).toBeLessThan(0.02);
+    },
+    60_000,
+  );
 });
