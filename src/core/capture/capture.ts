@@ -490,7 +490,13 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
     const shadows = parseShadows(cs.boxShadow);
     const gradient =
       cs.backgroundImage && cs.backgroundImage !== 'none' ? parseLinearGradient(cs.backgroundImage) : null;
-    if (!fill && !gradient && !border && shadows.length === 0) return;
+    const outlineW = num(cs.outlineWidth);
+    const outlineStyle = cs.outlineStyle;
+    const outline =
+      outlineW > 0 && outlineStyle !== 'none' && !transparent(cs.outlineColor)
+        ? { width: outlineW, color: normColor(cs.outlineColor), style: outlineStyle, offset: num(cs.outlineOffset) }
+        : null;
+    if (!fill && !gradient && !border && shadows.length === 0 && !outline) return;
     nodes.push({
       kind: 'box',
       id: nid(),
@@ -502,6 +508,7 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
       radii: radiiOf(cs),
       border,
       shadows,
+      outline,
     });
   };
 
@@ -550,8 +557,22 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
 
   const imgTasks: Promise<void>[] = [];
 
+  const containerRasterFallback = !!(opts as any).containerRasterFallback;
+
   const walk = async (el: Element, clip: Clip | null, inheritedOpacity: number) => {
     const cs = getComputedStyle(el);
+
+    // display:contents has no box of its own but its children (and direct text)
+    // render normally in the parent's formatting context.
+    if (cs.display === 'contents') {
+      if (cs.visibility === 'hidden' || cs.visibility === 'collapse') return;
+      const contOpacity = inheritedOpacity * num(cs.opacity || '1');
+      if (contOpacity === 0) return;
+      captureText(el, cs, clip, contOpacity);
+      for (const kid of Array.from(el.children)) await walk(kid as Element, clip, contOpacity);
+      return;
+    }
+
     if (!isVisible(el, cs)) return;
     const opacity = inheritedOpacity * num(cs.opacity || '1');
     const r = el.getBoundingClientRect();
@@ -560,16 +581,6 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
     if (subtreeReason) {
       pushRaster(r, clip, opacity, subtreeReason);
       return;
-    }
-
-    // box-level effects we can't vectorize: raster only when this is a leaf, so
-    // containers (incl. <html>/<body>) keep descending instead of nuking content
-    if (el.childElementCount === 0) {
-      const boxReason = needsBoxRaster(el, cs);
-      if (boxReason) {
-        pushRaster(r, clip, opacity, boxReason);
-        return;
-      }
     }
 
     if (el.tagName.toLowerCase() === 'svg') {
@@ -598,6 +609,13 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
 
     if (el.tagName.toUpperCase() === 'IMG') {
       const img = el as HTMLImageElement;
+      const objFit = cs.objectFit || 'fill';
+      const preserveAspectRatio =
+        objFit === 'contain' || objFit === 'scale-down'
+          ? 'xMidYMid meet'
+          : objFit === 'cover'
+            ? 'xMidYMid slice'
+            : 'none';
       const id = nid();
       const node: any = {
         kind: 'image',
@@ -606,7 +624,7 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
         opacity,
         clip,
         href: null,
-        preserveAspectRatio: 'none',
+        preserveAspectRatio,
       };
       nodes.push(node);
       imgTasks.push(
@@ -618,8 +636,30 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
       return;
     }
 
-    emitBox(el, cs, clip, opacity);
-    captureText(el, cs, clip, opacity);
+    // Box-level effects we can't vectorize:
+    //   • Leaf element  → rasterize and done (no children to miss)
+    //   • Non-leaf with raster backend → rasterize as base layer so pseudo-elements
+    //     and complex backgrounds appear, then vectorize children on top.  Children
+    //     paint over the raster so the visual result is correct where vectorization
+    //     is faithful; the raster fills the gaps (pseudo-elements, bg images, etc.).
+    //   • Non-leaf without raster backend → emit what we can vectorize and continue.
+    const boxReason = needsBoxRaster(el, cs);
+    if (boxReason) {
+      if (el.childElementCount === 0) {
+        pushRaster(r, clip, opacity, boxReason);
+        return;
+      }
+      if (containerRasterFallback) {
+        pushRaster(r, clip, opacity, boxReason);
+        // skip emitBox/captureText — the raster already captures them
+      } else {
+        emitBox(el, cs, clip, opacity);
+        captureText(el, cs, clip, opacity);
+      }
+    } else {
+      emitBox(el, cs, clip, opacity);
+      captureText(el, cs, clip, opacity);
+    }
 
     let childClip = clip;
     if (clipsContent(cs)) {
@@ -646,6 +686,17 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
     for (const m of neg) await walk(m.k, childClip, opacity);
     for (const m of mid) await walk(m.k, childClip, opacity);
     for (const m of pos) await walk(m.k, childClip, opacity);
+
+    // Walk open shadow roots after light-DOM children. Shadow DOM content renders
+    // on top of the host's light-DOM background; placing it last preserves that
+    // order. Slotted light-DOM elements are captured by their light-DOM walk
+    // (range.getClientRects() returns their visual slot position), so no doubling.
+    const shadow = (el as HTMLElement).shadowRoot;
+    if (shadow) {
+      for (const child of Array.from(shadow.children)) {
+        await walk(child as Element, childClip, opacity);
+      }
+    }
   };
 
   const body = document.body;

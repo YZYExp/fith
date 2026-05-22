@@ -40,6 +40,10 @@ async function run(opts: InPageOptions, root?: Element): Promise<string> {
       deviceScaleFactor: opts.deviceScaleFactor ?? window.devicePixelRatio ?? 1,
       fontMode: opts.fontMode === 'none' ? 'none' : 'embed',
       collectGlyphX: opts.fontMode === 'outline',
+      // Rasterize non-leaf containers that have un-vectorizable box effects
+      // (pseudo-elements, complex background images) only when a rasterize
+      // backend is available; otherwise silently emit what can be vectorized.
+      containerRasterFallback: !!opts.rasterize,
     },
     root,
   );

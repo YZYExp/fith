@@ -132,6 +132,25 @@ function emitBox(node: BoxNode, defs: Defs): string {
   if (node.gradient) out += fillShape(rect, radii, `url(#${gradientId(defs, node.gradient, rect)})`);
 
   if (node.border) out += emitBorder(node.border, rect, radii);
+
+  if (node.outline) {
+    const o = node.outline;
+    // Stroke center is outlineOffset + outlineWidth/2 outside the border box.
+    const exp = o.offset + o.width / 2;
+    const ox = rect.x - exp;
+    const oy = rect.y - exp;
+    const ow = rect.width + 2 * exp;
+    const oh = rect.height + 2 * exp;
+    const d = dash(o.style, o.width);
+    if (noRadii(radii)) {
+      out += `<rect x="${n(ox)}" y="${n(oy)}" width="${n(ow)}" height="${n(oh)}" fill="none" stroke="${esc(o.color)}" stroke-width="${n(o.width)}"${d}/>`;
+    } else {
+      // Outline follows border-radius; the radius at the stroke center grows by outlineOffset.
+      const adj = radii.map((r) => Math.max(0, r + o.offset)) as CornerRadii;
+      out += `<path d="${roundedRectPath(ox, oy, ow, oh, adj)}" fill="none" stroke="${esc(o.color)}" stroke-width="${n(o.width)}"${d}/>`;
+    }
+  }
+
   return out;
 }
 

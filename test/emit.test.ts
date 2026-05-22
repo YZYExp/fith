@@ -199,4 +199,47 @@ describe('emitSvg', () => {
     );
     expect(svg).toContain('opacity="0.5"');
   });
+
+  it('emits outline as a stroked rect outside the border box', () => {
+    const svg = emitSvg(
+      base([
+        {
+          kind: 'box',
+          id: 'a',
+          rect: { x: 10, y: 10, width: 80, height: 40 },
+          opacity: 1,
+          radii: [0, 0, 0, 0],
+          fill: 'white',
+          outline: { width: 2, color: 'blue', style: 'solid', offset: 0 },
+        },
+      ]),
+    );
+    // outline stroke center is 1px (width/2) outside the border box
+    expect(svg).toContain('stroke="blue"');
+    expect(svg).toContain('stroke-width="2"');
+    // rect is expanded by exp = offset + width/2 = 1 on each side
+    expect(svg).toContain('x="9"');
+    expect(svg).toContain('y="9"');
+    expect(svg).toContain('width="82"');
+    expect(svg).toContain('height="42"');
+    expect(svg).toContain('fill="none"');
+  });
+
+  it('emits dashed outline', () => {
+    const svg = emitSvg(
+      base([
+        {
+          kind: 'box',
+          id: 'a',
+          rect: { x: 0, y: 0, width: 100, height: 50 },
+          opacity: 1,
+          radii: [0, 0, 0, 0],
+          fill: null,
+          outline: { width: 3, color: 'red', style: 'dashed', offset: 2 },
+        },
+      ]),
+    );
+    expect(svg).toContain('stroke="red"');
+    expect(svg).toContain('stroke-dasharray');
+  });
 });

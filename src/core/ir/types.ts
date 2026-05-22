@@ -90,6 +90,8 @@ export interface BoxNode extends NodeBase {
   radii: CornerRadii;
   border?: BorderEdges | null;
   shadows?: BoxShadow[];
+  /** CSS outline rendered outside the border box. */
+  outline?: { width: number; color: string; style: string; offset: number } | null;
 }
 
 export interface BorderEdge {
@@ -164,4 +166,11 @@ export interface CaptureOptions {
   fontMode?: 'embed' | 'none';
   /** Capture per-glyph x positions for outline mode (slower). */
   collectGlyphX?: boolean;
+  /**
+   * When true, non-leaf containers with un-vectorizable box effects (pseudo-elements,
+   * complex background images) are rasterized as a base layer while their children
+   * are still vectorized on top. Set to true only when a rasterize backend is
+   * available; defaults to false to avoid empty raster placeholders in pure-DOM contexts.
+   */
+  containerRasterFallback?: boolean;
 }
