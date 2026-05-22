@@ -117,7 +117,9 @@ export async function validate(
       deviceScaleFactor: 2,
       fontMode: opts.fontMode === 'none' ? 'none' : 'embed',
       collectGlyphX: opts.fontMode === 'outline',
-    });
+      captureScrollableContent: true,
+      containerRasterFallback: true,
+    } as any);
     const byId = new Map(scene.rasterTargets.map((t) => [t.id, t]));
     for (const node of scene.nodes) {
       if (node.kind !== 'raster') continue;
