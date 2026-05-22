@@ -22,6 +22,17 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
   const originX = subtree ? rootRect.left : 0;
   const originY = subtree ? rootRect.top : 0;
 
+  // In subtree mode, collect all DOM ancestors of rootEl. walk() skips rendering
+  // for these elements (to suppress container backgrounds) but still descends into
+  // their children, so siblings and cousins that visually overlap the capture area
+  // are captured with correct paint order. We walk from document.documentElement
+  // instead of rootEl so those out-of-subtree elements are naturally visited.
+  const rootAncestors = new Set<Element>();
+  if (subtree) {
+    let a: Element | null = rootEl.parentElement;
+    while (a) { rootAncestors.add(a); a = a.parentElement; }
+  }
+
   const nodes: PaintNode[] = [];
   const rasterTargets: { id: string; x: number; y: number; width: number; height: number }[] = [];
   const collectGlyphX = !!opts.collectGlyphX;
@@ -704,14 +715,19 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
     // it with visibility:visible. We skip box/text for the hidden element itself
     // but always continue descent so visible children are captured.
     const visHidden = cs.visibility === 'hidden' || cs.visibility === 'collapse';
+    // In subtree mode, ancestor elements (between document root and the selected
+    // element) skip ALL rendering — we don't want container backgrounds appearing
+    // behind the selected content. We still descend to capture siblings/cousins
+    // that visually overlap the capture area with correct paint order.
+    const skipRender = rootAncestors.has(el);
 
-    const subtreeReason = needsSubtreeRaster(el, cs);
+    const subtreeReason = !skipRender && needsSubtreeRaster(el, cs);
     if (subtreeReason) {
       if (!visHidden) pushRaster(r, clip, opacity, subtreeReason);
       return;
     }
 
-    if (el.tagName.toLowerCase() === 'svg') {
+    if (!skipRender && el.tagName.toLowerCase() === 'svg') {
       if (!visHidden) {
         const clone = el.cloneNode(true) as SVGElement;
         clone.setAttribute('x', String(r.left));
@@ -737,7 +753,7 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
       return;
     }
 
-    if (el.tagName.toUpperCase() === 'IMG') {
+    if (!skipRender && el.tagName.toUpperCase() === 'IMG') {
       const img = el as HTMLImageElement;
       const objFit = cs.objectFit || 'fill';
       const preserveAspectRatio =
@@ -773,7 +789,7 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
     //     paint over the raster so the visual result is correct where vectorization
     //     is faithful; the raster fills the gaps (pseudo-elements, bg images, etc.).
     //   • Non-leaf without raster backend → emit what we can vectorize and continue.
-    const boxReason = !visHidden && needsBoxRaster(el, cs);
+    const boxReason = !skipRender && !visHidden && needsBoxRaster(el, cs);
     if (boxReason) {
       if (el.childElementCount === 0) {
         pushRaster(r, clip, opacity, boxReason);
@@ -787,7 +803,7 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
         captureText(el, cs, clip, opacity);
         captureListMarker(el, cs, clip, opacity);
       }
-    } else if (!visHidden) {
+    } else if (!skipRender && !visHidden) {
       emitBox(el, cs, clip, opacity);
       captureText(el, cs, clip, opacity);
       captureListMarker(el, cs, clip, opacity);
@@ -905,7 +921,10 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
     }
   }
 
-  await walk(rootEl, null, 1);
+  // In subtree mode, walk from document root so siblings and cousins that
+  // visually overlap the selected element's bounding area are captured with
+  // correct paint order. rootAncestors guards suppress their own rendering.
+  await walk(subtree ? (document.documentElement as Element) : rootEl, null, 1);
   await Promise.all(imgTasks);
 
   for (const { el, v } of cvSaved) el.style.contentVisibility = v;
