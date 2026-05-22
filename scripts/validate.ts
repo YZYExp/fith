@@ -68,7 +68,17 @@ export interface ValidateResult {
 
 export async function validate(
   target: { url: string } | { html: string },
-  opts: { width: number; height?: number; name: string; outDir: string; fontMode?: 'embed' | 'outline' | 'none' },
+  opts: {
+    width: number;
+    height?: number;
+    name: string;
+    outDir: string;
+    fontMode?: 'embed' | 'outline' | 'none';
+    /** JS snippet evaluated in-page before navigation (e.g. to seed localStorage). */
+    initScript?: string;
+    /** Extra settle time (ms) after networkidle before capturing. */
+    settleMs?: number;
+  },
 ): Promise<ValidateResult> {
   const execPath = process.env.CHROMIUM_PATH || (await sparticuz.executablePath());
   const browser: Browser = await chromium.launch({ executablePath: execPath, args: ARGS });
@@ -77,9 +87,11 @@ export async function validate(
       viewport: { width: opts.width, height: opts.height || 800 },
       deviceScaleFactor: 1,
     });
+    if (opts.initScript) await context.addInitScript(opts.initScript);
     const page = await context.newPage();
     if ('url' in target) await page.goto(target.url, { waitUntil: 'networkidle' });
     else await page.setContent(target.html, { waitUntil: 'networkidle' });
+    if (opts.settleMs) await page.waitForTimeout(opts.settleMs);
 
     await page.evaluate(async () => {
       if (document.fonts) await document.fonts.ready;
