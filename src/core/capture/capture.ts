@@ -226,14 +226,18 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
   const cullLeft = subtree ? originX : 0;
   const cullTop = subtree ? originY : 0;
   const isVisible = (el: Element, cs: CSSStyleDeclaration) => {
-    if (cs.display === 'none' || cs.visibility === 'hidden' || cs.visibility === 'collapse')
-      return false;
+    // display:none removes element from layout entirely — no descent possible
+    if (cs.display === 'none') return false;
+    // opacity:0 composites to invisible and cannot be overridden by children
     if (num(cs.opacity) === 0) return false;
     const r = el.getBoundingClientRect();
     if (r.width === 0 && r.height === 0) return false;
     if (r.bottom < cullTop || r.right < cullLeft || r.top > cullBottom || r.left > cullRight)
       return false;
     return true;
+    // NOTE: visibility:hidden is intentionally NOT checked here. Children can
+    // override it with visibility:visible, so descent must continue. The walk()
+    // function skips emitBox/captureText for the hidden element itself.
   };
 
   const pseudoVisible = (el: Element, sel: string) => {
@@ -696,34 +700,40 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
     if (!isVisible(el, cs)) return;
     const opacity = inheritedOpacity * num(cs.opacity || '1');
     const r = el.getBoundingClientRect();
+    // visibility:hidden hides the element's own rendering but children can override
+    // it with visibility:visible. We skip box/text for the hidden element itself
+    // but always continue descent so visible children are captured.
+    const visHidden = cs.visibility === 'hidden' || cs.visibility === 'collapse';
 
     const subtreeReason = needsSubtreeRaster(el, cs);
     if (subtreeReason) {
-      pushRaster(r, clip, opacity, subtreeReason);
+      if (!visHidden) pushRaster(r, clip, opacity, subtreeReason);
       return;
     }
 
     if (el.tagName.toLowerCase() === 'svg') {
-      const clone = el.cloneNode(true) as SVGElement;
-      clone.setAttribute('x', String(r.left));
-      clone.setAttribute('y', String(r.top));
-      clone.setAttribute('width', String(r.width));
-      clone.setAttribute('height', String(r.height));
-      // resolve currentColor used by icon fonts/icons
-      (clone as any).style.color = normColor(cs.color);
-      if (!clone.getAttribute('xmlns')) clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
-      // Inline computed presentation styles so CSS-class-styled SVG (e.g. MUI
-      // x-charts line strokes / bar fills) survives transplanting without the
-      // page's stylesheet. Walk original + clone in lockstep (same structure).
-      inlineSvgStyles(el, clone);
-      nodes.push({
-        kind: 'inline-svg',
-        id: nid(),
-        rect: { x: r.left, y: r.top, width: r.width, height: r.height },
-        opacity,
-        clip,
-        markup: clone.outerHTML,
-      });
+      if (!visHidden) {
+        const clone = el.cloneNode(true) as SVGElement;
+        clone.setAttribute('x', String(r.left));
+        clone.setAttribute('y', String(r.top));
+        clone.setAttribute('width', String(r.width));
+        clone.setAttribute('height', String(r.height));
+        // resolve currentColor used by icon fonts/icons
+        (clone as any).style.color = normColor(cs.color);
+        if (!clone.getAttribute('xmlns')) clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+        // Inline computed presentation styles so CSS-class-styled SVG (e.g. MUI
+        // x-charts line strokes / bar fills) survives transplanting without the
+        // page's stylesheet. Walk original + clone in lockstep (same structure).
+        inlineSvgStyles(el, clone);
+        nodes.push({
+          kind: 'inline-svg',
+          id: nid(),
+          rect: { x: r.left, y: r.top, width: r.width, height: r.height },
+          opacity,
+          clip,
+          markup: clone.outerHTML,
+        });
+      }
       return;
     }
 
@@ -763,7 +773,7 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
     //     paint over the raster so the visual result is correct where vectorization
     //     is faithful; the raster fills the gaps (pseudo-elements, bg images, etc.).
     //   • Non-leaf without raster backend → emit what we can vectorize and continue.
-    const boxReason = needsBoxRaster(el, cs);
+    const boxReason = !visHidden && needsBoxRaster(el, cs);
     if (boxReason) {
       if (el.childElementCount === 0) {
         pushRaster(r, clip, opacity, boxReason);
@@ -777,7 +787,7 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
         captureText(el, cs, clip, opacity);
         captureListMarker(el, cs, clip, opacity);
       }
-    } else {
+    } else if (!visHidden) {
       emitBox(el, cs, clip, opacity);
       captureText(el, cs, clip, opacity);
       captureListMarker(el, cs, clip, opacity);
@@ -863,8 +873,12 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
   // Reset all scroll positions so scrolled-out content is at its natural position
   // during capture. getBoundingClientRect() forces a synchronous layout flush, so
   // positions are correct even though the reset is synchronous.
-  // Restored after capture to avoid disrupting the user's scroll state.
+  // Also override content-visibility:auto/hidden — browsers skip layout for
+  // off-screen content-visibility:auto elements, leaving their children with zero
+  // bounding rects that would be culled as invisible (GitHub issue feeds, etc.).
+  // Both states are restored after capture.
   const scrollSaved: { el: HTMLElement; top: number; left: number }[] = [];
+  const cvSaved: { el: HTMLElement; v: string }[] = [];
   if ((opts as any).captureScrollableContent) {
     const docEl = document.documentElement as HTMLElement;
     const bodyEl = document.body as HTMLElement | null;
@@ -883,12 +897,18 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
         h.scrollTop = 0;
         h.scrollLeft = 0;
       }
+      const cv = (getComputedStyle(h) as any).contentVisibility;
+      if (cv === 'auto' || cv === 'hidden') {
+        cvSaved.push({ el: h, v: h.style.contentVisibility });
+        h.style.contentVisibility = 'visible';
+      }
     }
   }
 
   await walk(rootEl, null, 1);
   await Promise.all(imgTasks);
 
+  for (const { el, v } of cvSaved) el.style.contentVisibility = v;
   for (const { el, top, left } of scrollSaved) {
     el.scrollTop = top;
     el.scrollLeft = left;
