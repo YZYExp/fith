@@ -333,6 +333,23 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
     }
   };
 
+  // Try to extract image pixels via canvas (works for decoded same-origin images
+  // and CORS-enabled cross-origin images without a network round-trip).
+  const canvasExtractDataURL = (img: HTMLImageElement): string | null => {
+    if (!img.complete || img.naturalWidth === 0 || img.naturalHeight === 0) return null;
+    try {
+      const c = document.createElement('canvas');
+      c.width = img.naturalWidth;
+      c.height = img.naturalHeight;
+      const ctx = c.getContext('2d');
+      if (!ctx) return null;
+      ctx.drawImage(img, 0, 0);
+      return c.toDataURL('image/png');
+    } catch {
+      return null; // cross-origin without CORS headers: canvas is tainted
+    }
+  };
+
   const pushRaster = (rect: DOMRect, clip: Clip | null, opacity: number, reason: string) => {
     const x = Math.max(0, Math.floor(rect.left));
     const y = Math.max(0, Math.floor(rect.top));
@@ -774,10 +791,31 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
       };
       nodes.push(node);
       imgTasks.push(
-        fetchDataURL(img.currentSrc || img.src).then((d) => {
-          if (d) node.href = d;
-          else pushRaster(r, clip, opacity, 'img-cors');
-        }),
+        (async () => {
+          const src = img.currentSrc || img.src;
+          // 1) Try canvas extraction (instant, no network, works for decoded images)
+          const canvas = canvasExtractDataURL(img);
+          if (canvas) { node.href = canvas; return; }
+          // 2) Fall back to fetch
+          const fetched = await fetchDataURL(src);
+          if (fetched) { node.href = fetched; return; }
+          // 3) CORS / network failure: convert this node in-place to a raster target
+          //    so it keeps its paint-order position rather than appending at the end.
+          const x = Math.max(0, Math.floor(r.left));
+          const y = Math.max(0, Math.floor(r.top));
+          const right = Math.min(W, Math.ceil(r.right));
+          const bottom = Math.min(H, Math.ceil(r.bottom));
+          const rw = right - x;
+          const rh = bottom - y;
+          if (rw > 0 && rh > 0) {
+            Object.assign(node, { kind: 'raster', rect: { x, y, width: rw, height: rh }, reason: 'img-cors' });
+            rasterTargets.push({ id, x, y, width: rw, height: rh });
+          } else {
+            // image is entirely outside the capture bounds — remove the placeholder
+            const idx = nodes.indexOf(node);
+            if (idx >= 0) nodes.splice(idx, 1);
+          }
+        })(),
       );
       return;
     }

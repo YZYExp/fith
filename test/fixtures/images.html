@@ -1,0 +1,75 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <style>
+      body { margin: 0; font: 14px/1.5 system-ui, sans-serif; background: #f5f5f5; }
+      .card { background: #fff; margin: 20px; padding: 16px; border-radius: 8px; box-shadow: 0 1px 4px rgba(0,0,0,.1); }
+      h2 { margin: 0 0 12px; font-size: 16px; }
+      img { display: block; border-radius: 4px; }
+      .grid { display: flex; gap: 12px; flex-wrap: wrap; }
+      .label { font-size: 11px; color: #888; margin-top: 4px; }
+    </style>
+  </head>
+  <body>
+    <div class="card">
+      <h2>Inline data-URI image (always works)</h2>
+      <!-- 2×2 red/blue/green/yellow grid encoded as data URI -->
+      <img
+        src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAFklEQVQI12P4z8BQDwAEgAF/QualIQAAAABJRU5ErkJggg=="
+        width="40" height="40" alt="data-uri"
+      />
+      <div class="label">data: URI — extracted inline</div>
+    </div>
+
+    <div class="card">
+      <h2>Same-origin SVG image (canvas extraction)</h2>
+      <!-- Inline SVG served as a file on the same origin; canvas.drawImage will succeed -->
+      <img
+        src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='80' height='80'%3E%3Crect width='80' height='80' fill='%234f46e5'/%3E%3Ccircle cx='40' cy='40' r='30' fill='%23fff'/%3E%3C/svg%3E"
+        width="80" height="80" alt="svg image"
+      />
+      <div class="label">SVG via data: URI — extracted via canvas</div>
+    </div>
+
+    <div class="card">
+      <h2>Object-fit variations</h2>
+      <div class="grid">
+        <div>
+          <img
+            src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAYAAADED76LAAAAMElEQVQY02NgYGD4z8BQDwAEgAF/QqualIQAAAABJRU5ErkJggg=="
+            width="80" height="40" style="object-fit:cover" alt="cover"
+          />
+          <div class="label">object-fit: cover</div>
+        </div>
+        <div>
+          <img
+            src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAYAAADED76LAAAAMElEQVQY02NgYGD4z8BQDwAEgAF/QqualIQAAAABJRU5ErkJggg=="
+            width="80" height="80" style="object-fit:contain; background:#e5e7eb" alt="contain"
+          />
+          <div class="label">object-fit: contain</div>
+        </div>
+        <div>
+          <img
+            src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAYAAADED76LAAAAMElEQVQY02NgYGD4z8BQDwAEgAF/QqualIQAAAABJRU5ErkJggg=="
+            width="80" height="80" style="object-fit:fill" alt="fill"
+          />
+          <div class="label">object-fit: fill</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Multiple images in sequence (paint-order preserved)</h2>
+      <div class="grid" id="sequence">
+        <!-- 5 colored squares; each must appear in order in the SVG -->
+        <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='40'%3E%3Crect width='40' height='40' fill='%23ef4444'/%3E%3Ctext x='20' y='26' text-anchor='middle' fill='%23fff' font-size='14'%3E1%3C/text%3E%3C/svg%3E" width="40" height="40" alt="1"/>
+        <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='40'%3E%3Crect width='40' height='40' fill='%23f97316'/%3E%3Ctext x='20' y='26' text-anchor='middle' fill='%23fff' font-size='14'%3E2%3C/text%3E%3C/svg%3E" width="40" height="40" alt="2"/>
+        <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='40'%3E%3Crect width='40' height='40' fill='%2322c55e'/%3E%3Ctext x='20' y='26' text-anchor='middle' fill='%23fff' font-size='14'%3E3%3C/text%3E%3C/svg%3E" width="40" height="40" alt="3"/>
+        <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='40'%3E%3Crect width='40' height='40' fill='%233b82f6'/%3E%3Ctext x='20' y='26' text-anchor='middle' fill='%23fff' font-size='14'%3E4%3C/text%3E%3C/svg%3E" width="40" height="40" alt="4"/>
+        <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='40'%3E%3Crect width='40' height='40' fill='%238b5cf6'/%3E%3Ctext x='20' y='26' text-anchor='middle' fill='%23fff' font-size='14'%3E5%3C/text%3E%3C/svg%3E" width="40" height="40" alt="5"/>
+      </div>
+      <div class="label">5 colored squares — all 5 must appear in SVG output</div>
+    </div>
+  </body>
+</html>
