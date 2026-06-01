@@ -323,6 +323,8 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
     });
 
   const fetchDataURL = async (url: string): Promise<string | null> => {
+    // Guard against fetching the current page when img.src is empty or blank.
+    if (!url || url === 'about:blank') return null;
     if (url.startsWith('data:')) return url;
     try {
       const res = await fetch(url, { cache: 'force-cache' });
