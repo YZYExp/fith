@@ -10,7 +10,7 @@ import type { Rect } from '../../core/ir/types.js';
 type OutputMode = 'both' | 'download' | 'preview';
 type FontMode = 'embed' | 'outline' | 'none';
 
-function rasterize(rect: Rect): Promise<string | null> {
+function rasterize(rect: Rect, _scale?: number): Promise<string | null> {
   return new Promise((resolve) => {
     chrome.runtime.sendMessage(
       { type: 'fh:rasterize', rect, dpr: window.devicePixelRatio || 1 },

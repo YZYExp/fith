@@ -936,17 +936,31 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
   const scrollSaved: { el: HTMLElement; top: number; left: number }[] = [];
   const cvSaved: { el: HTMLElement; v: string }[] = [];
   if ((opts as any).captureScrollableContent) {
-    const docEl = document.documentElement as HTMLElement;
-    const bodyEl = document.body as HTMLElement | null;
-    for (const el of [docEl, bodyEl]) {
-      if (!el) continue;
-      if (el.scrollTop || el.scrollLeft) {
-        scrollSaved.push({ el, top: el.scrollTop, left: el.scrollLeft });
-        el.scrollTop = 0;
-        el.scrollLeft = 0;
+    // For full-page capture, reset the outer document scroll so all content is
+    // at its natural (unfurled) position for getBoundingClientRect() and for
+    // captureVisibleTab screenshots. For element (subtree) capture, we must NOT
+    // reset the page scroll — the user just picked an element that is visible in
+    // the current viewport, and resetting scroll would push it off-screen, making
+    // captureVisibleTab unable to reach raster regions inside it.
+    if (!subtree) {
+      const docEl = document.documentElement as HTMLElement;
+      const bodyEl = document.body as HTMLElement | null;
+      for (const el of [docEl, bodyEl]) {
+        if (!el) continue;
+        if (el.scrollTop || el.scrollLeft) {
+          scrollSaved.push({ el, top: el.scrollTop, left: el.scrollLeft });
+          el.scrollTop = 0;
+          el.scrollLeft = 0;
+        }
       }
     }
-    for (const el of Array.from(document.querySelectorAll('*'))) {
+    // Reset scroll on elements inside the capture root (full-page: all; subtree:
+    // only descendants of rootEl). Also force content-visibility so off-screen
+    // content inside the root gets layout and isn't culled as zero-rect.
+    const scrollScope = subtree
+      ? Array.from(rootEl.querySelectorAll('*'))
+      : Array.from(document.querySelectorAll('*'));
+    for (const el of scrollScope) {
       const h = el as HTMLElement;
       if (h.scrollTop || h.scrollLeft) {
         scrollSaved.push({ el: h, top: h.scrollTop, left: h.scrollLeft });
