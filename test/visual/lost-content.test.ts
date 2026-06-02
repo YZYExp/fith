@@ -100,6 +100,58 @@ describe('lost-content detector', () => {
   );
 
   it(
+    'captures content inside MUI Collapse-style overflow:hidden wrappers (all list items)',
+    async () => {
+      const code = await bundleBrowser();
+      const execPath = process.env.CHROMIUM_PATH || (await sparticuz.executablePath());
+      const browser: Browser = await chromium.launch({ executablePath: execPath, args: ARGS });
+      try {
+        const ctx = await browser.newContext({ viewport: { width: 700, height: 800 }, deviceScaleFactor: 1 });
+        const page = await ctx.newPage();
+        const fixture = pathToFileURL(resolve(__dirname, '../fixtures/mui-collapse-list.html')).href;
+        await page.goto(fixture, { waitUntil: 'networkidle' });
+        await page.evaluate(async () => {
+          if (document.fonts) await document.fonts.ready;
+        });
+        await page.addScriptTag({ content: code });
+
+        // Find text nodes whose own rect falls entirely OUTSIDE their clip.
+        // These would be clipped to nothing by SVG's clip-path — invisible.
+        const clippedAway = await page.evaluate(async () => {
+          // @ts-expect-error injected global
+          const scene = await FittingHtml.captureScene({
+            width: document.documentElement.clientWidth,
+            height: Math.max(document.documentElement.scrollHeight, document.body.scrollHeight),
+            deviceScaleFactor: 1,
+            fontMode: 'none',
+            captureScrollableContent: true,
+            containerRasterFallback: false,
+          });
+          const lost: { text: string; reason: string }[] = [];
+          for (const n of scene.nodes as any[]) {
+            if (n.kind !== 'text' || !n.clip) continue;
+            const text = n.lines.map((l: any) => l.text).join(' ').trim();
+            if (!text) continue;
+            const cx = n.rect.x + n.rect.width / 2;
+            const cy = n.rect.y + n.rect.height / 2;
+            const inside =
+              cx >= n.clip.x && cx <= n.clip.x + n.clip.width &&
+              cy >= n.clip.y && cy <= n.clip.y + n.clip.height;
+            if (!inside) lost.push({ text: text.slice(0, 40), reason: 'text center outside clip' });
+          }
+          return lost;
+        });
+
+        if (clippedAway.length) console.error('CLIPPED OUT (mui-collapse):', JSON.stringify(clippedAway, null, 2));
+        expect(clippedAway).toEqual([]);
+      } finally {
+        await browser.close();
+      }
+    },
+    90_000,
+  );
+
+  it(
     'includes overlapping sibling text when a single element is selected',
     async () => {
       const code = await bundleBrowser();

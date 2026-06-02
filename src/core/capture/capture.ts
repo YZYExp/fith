@@ -852,22 +852,30 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
     let childClip = clip;
     if (clipsContent(cs)) {
       // For scrollable containers (overflow:auto/scroll) in full-content mode,
+      // For scrollable containers (overflow:auto/scroll) in full-content mode,
       // expand the clip to scrollWidth × scrollHeight so items that are outside
       // the container's current visible area are still included in the output.
-      // For overflow:hidden/clip the CSS dimensions are intentional — keep them.
+      // For overflow:hidden the CSS dimensions are usually intentional (rounded
+      // corner clips, dropdown menus, etc.) — keep them. BUT MUI Collapse,
+      // Accordion, Drawer, and similar animation primitives use overflow:hidden
+      // combined with a transitioning height to reveal content. After the
+      // animation settles, scrollHeight typically equals clientHeight, but for
+      // the brief window where height is still transitioning (or where layout
+      // has sub-pixel mismatches), children would be silently clipped to the
+      // collapsed size and disappear from the export. When scrollHeight clearly
+      // exceeds clientHeight, expand the clip so the content survives.
       const htmlEl = el as HTMLElement;
       const isScrollContainer =
         cs.overflowX === 'scroll' || cs.overflowX === 'auto' ||
         cs.overflowY === 'scroll' || cs.overflowY === 'auto';
+      const isHiddenWithOverflow =
+        (cs.overflowX === 'hidden' || cs.overflowY === 'hidden') &&
+        ((htmlEl.scrollHeight || 0) - htmlEl.clientHeight > 1 ||
+          (htmlEl.scrollWidth || 0) - htmlEl.clientWidth > 1);
       const captureScrollable = !!(opts as any).captureScrollableContent;
-      const clipW =
-        captureScrollable && isScrollContainer
-          ? Math.max(r.width, htmlEl.scrollWidth || 0)
-          : r.width;
-      const clipH =
-        captureScrollable && isScrollContainer
-          ? Math.max(r.height, htmlEl.scrollHeight || 0)
-          : r.height;
+      const shouldExpand = captureScrollable && (isScrollContainer || isHiddenWithOverflow);
+      const clipW = shouldExpand ? Math.max(r.width, htmlEl.scrollWidth || 0) : r.width;
+      const clipH = shouldExpand ? Math.max(r.height, htmlEl.scrollHeight || 0) : r.height;
       childClip = intersect(clip, {
         x: r.left,
         y: r.top,
