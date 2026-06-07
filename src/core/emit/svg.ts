@@ -280,11 +280,16 @@ function emitText(node: TextNode, defs: Defs, outline?: Outliner): string {
   }
   const weightAttr = node.fontWeight === '400' || node.fontWeight === 'normal' ? '' : ` font-weight="${esc(node.fontWeight)}"`;
   const styleAttr = node.fontStyle === 'normal' ? '' : ` font-style="${esc(node.fontStyle)}"`;
+  const decoVal = node.decoration
+    ? node.decorationColor && node.decorationColor !== node.color
+      ? `${node.decoration} ${esc(node.decorationColor)}`
+      : node.decoration
+    : null;
   const attrs =
     `font-family="${esc(node.fontFamily)}" font-size="${n(node.fontSize)}"${weightAttr}${styleAttr} fill="${fill}"` +
     (node.letterSpacing ? ` letter-spacing="${n(node.letterSpacing)}"` : '') +
     (node.wordSpacing ? ` word-spacing="${n(node.wordSpacing)}"` : '') +
-    (node.decoration ? ` text-decoration="${esc(node.decoration)}"` : '') +
+    (decoVal ? ` text-decoration="${decoVal}"` : '') +
     (node.textAnchor && node.textAnchor !== 'start' ? ` text-anchor="${node.textAnchor}"` : '');
   return node.lines
     .map((l) => `<text x="${n(l.x)}" y="${n(l.baseline)}" ${attrs}>${esc(l.text)}</text>`)
