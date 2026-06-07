@@ -323,6 +323,8 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
     });
 
   const fetchDataURL = async (url: string): Promise<string | null> => {
+    // Guard against fetching the current page when img.src is empty or blank.
+    if (!url || url === 'about:blank') return null;
     if (url.startsWith('data:')) return url;
     try {
       const res = await fetch(url, { cache: 'force-cache' });
@@ -330,6 +332,23 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
       return await blobToDataURL(await res.blob());
     } catch {
       return null;
+    }
+  };
+
+  // Try to extract image pixels via canvas (works for decoded same-origin images
+  // and CORS-enabled cross-origin images without a network round-trip).
+  const canvasExtractDataURL = (img: HTMLImageElement): string | null => {
+    if (!img.complete || img.naturalWidth === 0 || img.naturalHeight === 0) return null;
+    try {
+      const c = document.createElement('canvas');
+      c.width = img.naturalWidth;
+      c.height = img.naturalHeight;
+      const ctx = c.getContext('2d');
+      if (!ctx) return null;
+      ctx.drawImage(img, 0, 0);
+      return c.toDataURL('image/png');
+    } catch {
+      return null; // cross-origin without CORS headers: canvas is tainted
     }
   };
 
@@ -774,10 +793,31 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
       };
       nodes.push(node);
       imgTasks.push(
-        fetchDataURL(img.currentSrc || img.src).then((d) => {
-          if (d) node.href = d;
-          else pushRaster(r, clip, opacity, 'img-cors');
-        }),
+        (async () => {
+          const src = img.currentSrc || img.src;
+          // 1) Try canvas extraction (instant, no network, works for decoded images)
+          const canvas = canvasExtractDataURL(img);
+          if (canvas) { node.href = canvas; return; }
+          // 2) Fall back to fetch
+          const fetched = await fetchDataURL(src);
+          if (fetched) { node.href = fetched; return; }
+          // 3) CORS / network failure: convert this node in-place to a raster target
+          //    so it keeps its paint-order position rather than appending at the end.
+          const x = Math.max(0, Math.floor(r.left));
+          const y = Math.max(0, Math.floor(r.top));
+          const right = Math.min(W, Math.ceil(r.right));
+          const bottom = Math.min(H, Math.ceil(r.bottom));
+          const rw = right - x;
+          const rh = bottom - y;
+          if (rw > 0 && rh > 0) {
+            Object.assign(node, { kind: 'raster', rect: { x, y, width: rw, height: rh }, reason: 'img-cors' });
+            rasterTargets.push({ id, x, y, width: rw, height: rh });
+          } else {
+            // image is entirely outside the capture bounds — remove the placeholder
+            const idx = nodes.indexOf(node);
+            if (idx >= 0) nodes.splice(idx, 1);
+          }
+        })(),
       );
       return;
     }
@@ -812,22 +852,30 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
     let childClip = clip;
     if (clipsContent(cs)) {
       // For scrollable containers (overflow:auto/scroll) in full-content mode,
+      // For scrollable containers (overflow:auto/scroll) in full-content mode,
       // expand the clip to scrollWidth × scrollHeight so items that are outside
       // the container's current visible area are still included in the output.
-      // For overflow:hidden/clip the CSS dimensions are intentional — keep them.
+      // For overflow:hidden the CSS dimensions are usually intentional (rounded
+      // corner clips, dropdown menus, etc.) — keep them. BUT MUI Collapse,
+      // Accordion, Drawer, and similar animation primitives use overflow:hidden
+      // combined with a transitioning height to reveal content. After the
+      // animation settles, scrollHeight typically equals clientHeight, but for
+      // the brief window where height is still transitioning (or where layout
+      // has sub-pixel mismatches), children would be silently clipped to the
+      // collapsed size and disappear from the export. When scrollHeight clearly
+      // exceeds clientHeight, expand the clip so the content survives.
       const htmlEl = el as HTMLElement;
       const isScrollContainer =
         cs.overflowX === 'scroll' || cs.overflowX === 'auto' ||
         cs.overflowY === 'scroll' || cs.overflowY === 'auto';
+      const isHiddenWithOverflow =
+        (cs.overflowX === 'hidden' || cs.overflowY === 'hidden') &&
+        ((htmlEl.scrollHeight || 0) - htmlEl.clientHeight > 1 ||
+          (htmlEl.scrollWidth || 0) - htmlEl.clientWidth > 1);
       const captureScrollable = !!(opts as any).captureScrollableContent;
-      const clipW =
-        captureScrollable && isScrollContainer
-          ? Math.max(r.width, htmlEl.scrollWidth || 0)
-          : r.width;
-      const clipH =
-        captureScrollable && isScrollContainer
-          ? Math.max(r.height, htmlEl.scrollHeight || 0)
-          : r.height;
+      const shouldExpand = captureScrollable && (isScrollContainer || isHiddenWithOverflow);
+      const clipW = shouldExpand ? Math.max(r.width, htmlEl.scrollWidth || 0) : r.width;
+      const clipH = shouldExpand ? Math.max(r.height, htmlEl.scrollHeight || 0) : r.height;
       childClip = intersect(clip, {
         x: r.left,
         y: r.top,
@@ -896,17 +944,31 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
   const scrollSaved: { el: HTMLElement; top: number; left: number }[] = [];
   const cvSaved: { el: HTMLElement; v: string }[] = [];
   if ((opts as any).captureScrollableContent) {
-    const docEl = document.documentElement as HTMLElement;
-    const bodyEl = document.body as HTMLElement | null;
-    for (const el of [docEl, bodyEl]) {
-      if (!el) continue;
-      if (el.scrollTop || el.scrollLeft) {
-        scrollSaved.push({ el, top: el.scrollTop, left: el.scrollLeft });
-        el.scrollTop = 0;
-        el.scrollLeft = 0;
+    // For full-page capture, reset the outer document scroll so all content is
+    // at its natural (unfurled) position for getBoundingClientRect() and for
+    // captureVisibleTab screenshots. For element (subtree) capture, we must NOT
+    // reset the page scroll — the user just picked an element that is visible in
+    // the current viewport, and resetting scroll would push it off-screen, making
+    // captureVisibleTab unable to reach raster regions inside it.
+    if (!subtree) {
+      const docEl = document.documentElement as HTMLElement;
+      const bodyEl = document.body as HTMLElement | null;
+      for (const el of [docEl, bodyEl]) {
+        if (!el) continue;
+        if (el.scrollTop || el.scrollLeft) {
+          scrollSaved.push({ el, top: el.scrollTop, left: el.scrollLeft });
+          el.scrollTop = 0;
+          el.scrollLeft = 0;
+        }
       }
     }
-    for (const el of Array.from(document.querySelectorAll('*'))) {
+    // Reset scroll on elements inside the capture root (full-page: all; subtree:
+    // only descendants of rootEl). Also force content-visibility so off-screen
+    // content inside the root gets layout and isn't culled as zero-rect.
+    const scrollScope = subtree
+      ? Array.from(rootEl.querySelectorAll('*'))
+      : Array.from(document.querySelectorAll('*'));
+    for (const el of scrollScope) {
       const h = el as HTMLElement;
       if (h.scrollTop || h.scrollLeft) {
         scrollSaved.push({ el: h, top: h.scrollTop, left: h.scrollLeft });
