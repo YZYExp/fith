@@ -276,8 +276,22 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
     if ((cs as any).maskImage && (cs as any).maskImage !== 'none' && (cs as any).maskImage !== undefined)
       return 'mask';
     if (cs.clipPath && cs.clipPath !== 'none') return 'clip-path';
-    const m = parseMatrix(cs.transform);
-    if (m && (Math.abs(m.b) > 1e-3 || Math.abs(m.c) > 1e-3)) return 'transform-rotate';
+    const tf = cs.transform;
+    if (tf && tf !== 'none') {
+      // Detect 3D transforms (rotateX/Y, perspective…) via the matrix3d coefficients that
+      // a pure-2D transform leaves at zero. These can't be flattened to SVG's 2D canvas.
+      const m3match = tf.match(/matrix3d\(([^)]+)\)/);
+      if (m3match) {
+        const p = m3match[1].split(',').map((x) => parseFloat(x));
+        // A pure 2D-equivalent matrix3d has p[2]=p[3]=p[6]=p[7]=p[8]=p[9]=p[14]=0
+        const has3D =
+          Math.abs(p[2]) > 1e-3 || Math.abs(p[6]) > 1e-3 ||
+          Math.abs(p[8]) > 1e-3 || Math.abs(p[9]) > 1e-3 || Math.abs(p[14]) > 1e-3;
+        if (has3D) return 'transform-3d';
+      }
+      const m = parseMatrix(tf);
+      if (m && (Math.abs(m.b) > 1e-3 || Math.abs(m.c) > 1e-3)) return 'transform-rotate';
+    }
     // Custom elements (hyphenated tag) with no light-DOM children and no accessible
     // shadow root are likely using closed shadow DOM — raster to capture their rendering.
     if (el.tagName.includes('-') && el.childElementCount === 0 && !(el as HTMLElement).shadowRoot)
@@ -366,9 +380,12 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
   };
 
   const parseShadows = (value: string) => {
-    if (!value || value === 'none' || value.includes('inset')) return [];
+    if (!value || value === 'none') return [];
+    // Only emit outset layers; inset layers are handled as raster by needsBoxRaster.
+    // Filter before parsing so a mix of outset + inset keeps the outset shadows.
+    const parts = splitTopLevel(value).filter((p) => !p.includes('inset'));
+    if (parts.length === 0) return [];
     const out: { offsetX: number; offsetY: number; blur: number; spread: number; color: string }[] = [];
-    const parts = splitTopLevel(value);
     const COLOR_FN = /((?:rgba?|hsla?|oklch|oklab|lab|lch|hwb|color)\([^)]+\)|#[0-9a-fA-F]+|[a-z]+)/;
     for (const part of parts) {
       const colorMatch = part.match(COLOR_FN);

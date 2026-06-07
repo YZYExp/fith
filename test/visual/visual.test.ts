@@ -95,4 +95,70 @@ describe('visual regression', () => {
     },
     60_000,
   );
+
+  it(
+    'renders a complex Ant Design-style data table with badges and actions',
+    async () => {
+      const r = await validate(
+        { url: pathToFileURL(resolve(FIXTURES, 'antd-table.html')).href },
+        { width: 1200, height: 600, name: 'antd-table', outDir: OUT },
+      );
+      const svg = readFileSync(resolve(OUT, 'antd-table.svg'), 'utf8');
+      // Key content: headers, status badges, order IDs, customer names
+      expect(svg).toContain('Order Management');
+      expect(svg).toContain('Orders (247)');
+      expect(svg).toContain('Completed');
+      expect(svg).toContain('Alice Johnson');
+      expect(svg).toContain('#ORD-20241');
+      // Must have many text nodes (headers + rows + pagination)
+      expect((svg.match(/<text/g) || []).length).toBeGreaterThan(20);
+      expect(r.ratio).toBeLessThan(0.08);
+    },
+    90_000,
+  );
+
+  it(
+    'renders a MUI-style dashboard with sidebar, stat cards, and activity feed',
+    async () => {
+      const r = await validate(
+        { url: pathToFileURL(resolve(FIXTURES, 'mui-dashboard.html')).href },
+        { width: 1280, height: 900, name: 'mui-dashboard', outDir: OUT },
+      );
+      const svg = readFileSync(resolve(OUT, 'mui-dashboard.svg'), 'utf8');
+      // Key structural elements — stat-label uses text-transform:uppercase so
+      // "Total Revenue" appears as "TOTAL REVENUE" in the SVG
+      expect(svg).toContain('Dashboard');
+      expect(svg).toContain('TOTAL REVENUE');
+      expect(svg).toContain('$48,352');
+      expect(svg).toContain('Recent Activity');
+      expect(svg).toContain('Top Products');
+      expect(svg).toContain('Sales by Channel');
+      expect((svg.match(/<text/g) || []).length).toBeGreaterThan(10);
+      // Gradient stat cards and progress bars must not collapse the page
+      expect(r.ratio).toBeLessThan(0.10);
+    },
+    90_000,
+  );
+
+  it(
+    'captures text decorations and gradient text (text-styles fixture)',
+    async () => {
+      const r = await validate(
+        { url: pathToFileURL(resolve(FIXTURES, 'text-styles.html')).href },
+        { width: 800, height: 700, name: 'text-styles', outDir: OUT },
+      );
+      const svg = readFileSync(resolve(OUT, 'text-styles.svg'), 'utf8');
+      // Gradient text pattern (background-clip:text)
+      expect(svg).toContain('Design Systems');
+      // Text decoration nodes must be present
+      expect(svg).toContain('standard underline');
+      expect(svg).toContain('red underline');
+      // decorationColor should appear when it differs from text color
+      expect(svg).toMatch(/text-decoration="underline rgb\(239,\s*68,\s*68\)"|text-decoration="underline #ef4444"/);
+      // Gradient text should reference a linearGradient
+      expect(svg).toContain('<linearGradient');
+      expect(r.ratio).toBeLessThan(0.06);
+    },
+    90_000,
+  );
 });

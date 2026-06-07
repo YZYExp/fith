@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; }
+    body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+           font-size: 14px; color: #000000d9; background: #f0f2f5; }
+
+    .page { padding: 24px; }
+    h2 { margin: 0 0 16px; font-size: 16px; font-weight: 600; color: #000000d9; }
+
+    /* Card wrapper */
+    .card { background: #fff; border-radius: 8px; box-shadow: 0 1px 2px rgba(0,0,0,.06), 0 1px 6px -1px rgba(0,0,0,.06); padding: 0; overflow: hidden; }
+
+    /* Toolbar */
+    .toolbar { display: flex; align-items: center; justify-content: space-between; padding: 16px 24px; border-bottom: 1px solid #f0f0f0; }
+    .toolbar-title { font-size: 16px; font-weight: 600; }
+    .toolbar-btns { display: flex; gap: 8px; }
+    .btn { padding: 4px 15px; border-radius: 6px; font-size: 14px; border: 1px solid #d9d9d9; background: #fff; cursor: pointer; }
+    .btn-primary { background: #1677ff; border-color: #1677ff; color: #fff; }
+    .btn-danger  { background: #fff; border-color: #ff4d4f; color: #ff4d4f; }
+
+    /* Table */
+    table { width: 100%; border-collapse: collapse; }
+    thead th {
+      background: #fafafa; padding: 12px 16px; text-align: left;
+      font-weight: 600; font-size: 14px; color: #000000d9;
+      border-bottom: 1px solid #f0f0f0; white-space: nowrap;
+    }
+    thead th .sort-icon { display: inline-flex; flex-direction: column; margin-left: 4px; }
+    thead th .sort-icon span { font-size: 10px; line-height: 1; color: #bfbfbf; }
+    thead th .sort-icon span.active { color: #1677ff; }
+
+    tbody tr { transition: background 0.2s; }
+    tbody tr:hover td { background: #fafafa; }
+    tbody tr.selected td { background: #e6f4ff; }
+    td { padding: 12px 16px; border-bottom: 1px solid #f0f0f0; vertical-align: middle; }
+
+    /* Striped */
+    tbody tr:nth-child(even) td { background: #fafafa; }
+    tbody tr:nth-child(even):hover td { background: #f0f0f0; }
+
+    /* Badge */
+    .badge { display: inline-block; padding: 1px 8px; border-radius: 100px; font-size: 12px; font-weight: 500; line-height: 20px; }
+    .badge-green  { background: #f6ffed; border: 1px solid #b7eb8f; color: #52c41a; }
+    .badge-orange { background: #fff7e6; border: 1px solid #ffd591; color: #fa8c16; }
+    .badge-red    { background: #fff1f0; border: 1px solid #ffa39e; color: #f5222d; }
+    .badge-blue   { background: #e6f4ff; border: 1px solid #91caff; color: #1677ff; }
+    .badge-gray   { background: #f5f5f5; border: 1px solid #d9d9d9; color: #8c8c8c; }
+
+    /* Action links */
+    .action-link { color: #1677ff; cursor: pointer; margin-right: 8px; }
+    .action-link.danger { color: #ff4d4f; }
+
+    /* Pagination */
+    .pagination { display: flex; align-items: center; justify-content: flex-end; padding: 12px 24px; gap: 4px; border-top: 1px solid #f0f0f0; }
+    .pagination .info { margin-right: auto; color: #000000a6; }
+    .page-btn { display: inline-flex; align-items: center; justify-content: center;
+               width: 32px; height: 32px; border-radius: 6px; border: 1px solid #d9d9d9;
+               background: #fff; font-size: 14px; cursor: pointer; }
+    .page-btn.active { background: #1677ff; border-color: #1677ff; color: #fff; }
+    .page-btn.disabled { color: #d9d9d9; cursor: default; }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <h2>Order Management</h2>
+    <div class="card">
+      <div class="toolbar">
+        <span class="toolbar-title">Orders (247)</span>
+        <div class="toolbar-btns">
+          <button class="btn">Export</button>
+          <button class="btn btn-primary">+ New Order</button>
+        </div>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th style="width:48px"><input type="checkbox" style="width:16px;height:16px"/></th>
+            <th>Order ID <span class="sort-icon"><span class="active">▲</span><span>▼</span></span></th>
+            <th>Customer</th>
+            <th>Product</th>
+            <th>Amount <span class="sort-icon"><span>▲</span><span>▼</span></span></th>
+            <th>Status</th>
+            <th>Date</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr class="selected">
+            <td><input type="checkbox" checked style="width:16px;height:16px"/></td>
+            <td style="font-weight:600; color:#1677ff">#ORD-20241</td>
+            <td>Alice Johnson</td>
+            <td>Pro Subscription × 2</td>
+            <td style="font-weight:600">$299.00</td>
+            <td><span class="badge badge-green">Completed</span></td>
+            <td style="color:#000000a6">2024-11-15</td>
+            <td><span class="action-link">View</span><span class="action-link">Edit</span><span class="action-link danger">Delete</span></td>
+          </tr>
+          <tr>
+            <td><input type="checkbox" style="width:16px;height:16px"/></td>
+            <td style="font-weight:600; color:#1677ff">#ORD-20240</td>
+            <td>Bob Smith</td>
+            <td>Enterprise Plan</td>
+            <td style="font-weight:600">$1,200.00</td>
+            <td><span class="badge badge-orange">Pending</span></td>
+            <td style="color:#000000a6">2024-11-14</td>
+            <td><span class="action-link">View</span><span class="action-link">Edit</span><span class="action-link danger">Delete</span></td>
+          </tr>
+          <tr>
+            <td><input type="checkbox" style="width:16px;height:16px"/></td>
+            <td style="font-weight:600; color:#1677ff">#ORD-20239</td>
+            <td>Carol White</td>
+            <td>Starter Kit × 5</td>
+            <td style="font-weight:600">$149.50</td>
+            <td><span class="badge badge-red">Failed</span></td>
+            <td style="color:#000000a6">2024-11-14</td>
+            <td><span class="action-link">View</span><span class="action-link">Retry</span></td>
+          </tr>
+          <tr>
+            <td><input type="checkbox" style="width:16px;height:16px"/></td>
+            <td style="font-weight:600; color:#1677ff">#ORD-20238</td>
+            <td>David Lee</td>
+            <td>API Add-on</td>
+            <td style="font-weight:600">$49.00</td>
+            <td><span class="badge badge-blue">Processing</span></td>
+            <td style="color:#000000a6">2024-11-13</td>
+            <td><span class="action-link">View</span><span class="action-link">Edit</span><span class="action-link danger">Delete</span></td>
+          </tr>
+          <tr>
+            <td><input type="checkbox" style="width:16px;height:16px"/></td>
+            <td style="font-weight:600; color:#1677ff">#ORD-20237</td>
+            <td>Emma Davis</td>
+            <td>Support Package</td>
+            <td style="font-weight:600">$79.00</td>
+            <td><span class="badge badge-gray">Cancelled</span></td>
+            <td style="color:#000000a6">2024-11-13</td>
+            <td><span class="action-link">View</span></td>
+          </tr>
+          <tr>
+            <td><input type="checkbox" style="width:16px;height:16px"/></td>
+            <td style="font-weight:600; color:#1677ff">#ORD-20236</td>
+            <td>Frank Miller</td>
+            <td>Pro Subscription × 1</td>
+            <td style="font-weight:600">$149.50</td>
+            <td><span class="badge badge-green">Completed</span></td>
+            <td style="color:#000000a6">2024-11-12</td>
+            <td><span class="action-link">View</span><span class="action-link">Edit</span><span class="action-link danger">Delete</span></td>
+          </tr>
+        </tbody>
+      </table>
+      <div class="pagination">
+        <span class="info">Showing 1–6 of 247 results</span>
+        <button class="page-btn disabled">‹</button>
+        <button class="page-btn active">1</button>
+        <button class="page-btn">2</button>
+        <button class="page-btn">3</button>
+        <button class="page-btn">…</button>
+        <button class="page-btn">42</button>
+        <button class="page-btn">›</button>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

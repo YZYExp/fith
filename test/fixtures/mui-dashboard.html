@@ -1,0 +1,250 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; }
+    body { margin: 0; font-family: "Roboto", -apple-system, BlinkMacSystemFont, sans-serif;
+           font-size: 14px; color: #1c2536; background: #f8f9fa; }
+
+    /* Layout */
+    .shell { display: grid; grid-template-columns: 240px 1fr; min-height: 100vh; }
+    .sidebar { background: #1c2536; padding: 16px 0; }
+    .sidebar-logo { display: flex; align-items: center; gap: 8px; padding: 12px 24px 24px;
+                    font-size: 18px; font-weight: 700; color: #fff; }
+    .sidebar-logo .dot { width: 28px; height: 28px; background: linear-gradient(135deg,#6366f1,#8b5cf6); border-radius: 8px; }
+    .sidebar-section { padding: 0 8px; margin-bottom: 8px; }
+    .sidebar-label { font-size: 11px; font-weight: 700; letter-spacing: 0.08em; color: #6b7a99; padding: 8px 16px 4px; text-transform: uppercase; }
+    .nav-item { display: flex; align-items: center; gap: 12px; padding: 8px 16px; border-radius: 8px;
+                color: #9da8b7; font-size: 14px; font-weight: 500; cursor: pointer; margin-bottom: 2px; }
+    .nav-item.active { background: rgba(99,102,241,.16); color: #6366f1; }
+    .nav-item:not(.active):hover { background: rgba(255,255,255,.05); }
+    .nav-icon { width: 20px; height: 20px; fill: currentColor; flex-shrink: 0; }
+    .nav-badge { margin-left: auto; background: #6366f1; color: #fff; border-radius: 9999px;
+                 font-size: 11px; padding: 1px 7px; font-weight: 700; }
+
+    /* Main */
+    .main { padding: 32px; overflow: auto; }
+    .main-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px; }
+    .main-title { font-size: 24px; font-weight: 700; }
+    .main-subtitle { font-size: 14px; color: #6b7280; margin-top: 4px; }
+    .avatar-row { display: flex; align-items: center; gap: 12px; }
+    .avatar { width: 40px; height: 40px; border-radius: 50%; background: linear-gradient(135deg,#6366f1,#8b5cf6); display: flex; align-items: center; justify-content: center; color: #fff; font-weight: 700; }
+    .avatar-name { font-weight: 600; font-size: 14px; }
+    .avatar-role { font-size: 12px; color: #6b7280; }
+
+    /* Stat cards */
+    .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 24px; }
+    .stat-card { background: #fff; border-radius: 12px; padding: 20px;
+                 box-shadow: 0 1px 3px rgba(0,0,0,.07), 0 1px 2px rgba(0,0,0,.05); }
+    .stat-card.gradient-blue  { background: linear-gradient(135deg, #6366f1, #8b5cf6); color: #fff; }
+    .stat-card.gradient-green { background: linear-gradient(135deg, #10b981, #059669); color: #fff; }
+    .stat-label { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em;
+                  color: #6b7280; margin-bottom: 8px; }
+    .stat-card.gradient-blue .stat-label,
+    .stat-card.gradient-green .stat-label { color: rgba(255,255,255,.75); }
+    .stat-value { font-size: 28px; font-weight: 700; line-height: 1; margin-bottom: 8px; }
+    .stat-change { font-size: 12px; display: flex; align-items: center; gap: 4px; }
+    .stat-change.up   { color: #10b981; }
+    .stat-change.down { color: #f43f5e; }
+    .stat-card.gradient-blue .stat-change,
+    .stat-card.gradient-green .stat-change { color: rgba(255,255,255,.9); }
+
+    /* Grid 2-col */
+    .grid-2 { display: grid; grid-template-columns: 1fr 320px; gap: 16px; margin-bottom: 24px; }
+
+    /* Activity feed */
+    .panel { background: #fff; border-radius: 12px; padding: 20px;
+             box-shadow: 0 1px 3px rgba(0,0,0,.07), 0 1px 2px rgba(0,0,0,.05); }
+    .panel-title { font-size: 16px; font-weight: 700; margin-bottom: 16px; }
+    .activity-item { display: flex; align-items: flex-start; gap: 12px; padding: 10px 0;
+                     border-bottom: 1px solid #f3f4f6; }
+    .activity-item:last-child { border-bottom: none; }
+    .activity-dot { width: 32px; height: 32px; border-radius: 50%; flex-shrink: 0; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; }
+    .dot-blue   { background: #ede9fe; color: #6366f1; }
+    .dot-green  { background: #d1fae5; color: #10b981; }
+    .dot-orange { background: #ffedd5; color: #f97316; }
+    .dot-red    { background: #fee2e2; color: #ef4444; }
+    .activity-body { flex: 1; min-width: 0; }
+    .activity-text { font-size: 14px; line-height: 1.5; }
+    .activity-text strong { font-weight: 600; }
+    .activity-time { font-size: 12px; color: #9ca3af; margin-top: 2px; }
+
+    /* Top products */
+    .product-item { display: flex; align-items: center; gap: 12px; padding: 10px 0;
+                    border-bottom: 1px solid #f3f4f6; }
+    .product-item:last-child { border-bottom: none; }
+    .product-thumb { width: 40px; height: 40px; border-radius: 8px; flex-shrink: 0; }
+    .product-name  { font-weight: 600; font-size: 14px; }
+    .product-cat   { font-size: 12px; color: #9ca3af; }
+    .product-revenue { margin-left: auto; font-weight: 700; font-size: 14px; }
+
+    /* Progress bars */
+    .progress-label { display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 13px; }
+    .progress-bar { height: 6px; background: #f3f4f6; border-radius: 9999px; overflow: hidden; margin-bottom: 12px; }
+    .progress-fill { height: 100%; border-radius: 9999px; }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <!-- Sidebar -->
+    <aside class="sidebar">
+      <div class="sidebar-logo">
+        <div class="dot"></div>
+        Devias Kit
+      </div>
+      <div class="sidebar-section">
+        <div class="sidebar-label">Overview</div>
+        <div class="nav-item active">
+          <svg class="nav-icon" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+          Dashboard
+        </div>
+        <div class="nav-item">
+          <svg class="nav-icon" viewBox="0 0 24 24"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3z"/><path d="M8 13c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
+          Customers
+          <span class="nav-badge">3</span>
+        </div>
+        <div class="nav-item">
+          <svg class="nav-icon" viewBox="0 0 24 24"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-7 14l-5-5 1.41-1.41L12 14.17l7.59-7.59L21 8l-9 9z"/></svg>
+          Orders
+        </div>
+        <div class="nav-item">
+          <svg class="nav-icon" viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+          Products
+        </div>
+      </div>
+      <div class="sidebar-section">
+        <div class="sidebar-label">Settings</div>
+        <div class="nav-item">
+          <svg class="nav-icon" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 3c1.66 0 3 1.34 3 3s-1.34 3-3 3-3-1.34-3-3 1.34-3 3-3zm0 14.2c-2.5 0-4.71-1.28-6-3.22.03-1.99 4-3.08 6-3.08 1.99 0 5.97 1.09 6 3.08-1.29 1.94-3.5 3.22-6 3.22z"/></svg>
+          Account
+        </div>
+      </div>
+    </aside>
+
+    <!-- Main content -->
+    <main class="main">
+      <div class="main-header">
+        <div>
+          <div class="main-title">Dashboard</div>
+          <div class="main-subtitle">Mon, 15 Nov 2024</div>
+        </div>
+        <div class="avatar-row">
+          <div style="text-align:right">
+            <div class="avatar-name">Admin User</div>
+            <div class="avatar-role">Project Manager</div>
+          </div>
+          <div class="avatar">AU</div>
+        </div>
+      </div>
+
+      <!-- Stat cards -->
+      <div class="stats">
+        <div class="stat-card gradient-blue">
+          <div class="stat-label">Total Revenue</div>
+          <div class="stat-value">$48,352</div>
+          <div class="stat-change up">↑ 12.5% vs last month</div>
+        </div>
+        <div class="stat-card gradient-green">
+          <div class="stat-label">New Customers</div>
+          <div class="stat-value">1,429</div>
+          <div class="stat-change up">↑ 8.3% vs last month</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Pending Orders</div>
+          <div class="stat-value">184</div>
+          <div class="stat-change down">↓ 4.1% vs last month</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Avg. Order Value</div>
+          <div class="stat-value">$33.84</div>
+          <div class="stat-change up">↑ 2.7% vs last month</div>
+        </div>
+      </div>
+
+      <!-- Two-column content -->
+      <div class="grid-2">
+        <!-- Activity feed -->
+        <div class="panel">
+          <div class="panel-title">Recent Activity</div>
+          <div class="activity-item">
+            <div class="activity-dot dot-blue">PO</div>
+            <div class="activity-body">
+              <div class="activity-text"><strong>Peter O'Brien</strong> placed a new order for Enterprise Plan</div>
+              <div class="activity-time">2 minutes ago</div>
+            </div>
+          </div>
+          <div class="activity-item">
+            <div class="activity-dot dot-green">SJ</div>
+            <div class="activity-body">
+              <div class="activity-text"><strong>Sarah Johnson</strong> completed onboarding and upgraded to Pro</div>
+              <div class="activity-time">18 minutes ago</div>
+            </div>
+          </div>
+          <div class="activity-item">
+            <div class="activity-dot dot-orange">MR</div>
+            <div class="activity-body">
+              <div class="activity-text"><strong>Mark Robinson</strong> submitted a refund request for order #ORD-20230</div>
+              <div class="activity-time">1 hour ago</div>
+            </div>
+          </div>
+          <div class="activity-item">
+            <div class="activity-dot dot-red">AB</div>
+            <div class="activity-body">
+              <div class="activity-text"><strong>Anna Brown</strong>'s payment for Starter Kit failed — retry pending</div>
+              <div class="activity-time">3 hours ago</div>
+            </div>
+          </div>
+          <div class="activity-item">
+            <div class="activity-dot dot-blue">TK</div>
+            <div class="activity-body">
+              <div class="activity-text"><strong>Tim Keller</strong> added 3 new products to the catalogue</div>
+              <div class="activity-time">Yesterday</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Top products + progress -->
+        <div style="display:flex;flex-direction:column;gap:16px">
+          <div class="panel">
+            <div class="panel-title">Top Products</div>
+            <div class="product-item">
+              <div class="product-thumb" style="background:linear-gradient(135deg,#6366f1,#8b5cf6)"></div>
+              <div>
+                <div class="product-name">Enterprise Plan</div>
+                <div class="product-cat">Subscription</div>
+              </div>
+              <div class="product-revenue">$18,200</div>
+            </div>
+            <div class="product-item">
+              <div class="product-thumb" style="background:linear-gradient(135deg,#10b981,#059669)"></div>
+              <div>
+                <div class="product-name">Pro Subscription</div>
+                <div class="product-cat">Subscription</div>
+              </div>
+              <div class="product-revenue">$12,450</div>
+            </div>
+            <div class="product-item">
+              <div class="product-thumb" style="background:linear-gradient(135deg,#f97316,#ef4444)"></div>
+              <div>
+                <div class="product-name">API Add-on</div>
+                <div class="product-cat">Add-on</div>
+              </div>
+              <div class="product-revenue">$5,890</div>
+            </div>
+          </div>
+          <div class="panel">
+            <div class="panel-title">Sales by Channel</div>
+            <div class="progress-label"><span>Direct</span><span>68%</span></div>
+            <div class="progress-bar"><div class="progress-fill" style="width:68%;background:#6366f1"></div></div>
+            <div class="progress-label"><span>Partner</span><span>21%</span></div>
+            <div class="progress-bar"><div class="progress-fill" style="width:21%;background:#10b981"></div></div>
+            <div class="progress-label"><span>Affiliate</span><span>11%</span></div>
+            <div class="progress-bar"><div class="progress-fill" style="width:11%;background:#f97316"></div></div>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+</body>
+</html>
