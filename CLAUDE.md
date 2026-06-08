@@ -47,6 +47,9 @@ Fix the root cause — never skip hooks or suppress errors.
 ```
 test/
   emit.test.ts              # unit tests for the SVG emitter
+  tiles.test.ts             # pure unit: planRegionTiles tiling/clamp math
+  shot-scheduler.test.ts    # pure unit: createShotScheduler rate-limit/retry (virtual clock)
+  extension-bundle.test.ts  # builds the MV3 bundle, asserts manifest/file integrity
   fixtures/                 # HTML pages used by visual tests
   visual/
     visual.test.ts          # pixel-diff regression tests (smoke, gradients, …)
@@ -55,11 +58,23 @@ test/
     element.test.ts         # subtree (single-element) capture
     inpage.test.ts          # in-page backend
     webfont.test.ts         # @font-face embed / outline modes
+    extension.test.ts       # drives the shared tiled rasterizer with a viewport-only
+                            #   (captureVisibleTab-like) screenshot env
+    extension-e2e.test.ts   # gated (EXTENSION_E2E=1): loads the real extension into a
+                            #   full Chromium and exercises the full download pipeline
+    realworld.test.ts       # gated (REALWORLD_TESTS=1): live external URLs
     __out__/                # generated SVGs (gitignored)
 ```
 
 Visual tests use `scripts/validate.ts` which renders the SVG in a second Chromium
 page and pixel-diffs it against the original. Threshold is per-test (typically < 1–5%).
+
+**Extension testing layers:** pure logic (`tiles`, `shot-scheduler`) → in-page
+integration (`extension.test.ts`, which runs the *shared* `createTiledRasterizer`
+so production code is covered, not a copy) → gated full E2E (`extension-e2e.test.ts`,
+needs a full Chromium that can load extensions — set `E2E_CHROME_PATH` or install a
+Playwright "Chrome for Testing"; the headless shell used by other tests can't load
+extensions).
 
 ## Common Pitfalls
 
