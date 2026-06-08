@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <style>
+    body { margin: 0; font-family: Arial, Helvetica, sans-serif; background: #f3f4f6; padding: 24px; }
+    .grid { display: flex; gap: 20px; }
+
+    /* Card with an opaque diagonal gradient drawn by ::before (inset:0 overlay). */
+    .card {
+      position: relative; width: 280px; height: 200px; border-radius: 12px;
+      overflow: hidden; background: #0ea5e9; color: #fff;
+    }
+    .card::before {
+      content: ""; position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+      background: linear-gradient(135deg, #2563eb 0%, #7c3aed 100%);
+    }
+    .card .caption {
+      position: absolute; left: 16px; bottom: 14px; z-index: 1;
+      font-size: 20px; font-weight: 700;
+    }
+
+    /* Badge with a solid ::after dot overlay. */
+    .panel {
+      position: relative; width: 280px; height: 200px; border-radius: 12px;
+      background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,0.12);
+      padding: 20px; box-sizing: border-box; color: #111827;
+    }
+    .panel::after {
+      content: ""; position: absolute; top: 14px; right: 14px;
+      width: 14px; height: 14px; border-radius: 50%; background: #22c55e;
+    }
+    .panel h3 { margin: 0 0 8px; font-size: 18px; }
+    .panel p  { margin: 0; font-size: 14px; color: #6b7280; line-height: 1.5; }
+  </style>
+</head>
+<body>
+  <div class="grid">
+    <div class="card"><div class="caption">Mountain View</div></div>
+    <div class="panel">
+      <h3>System Status</h3>
+      <p>All services operational. The green indicator is a decorative pseudo-element overlay.</p>
+    </div>
+  </div>
+</body>
+</html>
