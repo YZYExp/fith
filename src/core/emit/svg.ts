@@ -280,11 +280,16 @@ function emitText(node: TextNode, defs: Defs, outline?: Outliner): string {
   }
   const weightAttr = node.fontWeight === '400' || node.fontWeight === 'normal' ? '' : ` font-weight="${esc(node.fontWeight)}"`;
   const styleAttr = node.fontStyle === 'normal' ? '' : ` font-style="${esc(node.fontStyle)}"`;
+  const decoVal = node.decoration
+    ? node.decorationColor && node.decorationColor !== node.color
+      ? `${node.decoration} ${esc(node.decorationColor)}`
+      : node.decoration
+    : null;
   const attrs =
     `font-family="${esc(node.fontFamily)}" font-size="${n(node.fontSize)}"${weightAttr}${styleAttr} fill="${fill}"` +
     (node.letterSpacing ? ` letter-spacing="${n(node.letterSpacing)}"` : '') +
     (node.wordSpacing ? ` word-spacing="${n(node.wordSpacing)}"` : '') +
-    (node.decoration ? ` text-decoration="${esc(node.decoration)}"` : '') +
+    (decoVal ? ` text-decoration="${decoVal}"` : '') +
     (node.textAnchor && node.textAnchor !== 'start' ? ` text-anchor="${node.textAnchor}"` : '');
   return node.lines
     .map((l) => `<text x="${n(l.x)}" y="${n(l.baseline)}" ${attrs}>${esc(l.text)}</text>`)
@@ -395,15 +400,20 @@ export function emitSvg(scene: Scene, opts: EmitOptions = {}): string {
         )}"/>`
       : '';
 
+  const content = emitFonts(scene.fonts) + defs.render() + baseLayerEl + bg + body.join('');
+
+  // Transplanted inline-SVG icons (e.g. MUI/Material icons) may use the legacy
+  // `xlink:href` form on <use>/<image>. Standalone SVG parsers treat an
+  // undeclared namespace prefix as a fatal error — the whole document fails to
+  // render past the first occurrence. Declare xmlns:xlink only when the content
+  // actually references it, so plain SVGs stay free of the extra attribute.
+  const xlinkNs = content.includes('xlink:') ? ' xmlns:xlink="http://www.w3.org/1999/xlink"' : '';
+
   return (
-    `<svg xmlns="http://www.w3.org/2000/svg" width="${n(scene.width)}" height="${n(
+    `<svg xmlns="http://www.w3.org/2000/svg"${xlinkNs} width="${n(scene.width)}" height="${n(
       scene.height,
     )}" viewBox="${n(ox)} ${n(oy)} ${n(scene.width)} ${n(scene.height)}">` +
-    emitFonts(scene.fonts) +
-    defs.render() +
-    baseLayerEl +
-    bg +
-    body.join('') +
+    content +
     `</svg>`
   );
 }

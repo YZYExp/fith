@@ -177,6 +177,31 @@ describe('emitSvg', () => {
     expect(svg.match(/M0 0h16v16H0z/g)?.length).toBe(1);
   });
 
+  it('declares xmlns:xlink when transplanted markup uses the legacy xlink:href form', () => {
+    // MUI/Material icons embed <use xlink:href="#..."> — without an xmlns:xlink
+    // declaration on the root, a standalone SVG parser errors on the undefined
+    // prefix and the whole document fails to render.
+    const svg = emitSvg(
+      base([
+        {
+          kind: 'inline-svg',
+          id: 'a',
+          rect: { x: 0, y: 0, width: 24, height: 24 },
+          opacity: 1,
+          markup: `<svg x="0" y="0" width="24" height="24"><use xlink:href="#icon" fill="red"/></svg>`,
+        },
+      ]),
+    );
+    expect(svg).toContain('xmlns:xlink="http://www.w3.org/1999/xlink"');
+  });
+
+  it('omits xmlns:xlink when no content references it', () => {
+    const svg = emitSvg(
+      base([{ kind: 'box', id: 'a', rect: { x: 0, y: 0, width: 10, height: 10 }, opacity: 1, radii: [0, 0, 0, 0], fill: 'red' }]),
+    );
+    expect(svg).not.toContain('xmlns:xlink');
+  });
+
   it('keeps a single inline-svg icon inline (no use)', () => {
     const svg = emitSvg(
       base([
@@ -274,6 +299,77 @@ describe('emitSvg', () => {
     );
     expect(svg).toContain('stroke="red"');
     expect(svg).toContain('stroke-dasharray');
+  });
+
+  it('emits text-decoration with color when decorationColor differs from text color', () => {
+    const svg = emitSvg(
+      base([
+        {
+          kind: 'text',
+          id: 't',
+          rect: { x: 0, y: 0, width: 100, height: 20 },
+          opacity: 1,
+          lines: [{ text: 'underlined', x: 0, baseline: 15 }],
+          fontFamily: 'sans-serif',
+          fontSize: 14,
+          fontWeight: '400',
+          fontStyle: 'normal',
+          color: 'rgb(0,0,0)',
+          letterSpacing: 0,
+          wordSpacing: 0,
+          decoration: 'underline',
+          decorationColor: 'rgb(255,0,0)',
+        },
+      ]),
+    );
+    // color differs from text color → must be embedded in text-decoration shorthand
+    expect(svg).toContain('text-decoration="underline rgb(255,0,0)"');
+  });
+
+  it('omits decoration color when it equals the text color', () => {
+    const svg = emitSvg(
+      base([
+        {
+          kind: 'text',
+          id: 't',
+          rect: { x: 0, y: 0, width: 100, height: 20 },
+          opacity: 1,
+          lines: [{ text: 'same', x: 0, baseline: 15 }],
+          fontFamily: 'sans-serif',
+          fontSize: 14,
+          fontWeight: '400',
+          fontStyle: 'normal',
+          color: 'rgb(0,0,0)',
+          letterSpacing: 0,
+          wordSpacing: 0,
+          decoration: 'underline',
+          decorationColor: 'rgb(0,0,0)',
+        },
+      ]),
+    );
+    // same color → simple line-only decoration (no redundant color value)
+    expect(svg).toContain('text-decoration="underline"');
+    // the text-decoration attribute itself must not include the color
+    expect(svg).not.toMatch(/text-decoration="underline\s+rgb/);
+  });
+
+  it('emits box shadow filter + mask', () => {
+    const svg = emitSvg(
+      base([
+        {
+          kind: 'box',
+          id: 'a',
+          rect: { x: 10, y: 10, width: 80, height: 40 },
+          opacity: 1,
+          radii: [0, 0, 0, 0],
+          fill: 'white',
+          shadows: [{ offsetX: 2, offsetY: 4, blur: 8, spread: 0, color: 'rgba(0,0,0,0.2)' }],
+        },
+      ]),
+    );
+    expect(svg).toContain('<filter');
+    expect(svg).toContain('<mask');
+    expect(svg).toContain('feGaussianBlur');
   });
 
   it('renders list marker text node like any other text', () => {

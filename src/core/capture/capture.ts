@@ -276,8 +276,22 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
     if ((cs as any).maskImage && (cs as any).maskImage !== 'none' && (cs as any).maskImage !== undefined)
       return 'mask';
     if (cs.clipPath && cs.clipPath !== 'none') return 'clip-path';
-    const m = parseMatrix(cs.transform);
-    if (m && (Math.abs(m.b) > 1e-3 || Math.abs(m.c) > 1e-3)) return 'transform-rotate';
+    const tf = cs.transform;
+    if (tf && tf !== 'none') {
+      // Detect 3D transforms (rotateX/Y, perspective…) via the matrix3d coefficients that
+      // a pure-2D transform leaves at zero. These can't be flattened to SVG's 2D canvas.
+      const m3match = tf.match(/matrix3d\(([^)]+)\)/);
+      if (m3match) {
+        const p = m3match[1].split(',').map((x) => parseFloat(x));
+        // A pure 2D-equivalent matrix3d has p[2]=p[3]=p[6]=p[7]=p[8]=p[9]=p[14]=0
+        const has3D =
+          Math.abs(p[2]) > 1e-3 || Math.abs(p[6]) > 1e-3 ||
+          Math.abs(p[8]) > 1e-3 || Math.abs(p[9]) > 1e-3 || Math.abs(p[14]) > 1e-3;
+        if (has3D) return 'transform-3d';
+      }
+      const m = parseMatrix(tf);
+      if (m && (Math.abs(m.b) > 1e-3 || Math.abs(m.c) > 1e-3)) return 'transform-rotate';
+    }
     // Custom elements (hyphenated tag) with no light-DOM children and no accessible
     // shadow root are likely using closed shadow DOM — raster to capture their rendering.
     if (el.tagName.includes('-') && el.childElementCount === 0 && !(el as HTMLElement).shadowRoot)
@@ -353,10 +367,10 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
   };
 
   const pushRaster = (rect: DOMRect, clip: Clip | null, opacity: number, reason: string) => {
-    const x = Math.max(0, Math.floor(rect.left));
-    const y = Math.max(0, Math.floor(rect.top));
-    const right = Math.min(W, Math.ceil(rect.right));
-    const bottom = Math.min(H, Math.ceil(rect.bottom));
+    const x = Math.max(cullLeft, Math.floor(rect.left));
+    const y = Math.max(cullTop, Math.floor(rect.top));
+    const right = Math.min(cullRight, Math.ceil(rect.right));
+    const bottom = Math.min(cullBottom, Math.ceil(rect.bottom));
     const width = right - x;
     const height = bottom - y;
     if (width <= 0 || height <= 0) return;
@@ -366,21 +380,12 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
   };
 
   const parseShadows = (value: string) => {
-    if (!value || value === 'none' || value.includes('inset')) return [];
+    if (!value || value === 'none') return [];
+    // Only emit outset layers; inset layers are handled as raster by needsBoxRaster.
+    // Filter before parsing so a mix of outset + inset keeps the outset shadows.
+    const parts = splitTopLevel(value).filter((p) => !p.includes('inset'));
+    if (parts.length === 0) return [];
     const out: { offsetX: number; offsetY: number; blur: number; spread: number; color: string }[] = [];
-    // split on commas that are not inside rgb()/rgba()
-    const parts: string[] = [];
-    let depth = 0;
-    let cur = '';
-    for (const ch of value) {
-      if (ch === '(') depth++;
-      if (ch === ')') depth--;
-      if (ch === ',' && depth === 0) {
-        parts.push(cur);
-        cur = '';
-      } else cur += ch;
-    }
-    if (cur.trim()) parts.push(cur);
     const COLOR_FN = /((?:rgba?|hsla?|oklch|oklab|lab|lch|hwb|color)\([^)]+\)|#[0-9a-fA-F]+|[a-z]+)/;
     for (const part of parts) {
       const colorMatch = part.match(COLOR_FN);
@@ -803,10 +808,10 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
           if (fetched) { node.href = fetched; return; }
           // 3) CORS / network failure: convert this node in-place to a raster target
           //    so it keeps its paint-order position rather than appending at the end.
-          const x = Math.max(0, Math.floor(r.left));
-          const y = Math.max(0, Math.floor(r.top));
-          const right = Math.min(W, Math.ceil(r.right));
-          const bottom = Math.min(H, Math.ceil(r.bottom));
+          const x = Math.max(cullLeft, Math.floor(r.left));
+          const y = Math.max(cullTop, Math.floor(r.top));
+          const right = Math.min(cullRight, Math.ceil(r.right));
+          const bottom = Math.min(cullBottom, Math.ceil(r.bottom));
           const rw = right - x;
           const rh = bottom - y;
           if (rw > 0 && rh > 0) {
@@ -852,7 +857,6 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
     let childClip = clip;
     if (clipsContent(cs)) {
       // For scrollable containers (overflow:auto/scroll) in full-content mode,
-      // For scrollable containers (overflow:auto/scroll) in full-content mode,
       // expand the clip to scrollWidth × scrollHeight so items that are outside
       // the container's current visible area are still included in the output.
       // For overflow:hidden the CSS dimensions are usually intentional (rounded
@@ -865,9 +869,7 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
       // collapsed size and disappear from the export. When scrollHeight clearly
       // exceeds clientHeight, expand the clip so the content survives.
       const htmlEl = el as HTMLElement;
-      const isScrollContainer =
-        cs.overflowX === 'scroll' || cs.overflowX === 'auto' ||
-        cs.overflowY === 'scroll' || cs.overflowY === 'auto';
+      const isScrollContainer = cs.overflowX === 'scroll' || cs.overflowX === 'auto' || cs.overflowY === 'scroll' || cs.overflowY === 'auto';
       const isHiddenWithOverflow =
         (cs.overflowX === 'hidden' || cs.overflowY === 'hidden') &&
         ((htmlEl.scrollHeight || 0) - htmlEl.clientHeight > 1 ||
