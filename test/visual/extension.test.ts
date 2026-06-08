@@ -19,8 +19,8 @@ import pixelmatch from 'pixelmatch';
 import sparticuz from '@sparticuz/chromium';
 import { captureScene } from '../../src/core/capture/capture.js';
 import { emitSvg } from '../../src/core/emit/svg.js';
-import { planRegionTiles } from '../../src/backends/browser/tiles.js';
-import type { Scene, Rect } from '../../src/core/ir/types.js';
+import { createTiledRasterizer } from '../../src/backends/browser/tiled-raster.js';
+import type { Scene } from '../../src/core/ir/types.js';
 
 const ARGS = ['--no-sandbox', '--disable-setuid-sandbox', '--disable-gpu', '--single-process'];
 const OUT = resolve(__dirname, '__out__');
@@ -45,34 +45,46 @@ const FIXTURE = `<!doctype html><html><head><meta charset="utf-8"><style>
   <div class="spacer" style="height:300px"></div>
 </body></html>`;
 
-/** Mimic chrome.tabs.captureVisibleTab: screenshot only the current viewport. */
-async function viewportRasterizer(page: Page) {
-  const maxScroll = await page.evaluate(() => ({
-    x: Math.max(0, document.documentElement.scrollWidth - window.innerWidth),
-    y: Math.max(0, document.documentElement.scrollHeight - window.innerHeight),
-  }));
-  return async (rect: Rect): Promise<string | null> => {
-    const tiles = planRegionTiles(rect, { width: VW, height: VH }, maxScroll);
-    if (tiles.length === 0) return null;
-    const out = new PNG({ width: Math.round(rect.width), height: Math.round(rect.height) });
-    for (const t of tiles) {
-      await page.evaluate(([x, y]) => window.scrollTo(x, y), [t.scrollX, t.scrollY]);
-      await page.evaluate(
+/**
+ * Drive the *shared* createTiledRasterizer (the same code content.ts runs)
+ * through a Playwright-backed environment. shoot() screenshots only the current
+ * viewport — mimicking chrome.tabs.captureVisibleTab — and the output canvas is
+ * a pngjs buffer (deviceScaleFactor 1 → scale 1, so device px == CSS px).
+ */
+type PngShot = { scale: number; png: PNG };
+function viewportRasterizer(page: Page) {
+  return createTiledRasterizer<PngShot>({
+    getViewport: () => ({ width: VW, height: VH }),
+    getMaxScroll: () =>
+      page.evaluate(() => ({
+        x: Math.max(0, document.documentElement.scrollWidth - window.innerWidth),
+        y: Math.max(0, document.documentElement.scrollHeight - window.innerHeight),
+      })),
+    getScroll: () => page.evaluate(() => ({ x: window.scrollX, y: window.scrollY })),
+    scrollTo: (x, y) => page.evaluate(([sx, sy]) => window.scrollTo(sx, sy), [x, y]),
+    settle: () =>
+      page.evaluate(
         () => new Promise<void>((r) => requestAnimationFrame(() => requestAnimationFrame(() => r()))),
-      );
-      const shot = PNG.sync.read(await page.screenshot()); // current viewport only
-      // Blit the src crop into the output region (deviceScaleFactor 1 → 1:1).
-      for (let row = 0; row < t.height; row++) {
-        const sy = t.srcY + row;
-        const dy = t.dstY + row;
-        if (sy < 0 || sy >= shot.height || dy < 0 || dy >= out.height) continue;
-        const sStart = (sy * shot.width + t.srcX) * 4;
-        const dStart = (dy * out.width + t.dstX) * 4;
-        shot.data.copy(out.data, dStart, sStart, sStart + t.width * 4);
-      }
-    }
-    return 'data:image/png;base64,' + PNG.sync.write(out).toString('base64');
-  };
+      ),
+    shoot: async () => ({ scale: 1, png: PNG.sync.read(await page.screenshot()) }), // viewport only
+    createCanvas: (width, height) => {
+      const out = new PNG({ width, height });
+      return {
+        draw: (shot, sx, sy, sw, sh, dx, dy) => {
+          // scale is 1 in this env, so src/dst sizes match — straight row copy.
+          for (let row = 0; row < sh; row++) {
+            const syRow = sy + row;
+            const dyRow = dy + row;
+            if (syRow < 0 || syRow >= shot.png.height || dyRow < 0 || dyRow >= out.height) continue;
+            const sStart = (syRow * shot.png.width + sx) * 4;
+            const dStart = (dyRow * out.width + dx) * 4;
+            shot.png.data.copy(out.data, dStart, sStart, sStart + sw * 4);
+          }
+        },
+        toDataURL: async () => 'data:image/png;base64,' + PNG.sync.write(out).toString('base64'),
+      };
+    },
+  });
 }
 
 describe('extension viewport-tiled rasterization', () => {
@@ -105,7 +117,7 @@ describe('extension viewport-tiled rasterization', () => {
         const rasters = scene.rasterTargets.filter((t) => t.y > VH);
         expect(rasters.length).toBeGreaterThan(0);
 
-        const rasterize = await viewportRasterizer(page);
+        const rasterize = viewportRasterizer(page);
         const byId = new Map(scene.rasterTargets.map((t) => [t.id, t]));
         for (const node of scene.nodes) {
           if (node.kind !== 'raster') continue;
