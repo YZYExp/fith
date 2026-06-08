@@ -177,6 +177,31 @@ describe('emitSvg', () => {
     expect(svg.match(/M0 0h16v16H0z/g)?.length).toBe(1);
   });
 
+  it('declares xmlns:xlink when transplanted markup uses the legacy xlink:href form', () => {
+    // MUI/Material icons embed <use xlink:href="#..."> — without an xmlns:xlink
+    // declaration on the root, a standalone SVG parser errors on the undefined
+    // prefix and the whole document fails to render.
+    const svg = emitSvg(
+      base([
+        {
+          kind: 'inline-svg',
+          id: 'a',
+          rect: { x: 0, y: 0, width: 24, height: 24 },
+          opacity: 1,
+          markup: `<svg x="0" y="0" width="24" height="24"><use xlink:href="#icon" fill="red"/></svg>`,
+        },
+      ]),
+    );
+    expect(svg).toContain('xmlns:xlink="http://www.w3.org/1999/xlink"');
+  });
+
+  it('omits xmlns:xlink when no content references it', () => {
+    const svg = emitSvg(
+      base([{ kind: 'box', id: 'a', rect: { x: 0, y: 0, width: 10, height: 10 }, opacity: 1, radii: [0, 0, 0, 0], fill: 'red' }]),
+    );
+    expect(svg).not.toContain('xmlns:xlink');
+  });
+
   it('keeps a single inline-svg icon inline (no use)', () => {
     const svg = emitSvg(
       base([

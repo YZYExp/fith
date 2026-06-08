@@ -400,15 +400,20 @@ export function emitSvg(scene: Scene, opts: EmitOptions = {}): string {
         )}"/>`
       : '';
 
+  const content = emitFonts(scene.fonts) + defs.render() + baseLayerEl + bg + body.join('');
+
+  // Transplanted inline-SVG icons (e.g. MUI/Material icons) may use the legacy
+  // `xlink:href` form on <use>/<image>. Standalone SVG parsers treat an
+  // undeclared namespace prefix as a fatal error — the whole document fails to
+  // render past the first occurrence. Declare xmlns:xlink only when the content
+  // actually references it, so plain SVGs stay free of the extra attribute.
+  const xlinkNs = content.includes('xlink:') ? ' xmlns:xlink="http://www.w3.org/1999/xlink"' : '';
+
   return (
-    `<svg xmlns="http://www.w3.org/2000/svg" width="${n(scene.width)}" height="${n(
+    `<svg xmlns="http://www.w3.org/2000/svg"${xlinkNs} width="${n(scene.width)}" height="${n(
       scene.height,
     )}" viewBox="${n(ox)} ${n(oy)} ${n(scene.width)} ${n(scene.height)}">` +
-    emitFonts(scene.fonts) +
-    defs.render() +
-    baseLayerEl +
-    bg +
-    body.join('') +
+    content +
     `</svg>`
   );
 }
