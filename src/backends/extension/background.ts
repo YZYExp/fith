@@ -5,6 +5,7 @@
  * *current* viewport — it never crops. captureVisibleTab is rate-limited
  * (~2 calls/sec), so calls are serialized, spaced, and retried on quota errors.
  */
+import { createShotScheduler } from './shot-scheduler.js';
 
 // The toolbar action opens the popup (default_popup in the manifest), so there's
 // no action.onClicked here. Context menus and the keyboard command still work and
@@ -41,35 +42,9 @@ chrome.commands.onCommand.addListener(async (command) => {
   if (tab?.id != null) send(tab.id, 'fh:pick');
 });
 
-const MIN_SHOT_GAP_MS = 520; // stay under captureVisibleTab's ~2/sec quota
-const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
-
-// Serialize screenshots through a promise chain so concurrent requests don't
-// race the rate limiter, and space/retry them on quota errors.
-let chain: Promise<unknown> = Promise.resolve();
-let lastShot = 0;
-
-async function doShoot(): Promise<string | null> {
-  for (let attempt = 0; attempt < 5; attempt++) {
-    const wait = MIN_SHOT_GAP_MS - (Date.now() - lastShot);
-    if (wait > 0) await delay(wait);
-    try {
-      const url = await chrome.tabs.captureVisibleTab({ format: 'png' });
-      lastShot = Date.now();
-      return url;
-    } catch {
-      lastShot = Date.now();
-      await delay(300 * (attempt + 1)); // back off, then retry
-    }
-  }
-  return null;
-}
-
-function shootViewport(): Promise<string | null> {
-  const next = chain.then(() => doShoot());
-  chain = next.catch(() => {});
-  return next;
-}
+const shootViewport = createShotScheduler({
+  capture: () => chrome.tabs.captureVisibleTab({ format: 'png' }),
+});
 
 let previewSeq = 0;
 
