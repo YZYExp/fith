@@ -1,11 +1,10 @@
 /**
- * Service worker: triggers capture on the toolbar action, and rasterizes
- * fallback regions by screenshotting the visible tab and cropping.
- *
- * Note: captureVisibleTab only sees the current viewport; regions scrolled
- * off-screen are a known limitation of the pure-extension path.
+ * Service worker: triggers capture on the toolbar action, and screenshots the
+ * visible tab on demand. The content script scrolls each fallback region into
+ * view and composites the slices, so this worker only needs to capture the
+ * *current* viewport — it never crops. captureVisibleTab is rate-limited
+ * (~2 calls/sec), so calls are serialized, spaced, and retried on quota errors.
  */
-import type { Rect } from '../../core/ir/types.js';
 
 // The toolbar action opens the popup (default_popup in the manifest), so there's
 // no action.onClicked here. Context menus and the keyboard command still work and
@@ -42,44 +41,41 @@ chrome.commands.onCommand.addListener(async (command) => {
   if (tab?.id != null) send(tab.id, 'fh:pick');
 });
 
-let cache: { time: number; dataUrl: string } | null = null;
+const MIN_SHOT_GAP_MS = 520; // stay under captureVisibleTab's ~2/sec quota
+const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-async function captureViewport(): Promise<string> {
-  const now = Date.now();
-  if (cache && now - cache.time < 400) return cache.dataUrl;
-  const dataUrl = await chrome.tabs.captureVisibleTab({ format: 'png' });
-  cache = { time: now, dataUrl };
-  return dataUrl;
-}
+// Serialize screenshots through a promise chain so concurrent requests don't
+// race the rate limiter, and space/retry them on quota errors.
+let chain: Promise<unknown> = Promise.resolve();
+let lastShot = 0;
 
-function blobToDataURL(blob: Blob): Promise<string> {
-  return new Promise((res) => {
-    const fr = new FileReader();
-    fr.onload = () => res(fr.result as string);
-    fr.readAsDataURL(blob);
-  });
-}
-
-async function rasterize(rect: Rect, dpr: number): Promise<string | null> {
-  try {
-    const shot = await captureViewport();
-    const bmp = await createImageBitmap(await (await fetch(shot)).blob());
-    const sw = Math.max(1, Math.round(rect.width * dpr));
-    const sh = Math.max(1, Math.round(rect.height * dpr));
-    const canvas = new OffscreenCanvas(sw, sh);
-    const ctx = canvas.getContext('2d')!;
-    ctx.drawImage(bmp, rect.x * dpr, rect.y * dpr, rect.width * dpr, rect.height * dpr, 0, 0, sw, sh);
-    return await blobToDataURL(await canvas.convertToBlob({ type: 'image/png' }));
-  } catch {
-    return null;
+async function doShoot(): Promise<string | null> {
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const wait = MIN_SHOT_GAP_MS - (Date.now() - lastShot);
+    if (wait > 0) await delay(wait);
+    try {
+      const url = await chrome.tabs.captureVisibleTab({ format: 'png' });
+      lastShot = Date.now();
+      return url;
+    } catch {
+      lastShot = Date.now();
+      await delay(300 * (attempt + 1)); // back off, then retry
+    }
   }
+  return null;
+}
+
+function shootViewport(): Promise<string | null> {
+  const next = chain.then(() => doShoot());
+  chain = next.catch(() => {});
+  return next;
 }
 
 let previewSeq = 0;
 
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
-  if (msg?.type === 'fh:rasterize') {
-    rasterize(msg.rect, msg.dpr || 1).then((dataUrl) => sendResponse({ dataUrl }));
+  if (msg?.type === 'fh:shoot') {
+    shootViewport().then((dataUrl) => sendResponse({ dataUrl }));
     return true; // async response
   }
   if (msg?.type === 'fh:preview') {
