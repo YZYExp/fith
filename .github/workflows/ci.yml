@@ -13,26 +13,31 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          run_install: false
+
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '22'
-          cache: 'npm'
+          cache: 'pnpm'
 
       - name: Install dependencies
-        run: npm ci
+        run: pnpm install --frozen-lockfile
 
       - name: TypeScript build
-        run: npm run build
+        run: pnpm run build
 
       - name: Build extension bundle
-        run: npm run build:extension
+        run: pnpm run build:extension
 
       - name: Install Playwright browsers
-        run: npx playwright install chromium --with-deps
+        run: pnpm exec playwright install chromium --with-deps
 
       - name: Run tests
-        run: npm test
+        run: pnpm test
         env:
           # Point visual tests at the Playwright-managed Chromium (full build,
           # not the @sparticuz headless shell) so extension.test.ts can also
@@ -56,20 +61,25 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          run_install: false
+
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '22'
-          cache: 'npm'
+          cache: 'pnpm'
 
       - name: Install dependencies
-        run: npm ci
+        run: pnpm install --frozen-lockfile
 
       - name: Install Playwright Chromium (full build, supports extensions)
-        run: npx playwright install chromium --with-deps
+        run: pnpm exec playwright install chromium --with-deps
 
       - name: Run extension E2E test
-        run: EXTENSION_E2E=1 npx vitest run test/visual/extension-e2e.test.ts
+        run: EXTENSION_E2E=1 pnpm exec vitest run test/visual/extension-e2e.test.ts
         env:
           # The Playwright-managed chromium-<rev>/chrome-linux64/chrome binary
           # supports loading unpacked extensions (unlike the headless shell).
