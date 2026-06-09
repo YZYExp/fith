@@ -17,26 +17,50 @@ interface BitmapShot {
   bitmap: ImageBitmap;
 }
 
+/**
+ * Send a message to the service worker and resolve its `dataUrl`, but never hang:
+ * if the worker is suspended mid-call or the callback is dropped, resolve null
+ * after `timeoutMs` so the capture pipeline always completes (falling back to a
+ * viewport crop, or omitting that one raster node).
+ */
+function requestDataUrl(msg: unknown, timeoutMs: number): Promise<string | null> {
+  return new Promise((resolve) => {
+    let done = false;
+    const finish = (v: string | null) => {
+      if (done) return;
+      done = true;
+      resolve(v);
+    };
+    const timer = setTimeout(() => finish(null), timeoutMs);
+    try {
+      chrome.runtime.sendMessage(msg, (resp) => {
+        clearTimeout(timer);
+        // Touch lastError so Chrome doesn't log "Unchecked runtime.lastError".
+        void chrome.runtime.lastError;
+        finish(resp?.dataUrl ?? null);
+      });
+    } catch {
+      clearTimeout(timer);
+      finish(null);
+    }
+  });
+}
+
 /** Ask the service worker for a screenshot of the *current* viewport. */
 function shootViewport(): Promise<string | null> {
-  return new Promise((resolve) => {
-    chrome.runtime.sendMessage({ type: 'fh:shoot' }, (resp) => resolve(resp?.dataUrl ?? null));
-  });
+  return requestDataUrl({ type: 'fh:shoot' }, 8000);
 }
 
 /**
  * Ask the service worker for an exact-region screenshot via chrome.debugger
  * (Page.captureScreenshot + captureBeyondViewport): captures any document region
  * — including below the fold — in one shot, WITHOUT scrolling. Returns null when
- * the optional `debugger` permission isn't granted (caller falls back to a
- * viewport crop), so this never forces the permission.
+ * the optional `debugger` permission isn't granted or the shot is too slow/large
+ * (caller falls back to a viewport crop), so it never forces the permission and
+ * never hangs.
  */
 function shootRegion(rect: Rect, scale: number): Promise<string | null> {
-  return new Promise((resolve) => {
-    chrome.runtime.sendMessage({ type: 'fh:shootRegion', rect, scale }, (resp) =>
-      resolve(resp?.dataUrl ?? null),
-    );
-  });
+  return requestDataUrl({ type: 'fh:shootRegion', rect, scale }, 15000);
 }
 
 /** Decode a service-worker viewport screenshot into a CSS-px-scaled ImageBitmap. */
@@ -86,18 +110,46 @@ function makeViewportRasterizer() {
   });
 }
 
+/** One full-document chrome.debugger screenshot, decoded once and cached. */
+async function shootFullPageBitmap(): Promise<BitmapShot | null> {
+  const docW = Math.max(document.documentElement.scrollWidth, document.documentElement.clientWidth, 1);
+  const docH = Math.max(document.documentElement.scrollHeight, document.documentElement.clientHeight, 1);
+  const url = await shootRegion({ x: 0, y: 0, width: docW, height: docH }, window.devicePixelRatio || 1);
+  if (!url) return null;
+  const bitmap = await createImageBitmap(await (await fetch(url)).blob());
+  return { scale: bitmap.width / docW, bitmap };
+}
+
 /**
  * Full-page rasterizer (no scrolling). Coords are document-absolute, so the
- * viewport origin is the current scroll position. Prefers an exact chrome.debugger
- * region shot (reaches below the fold) when the permission is granted; otherwise
- * falls back to cropping the current viewport (off-screen raster is then omitted).
- * `useDebugger` is decided once up front from the granted permissions.
+ * viewport origin is the current scroll position. When the optional `debugger`
+ * permission is granted, it takes ONE full-document screenshot (captureBeyond
+ * viewport) and crops every region out of it client-side — reaching below the
+ * fold with a single, bounded capture. If that's unavailable (permission denied,
+ * page too large, timeout), it falls back to cropping the current viewport, so
+ * off-screen raster is simply omitted. Either way it always completes.
  */
 function makeFullPageRasterizer(useDebugger: boolean) {
+  let full: Promise<BitmapShot | null> | null = null;
+  const getFull = () => (full ??= shootFullPageBitmap());
+
   return createViewportRasterizer<BitmapShot>({
     getViewport: () => ({ width: window.innerWidth, height: window.innerHeight }),
     getOrigin: () => ({ x: window.scrollX, y: window.scrollY }),
-    shootRegion: useDebugger ? (rect) => shootRegion(rect, window.devicePixelRatio || 1) : undefined,
+    shootRegion: useDebugger
+      ? async (rect) => {
+          const f = await getFull();
+          if (!f) return null; // → viewport-crop fallback
+          const s = f.scale;
+          const w = Math.max(1, Math.round(rect.width * s));
+          const h = Math.max(1, Math.round(rect.height * s));
+          const canvas = new OffscreenCanvas(w, h);
+          const ctx = canvas.getContext('2d');
+          if (!ctx) return null;
+          ctx.drawImage(f.bitmap, rect.x * s, rect.y * s, rect.width * s, rect.height * s, 0, 0, w, h);
+          return canvasToDataUrl(canvas);
+        }
+      : undefined,
     shoot: shootBitmap,
     createCanvas: makeCanvas,
   });

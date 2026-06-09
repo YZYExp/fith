@@ -81,6 +81,19 @@ function scheduleDetach() {
   }, 4000);
 }
 
+/** Reject if `p` doesn't settle within `ms` (so a stalled debugger call can't hang). */
+function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
+  return Promise.race([
+    p,
+    new Promise<T>((_, reject) => setTimeout(() => reject(new Error('timeout')), ms)),
+  ]);
+}
+
+// captureBeyondViewport renders the whole clip at `scale` device px; cap the
+// device-pixel area so an enormous below-the-fold region can't OOM/stall Chrome
+// (caller then falls back to a viewport crop, or omits the node).
+const MAX_REGION_DEVICE_PX = 40_000_000; // ~ 4000 × 10000
+
 /** Screenshot an exact document-coords region (CSS px) at `scale` device px/CSS px. */
 async function shootRegion(
   tabId: number,
@@ -89,14 +102,19 @@ async function shootRegion(
 ): Promise<string | null> {
   if (!(await chrome.permissions.contains({ permissions: ['debugger'] }).catch(() => false))) return null;
   if (!(rect.width > 0 && rect.height > 0)) return null;
+  const s = scale || 1;
+  if (rect.width * rect.height * s * s > MAX_REGION_DEVICE_PX) return null; // too big → fall back
   try {
     await ensureAttached(tabId);
     scheduleDetach();
-    const res = (await chrome.debugger.sendCommand({ tabId }, 'Page.captureScreenshot', {
-      format: 'png',
-      captureBeyondViewport: true,
-      clip: { x: rect.x, y: rect.y, width: rect.width, height: rect.height, scale: scale || 1 },
-    })) as { data?: string } | undefined;
+    const res = (await withTimeout(
+      chrome.debugger.sendCommand({ tabId }, 'Page.captureScreenshot', {
+        format: 'png',
+        captureBeyondViewport: true,
+        clip: { x: rect.x, y: rect.y, width: rect.width, height: rect.height, scale: s },
+      }),
+      12_000,
+    )) as { data?: string } | undefined;
     return res?.data ? 'data:image/png;base64,' + res.data : null;
   } catch {
     return null; // fall back to the viewport crop in the content script
