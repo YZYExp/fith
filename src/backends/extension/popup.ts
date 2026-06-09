@@ -39,17 +39,26 @@ async function trigger(type: 'fh:capture' | 'fh:pick') {
   await persist();
   try {
     await ensureInjected(tab.id);
-    await chrome.tabs.sendMessage(tab.id, {
+    const payload = {
       type,
       output: outputSel.value,
       fontMode: fontSel.value,
       scope: scopeSel.value,
-    });
+    };
     if (type === 'fh:pick') {
-      window.close(); // let the user interact with the page
+      await chrome.tabs.sendMessage(tab.id, payload);
+      window.close();
+      return;
+    }
+    status.style.color = '#16a34a';
+    status.textContent = 'Converting…';
+    const resp = await chrome.tabs.sendMessage(tab.id, payload);
+    if (resp?.ok) {
+      const kb = Math.round((resp.bytes || 0) / 1024);
+      status.textContent = kb ? `Done (${kb} KB)` : 'Done';
     } else {
-      status.style.color = '#16a34a';
-      status.textContent = 'Converting…';
+      status.style.color = '#dc2626';
+      status.textContent = 'Failed: ' + (resp?.error ?? 'unknown error');
     }
   } catch (e) {
     status.style.color = '#dc2626';

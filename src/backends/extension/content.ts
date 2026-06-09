@@ -110,11 +110,15 @@ function makeViewportRasterizer() {
   });
 }
 
+const MAX_REGION_DEVICE_PX = 40_000_000;
+
 /** One full-document chrome.debugger screenshot, decoded once and cached. */
 async function shootFullPageBitmap(): Promise<BitmapShot | null> {
   const docW = Math.max(document.documentElement.scrollWidth, document.documentElement.clientWidth, 1);
   const docH = Math.max(document.documentElement.scrollHeight, document.documentElement.clientHeight, 1);
-  const url = await shootRegion({ x: 0, y: 0, width: docW, height: docH }, window.devicePixelRatio || 1);
+  const dpr = window.devicePixelRatio || 1;
+  if (docW * docH * dpr * dpr > MAX_REGION_DEVICE_PX) return null;
+  const url = await shootRegion({ x: 0, y: 0, width: docW, height: docH }, dpr);
   if (!url) return null;
   const bitmap = await createImageBitmap(await (await fetch(url)).blob());
   return { scale: bitmap.width / docW, bitmap };
