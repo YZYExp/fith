@@ -671,6 +671,96 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
     });
   };
 
+  // Attempt to vectorize a decorative ::before/::after pseudo-element as a box
+  // node, instead of rastering the whole host container (which turns the host's
+  // text into a fuzzy bitmap and double-paints it under the vector layer).
+  // Returns { handled:false } when the pseudo can't be reproduced as a vector
+  // box — text/image content, flow positioning, auto insets, un-vectorizable
+  // background/border — so the caller falls back to raster. Supported: the
+  // ubiquitous full/inset overlay & scrim pattern (absolutely-positioned,
+  // empty-content pseudo whose host is its containing block and whose four
+  // insets are all resolved lengths), which is geometry we can derive exactly.
+  const tryPseudoBox = (
+    el: Element,
+    csEl: CSSStyleDeclaration,
+    sel: '::before' | '::after',
+    clip: Clip | null,
+    opacity: number,
+  ): { handled: boolean; node?: PaintNode } => {
+    const ps = getComputedStyle(el, sel);
+    const content = ps.content;
+    if (content === 'none') return { handled: true }; // generates no box at all
+    // Only empty content yields a pure decorative box; text/url()/counter()/attr()
+    // need real content rendering, which we can't place without flow geometry.
+    if (!(content === '""' || content === "''" || content === 'normal' || content === ''))
+      return { handled: false };
+    if (ps.position !== 'absolute') return { handled: false };
+    if (csEl.position === 'static') return { handled: false }; // host isn't the containing block
+    for (const s of ['top', 'right', 'bottom', 'left'] as const) {
+      const v = ps.getPropertyValue(s);
+      if (!v || v === 'auto') return { handled: false }; // width-based positioning → skip
+    }
+    const r = el.getBoundingClientRect();
+    // Containing block for an absolute pseudo whose host is positioned = host padding box.
+    const cbX = r.left + num(csEl.borderLeftWidth);
+    const cbY = r.top + num(csEl.borderTopWidth);
+    const cbW = r.width - num(csEl.borderLeftWidth) - num(csEl.borderRightWidth);
+    const cbH = r.height - num(csEl.borderTopWidth) - num(csEl.borderBottomWidth);
+    const x = cbX + num(ps.left) + num(ps.marginLeft);
+    const y = cbY + num(ps.top) + num(ps.marginTop);
+    const width = cbX + cbW - num(ps.right) - num(ps.marginRight) - x;
+    const height = cbY + cbH - num(ps.bottom) - num(ps.marginBottom) - y;
+    if (width <= 0 || height <= 0) return { handled: true }; // collapsed → nothing visible
+
+    const gradient =
+      ps.backgroundImage && ps.backgroundImage !== 'none' ? parseFirstLinearGradient(ps.backgroundImage) : null;
+    if (ps.backgroundImage && ps.backgroundImage !== 'none' && !gradient) return { handled: false }; // url()/radial/conic
+    if (ps.boxShadow && ps.boxShadow.includes('inset')) return { handled: false };
+    const bw = {
+      top: num(ps.borderTopWidth), right: num(ps.borderRightWidth),
+      bottom: num(ps.borderBottomWidth), left: num(ps.borderLeftWidth),
+    };
+    const hasBorder = bw.top + bw.right + bw.bottom + bw.left > 0;
+    if (hasBorder) {
+      for (const st of [ps.borderTopStyle, ps.borderRightStyle, ps.borderBottomStyle, ps.borderLeftStyle])
+        if (st === 'double' || st === 'groove' || st === 'ridge' || st === 'inset' || st === 'outset')
+          return { handled: false };
+    }
+    const fill = transparent(ps.backgroundColor) ? null : normColor(ps.backgroundColor);
+    const border = hasBorder
+      ? {
+          top: { width: bw.top, color: normColor(ps.borderTopColor), style: ps.borderTopStyle },
+          right: { width: bw.right, color: normColor(ps.borderRightColor), style: ps.borderRightStyle },
+          bottom: { width: bw.bottom, color: normColor(ps.borderBottomColor), style: ps.borderBottomStyle },
+          left: { width: bw.left, color: normColor(ps.borderLeftColor), style: ps.borderLeftStyle },
+        }
+      : null;
+    const shadows = parseShadows(ps.boxShadow);
+    if (!fill && !gradient && !border && shadows.length === 0) return { handled: true }; // nothing to draw
+
+    // Clip the pseudo to the host's rounded content box when the host clips overflow,
+    // so an inset overlay follows the card's rounded corners.
+    const pseudoClip = clipsContent(csEl)
+      ? intersect(clip, { x: r.left, y: r.top, width: r.width, height: r.height, radii: radiiOf(csEl) })
+      : clip;
+    return {
+      handled: true,
+      node: {
+        kind: 'box',
+        id: nid(),
+        rect: { x, y, width, height },
+        opacity,
+        clip: pseudoClip,
+        fill,
+        gradient,
+        radii: radiiOf(ps),
+        border,
+        shadows,
+        outline: null,
+      } as PaintNode,
+    };
+  };
+
   // SVG presentation properties to inline onto transplanted inline-svg nodes.
   const SVG_PAINT = [
     'fill',
@@ -835,7 +925,29 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
     //     is faithful; the raster fills the gaps (pseudo-elements, bg images, etc.).
     //   • Non-leaf without raster backend → emit what we can vectorize and continue.
     const boxReason = !skipRender && !visHidden && needsBoxRaster(el, cs);
-    if (boxReason) {
+    // ::after is emitted after the element's children (it paints on top of content);
+    // hold its node here and push it past the child walk below.
+    let afterPseudoNode: PaintNode | null = null;
+    let pseudoVectorized = false;
+    if (boxReason === 'pseudo') {
+      // Try to vectorize the decorative pseudo(s) rather than raster the whole box.
+      const before = pseudoVisible(el, '::before')
+        ? tryPseudoBox(el, cs, '::before', clip, opacity)
+        : { handled: true as const };
+      const after = pseudoVisible(el, '::after')
+        ? tryPseudoBox(el, cs, '::after', clip, opacity)
+        : { handled: true as const };
+      if (before.handled && after.handled) {
+        pseudoVectorized = true;
+        // Paint order: host box → ::before → host content/children → ::after.
+        emitBox(el, cs, clip, opacity);
+        if (before.node) nodes.push(before.node);
+        captureText(el, cs, clip, opacity);
+        captureListMarker(el, cs, clip, opacity);
+        afterPseudoNode = after.node ?? null;
+      }
+    }
+    if (boxReason && !pseudoVectorized) {
       if (el.childElementCount === 0) {
         pushRaster(r, clip, opacity, boxReason);
         return;
@@ -848,7 +960,7 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
         captureText(el, cs, clip, opacity);
         captureListMarker(el, cs, clip, opacity);
       }
-    } else if (!skipRender && !visHidden) {
+    } else if (!boxReason && !skipRender && !visHidden) {
       emitBox(el, cs, clip, opacity);
       captureText(el, cs, clip, opacity);
       captureListMarker(el, cs, clip, opacity);
@@ -920,6 +1032,9 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
         await walk(child as Element, childClip, opacity);
       }
     }
+
+    // ::after paints above the host's content (emitted after the child walk).
+    if (afterPseudoNode) nodes.push(afterPseudoNode);
   };
 
   const body = document.body;

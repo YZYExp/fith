@@ -141,6 +141,26 @@ describe('visual regression', () => {
   );
 
   it(
+    'vectorizes decorative pseudo-element overlays instead of rastering the host (text stays vector)',
+    async () => {
+      const r = await validate(
+        { url: pathToFileURL(resolve(FIXTURES, 'pseudo-overlay.html')).href },
+        { width: 640, height: 260, name: 'pseudo-overlay', outDir: OUT },
+      );
+      const svg = readFileSync(resolve(OUT, 'pseudo-overlay.svg'), 'utf8');
+      // The host text must survive as vector <text>, not be swallowed by a raster.
+      expect(svg).toContain('Mountain View');
+      expect(svg).toContain('System Status');
+      // The ::before scrim is a linear-gradient overlay → emitted as a gradient.
+      expect(svg).toContain('<linearGradient');
+      // The decorative pseudos must NOT have forced a raster <image> fallback.
+      expect(svg).not.toContain('<image');
+      expect(r.ratio).toBeLessThan(0.05);
+    },
+    90_000,
+  );
+
+  it(
     'captures text decorations and gradient text (text-styles fixture)',
     async () => {
       const r = await validate(

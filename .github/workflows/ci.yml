@@ -1,0 +1,86 @@
+name: CI
+
+on:
+  push:
+    branches: [main, 'claude/**']
+  pull_request:
+    branches: [main]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          run_install: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: TypeScript build
+        run: pnpm run build
+
+      - name: Build extension bundle
+        run: pnpm run build:extension
+
+      - name: Install Playwright browsers
+        run: pnpm exec playwright install chromium --with-deps
+
+      - name: Run tests
+        run: pnpm test
+        env:
+          # Point visual tests at the Playwright-managed Chromium (full build,
+          # not the @sparticuz headless shell) so extension.test.ts can also
+          # load extensions when needed.
+          PLAYWRIGHT_BROWSERS_PATH: ${{ runner.tool_cache }}/playwright
+
+      - name: Upload test artifacts on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-out
+          path: test/visual/__out__/
+          if-no-files-found: ignore
+
+  extension-e2e:
+    runs-on: ubuntu-latest
+    # Only run the full E2E (needs a real extension-capable Chromium) on pushes
+    # to main or claude/* branches, not on every PR to keep CI fast.
+    if: github.event_name == 'push'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          run_install: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Playwright Chromium (full build, supports extensions)
+        run: pnpm exec playwright install chromium --with-deps
+
+      - name: Run extension E2E test
+        run: EXTENSION_E2E=1 pnpm exec vitest run test/visual/extension-e2e.test.ts
+        env:
+          # The Playwright-managed chromium-<rev>/chrome-linux64/chrome binary
+          # supports loading unpacked extensions (unlike the headless shell).
+          PLAYWRIGHT_BROWSERS_PATH: ${{ runner.tool_cache }}/playwright

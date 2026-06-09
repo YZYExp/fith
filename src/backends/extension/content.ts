@@ -5,17 +5,65 @@
  * downloaded and/or opened in a preview tab per the chosen mode.
  */
 import { captureCurrentPage, captureElement } from '../browser/index.js';
-import type { Rect } from '../../core/ir/types.js';
+import { createTiledRasterizer } from '../browser/tiled-raster.js';
 
 type OutputMode = 'both' | 'download' | 'preview';
 type FontMode = 'embed' | 'outline' | 'none';
 
-function rasterize(rect: Rect, _scale?: number): Promise<string | null> {
+interface BitmapShot {
+  scale: number;
+  bitmap: ImageBitmap;
+}
+
+/** Ask the service worker for a screenshot of the *current* viewport. */
+function shootViewport(): Promise<string | null> {
   return new Promise((resolve) => {
-    chrome.runtime.sendMessage(
-      { type: 'fh:rasterize', rect, dpr: window.devicePixelRatio || 1 },
-      (resp) => resolve(resp?.dataUrl ?? null),
-    );
+    chrome.runtime.sendMessage({ type: 'fh:shoot' }, (resp) => resolve(resp?.dataUrl ?? null));
+  });
+}
+
+/**
+ * Build a rasterizer (fresh screenshot cache per capture) that resolves
+ * document-coordinate regions by scrolling them through the viewport,
+ * screenshotting via the service worker, and compositing with OffscreenCanvas.
+ * All tiling/sequencing lives in the shared createTiledRasterizer; this is just
+ * the browser-environment adapter.
+ */
+function makeRasterizer() {
+  return createTiledRasterizer<BitmapShot>({
+    getViewport: () => ({ width: window.innerWidth, height: window.innerHeight }),
+    getMaxScroll: () => ({
+      x: Math.max(0, document.documentElement.scrollWidth - window.innerWidth),
+      y: Math.max(0, document.documentElement.scrollHeight - window.innerHeight),
+    }),
+    getScroll: () => ({ x: window.scrollX, y: window.scrollY }),
+    scrollTo: (x, y) => window.scrollTo(x, y),
+    // Wait for layout + paint to settle after a programmatic scroll.
+    settle: () => new Promise<void>((r) => requestAnimationFrame(() => requestAnimationFrame(() => r()))),
+    shoot: async () => {
+      const url = await shootViewport();
+      if (!url) return null;
+      const bitmap = await createImageBitmap(await (await fetch(url)).blob());
+      return { scale: bitmap.width / Math.max(1, window.innerWidth), bitmap };
+    },
+    createCanvas: (width, height) => {
+      const canvas = new OffscreenCanvas(width, height);
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return null;
+      return {
+        draw: (shot, sx, sy, sw, sh, dx, dy, dw, dh) =>
+          ctx.drawImage(shot.bitmap, sx, sy, sw, sh, dx, dy, dw, dh),
+        toDataURL: async () => {
+          const blob = await canvas.convertToBlob({ type: 'image/png' });
+          return await new Promise<string | null>((resolve) => {
+            const fr = new FileReader();
+            fr.onload = () => resolve(fr.result as string);
+            fr.onerror = () => resolve(null);
+            fr.readAsDataURL(blob);
+          });
+        },
+      };
+    },
   });
 }
 
@@ -39,7 +87,7 @@ function output(svg: string, name: string, mode: OutputMode) {
 }
 
 async function capturePage(fontMode: FontMode, mode: OutputMode) {
-  const svg = await captureCurrentPage({ fontMode, rasterize });
+  const svg = await captureCurrentPage({ fontMode, rasterize: makeRasterizer() });
   output(svg, safeName(document.title), mode);
   return svg.length;
 }
@@ -121,7 +169,7 @@ function startPicker(fontMode: FontMode, mode: OutputMode) {
     const chosen = current;
     cleanup();
     if (chosen) {
-      captureElement(chosen, { fontMode, rasterize })
+      captureElement(chosen, { fontMode, rasterize: makeRasterizer() })
         .then((svg) => output(svg, safeName((chosen as HTMLElement).id || chosen.tagName.toLowerCase()), mode))
         .catch((err) => console.error('[fitting-html]', err));
     }
