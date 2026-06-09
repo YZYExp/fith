@@ -56,9 +56,15 @@ async function run(opts: InPageOptions, root?: Element): Promise<string> {
       fontMode: opts.fontMode === 'none' ? 'none' : 'embed',
       collectGlyphX: opts.fontMode === 'outline',
       // Rasterize non-leaf containers that have un-vectorizable box effects
-      // (pseudo-elements, complex background images) only when a rasterize
-      // backend is available; otherwise silently emit what can be vectorized.
-      containerRasterFallback: !!opts.rasterize,
+      // (pseudo-elements, complex background images) only when a rasterize backend
+      // is available AND we're doing a full-page capture.
+      // In viewport-only mode, containerRasterFallback must be OFF: it emits a
+      // full-container screenshot (which already includes all children) PLUS walks
+      // the children for a vector pass — the overlap produces visible ghosting on
+      // pages with complex CSS (e.g. GitHub). Viewport-only already has a single
+      // clean screenshot available for true raster nodes (canvas, video); complex
+      // container effects are left to best-effort vector + tryPseudoBox.
+      containerRasterFallback: !viewportOnly && !!opts.rasterize,
       // Full-page export unfurls all scroll containers (resets scroll to 0 and
       // expands overflow clips to scrollWidth × scrollHeight, restored after).
       // Viewport-only skips this so the capture matches what's on screen now.
