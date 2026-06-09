@@ -58,8 +58,10 @@ test/
     element.test.ts         # subtree (single-element) capture
     inpage.test.ts          # in-page backend
     webfont.test.ts         # @font-face embed / outline modes
-    extension.test.ts       # drives the shared tiled rasterizer with a viewport-only
-                            #   (captureVisibleTab-like) screenshot env
+    extension.test.ts       # full-page scope: drives the shared tiled rasterizer with a
+                            #   viewport-only (captureVisibleTab-like) screenshot env
+    extension-viewport.test.ts # "visible area" scope: drives the shared
+                            #   createViewportRasterizer (single shot, no scroll)
     extension-e2e.test.ts   # gated (EXTENSION_E2E=1): loads the real extension into a
                             #   full Chromium and exercises the full download pipeline
     realworld.test.ts       # gated (REALWORLD_TESTS=1): live external URLs
@@ -78,8 +80,14 @@ extensions).
 
 ## Common Pitfalls
 
+- The extension popup has two capture **scopes**: "Visible area" (default — single
+  `captureVisibleTab` shot via `createViewportRasterizer`, coords viewport-relative,
+  `captureScrollableContent: false`, off-screen content culled) and "Full page"
+  (scroll-and-stitch via `createTiledRasterizer`). Viewport-only avoids the slow,
+  artifact-prone scrolling on long pages.
 - `captureScrollableContent` and `containerRasterFallback` are not passed by the
-  Playwright backend (defaults to false). The browser backend passes them explicitly.
+  Playwright backend (defaults to false). The browser backend passes them explicitly
+  (`captureScrollableContent` only in full-page scope, not viewport-only).
 - `guaranteeFloor: true` embeds a full-page PNG as a `<image>` base layer (~150–800 KB).
 - `diffPatch: true` renders the SVG back in Chromium and patches divergent regions
   with raster screenshots; adds one extra page load per render.

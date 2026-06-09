@@ -28,15 +28,30 @@ export interface InPageOptions {
    * When absent, such regions are omitted.
    */
   rasterize?: (rect: Rect, scale: number) => Promise<string | null>;
+  /**
+   * Capture only the currently-visible viewport instead of the full scrollable
+   * document. Coordinates stay viewport-relative (scroll is NOT reset), so a
+   * single chrome.tabs.captureVisibleTab screenshot maps 1:1 to the output —
+   * no scroll-and-stitch, which on long pages is slow and drags sticky/fixed
+   * headers and lazy-loaded content into the wrong places. Off-screen content
+   * is clipped away. Default false (full-page).
+   */
+  viewportOnly?: boolean;
 }
 
 async function run(opts: InPageOptions, root?: Element): Promise<string> {
+  // Viewport-only: keep coords viewport-relative (don't reset scroll, don't
+  // unfurl overflow) so one viewport screenshot composites correctly and
+  // off-screen content is left out.
+  const viewportOnly = !!opts.viewportOnly && !root;
   const scene: Scene = await captureScene(
     {
-      width: opts.width ?? document.documentElement.clientWidth,
+      width: opts.width ?? (viewportOnly ? window.innerWidth : document.documentElement.clientWidth),
       height:
         opts.height ??
-        Math.max(document.documentElement.scrollHeight, document.body ? document.body.scrollHeight : 0),
+        (viewportOnly
+          ? window.innerHeight
+          : Math.max(document.documentElement.scrollHeight, document.body ? document.body.scrollHeight : 0)),
       deviceScaleFactor: opts.deviceScaleFactor ?? window.devicePixelRatio ?? 1,
       fontMode: opts.fontMode === 'none' ? 'none' : 'embed',
       collectGlyphX: opts.fontMode === 'outline',
@@ -44,10 +59,10 @@ async function run(opts: InPageOptions, root?: Element): Promise<string> {
       // (pseudo-elements, complex background images) only when a rasterize
       // backend is available; otherwise silently emit what can be vectorized.
       containerRasterFallback: !!opts.rasterize,
-      // Always capture the full scrollable content for design export: resets
-      // all scroll positions to 0 and expands overflow-container clips to their
-      // full scrollHeight × scrollWidth, then restores scroll state afterward.
-      captureScrollableContent: true,
+      // Full-page export unfurls all scroll containers (resets scroll to 0 and
+      // expands overflow clips to scrollWidth × scrollHeight, restored after).
+      // Viewport-only skips this so the capture matches what's on screen now.
+      captureScrollableContent: !viewportOnly,
     },
     root,
   );

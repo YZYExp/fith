@@ -6,9 +6,11 @@
  */
 import { captureCurrentPage, captureElement } from '../browser/index.js';
 import { createTiledRasterizer } from '../browser/tiled-raster.js';
+import { createViewportRasterizer } from '../browser/viewport-raster.js';
 
 type OutputMode = 'both' | 'download' | 'preview';
 type FontMode = 'embed' | 'outline' | 'none';
+type Scope = 'viewport' | 'full';
 
 interface BitmapShot {
   scale: number;
@@ -22,8 +24,43 @@ function shootViewport(): Promise<string | null> {
   });
 }
 
+/** Decode a service-worker viewport screenshot into a CSS-px-scaled ImageBitmap. */
+async function shootBitmap(): Promise<BitmapShot | null> {
+  const url = await shootViewport();
+  if (!url) return null;
+  const bitmap = await createImageBitmap(await (await fetch(url)).blob());
+  return { scale: bitmap.width / Math.max(1, window.innerWidth), bitmap };
+}
+
+/** Encode an OffscreenCanvas as a PNG data URL (null on failure). */
+async function canvasToDataUrl(canvas: OffscreenCanvas): Promise<string | null> {
+  try {
+    const blob = await canvas.convertToBlob({ type: 'image/png' });
+    return await new Promise<string | null>((resolve) => {
+      const fr = new FileReader();
+      fr.onload = () => resolve(fr.result as string);
+      fr.onerror = () => resolve(null);
+      fr.readAsDataURL(blob);
+    });
+  } catch {
+    return null;
+  }
+}
+
+/** OffscreenCanvas-backed TileCanvas adapter shared by both rasterizers. */
+function makeCanvas(width: number, height: number) {
+  const canvas = new OffscreenCanvas(width, height);
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return null;
+  return {
+    draw: (shot: BitmapShot, sx: number, sy: number, sw: number, sh: number, dx: number, dy: number, dw: number, dh: number) =>
+      ctx.drawImage(shot.bitmap, sx, sy, sw, sh, dx, dy, dw, dh),
+    toDataURL: () => canvasToDataUrl(canvas),
+  };
+}
+
 /**
- * Build a rasterizer (fresh screenshot cache per capture) that resolves
+ * Full-page rasterizer (fresh screenshot cache per capture): resolves
  * document-coordinate regions by scrolling them through the viewport,
  * screenshotting via the service worker, and compositing with OffscreenCanvas.
  * All tiling/sequencing lives in the shared createTiledRasterizer; this is just
@@ -40,30 +77,21 @@ function makeRasterizer() {
     scrollTo: (x, y) => window.scrollTo(x, y),
     // Wait for layout + paint to settle after a programmatic scroll.
     settle: () => new Promise<void>((r) => requestAnimationFrame(() => requestAnimationFrame(() => r()))),
-    shoot: async () => {
-      const url = await shootViewport();
-      if (!url) return null;
-      const bitmap = await createImageBitmap(await (await fetch(url)).blob());
-      return { scale: bitmap.width / Math.max(1, window.innerWidth), bitmap };
-    },
-    createCanvas: (width, height) => {
-      const canvas = new OffscreenCanvas(width, height);
-      const ctx = canvas.getContext('2d');
-      if (!ctx) return null;
-      return {
-        draw: (shot, sx, sy, sw, sh, dx, dy, dw, dh) =>
-          ctx.drawImage(shot.bitmap, sx, sy, sw, sh, dx, dy, dw, dh),
-        toDataURL: async () => {
-          const blob = await canvas.convertToBlob({ type: 'image/png' });
-          return await new Promise<string | null>((resolve) => {
-            const fr = new FileReader();
-            fr.onload = () => resolve(fr.result as string);
-            fr.onerror = () => resolve(null);
-            fr.readAsDataURL(blob);
-          });
-        },
-      };
-    },
+    shoot: shootBitmap,
+    createCanvas: makeCanvas,
+  });
+}
+
+/**
+ * Viewport-only rasterizer: one screenshot, crop each (viewport-relative) region
+ * out of it, no scrolling. All cropping/clamping lives in the shared
+ * createViewportRasterizer; this is just the browser-environment adapter.
+ */
+function makeViewportRasterizer() {
+  return createViewportRasterizer<BitmapShot>({
+    getViewport: () => ({ width: window.innerWidth, height: window.innerHeight }),
+    shoot: shootBitmap,
+    createCanvas: makeCanvas,
   });
 }
 
@@ -86,8 +114,11 @@ function output(svg: string, name: string, mode: OutputMode) {
   }
 }
 
-async function capturePage(fontMode: FontMode, mode: OutputMode) {
-  const svg = await captureCurrentPage({ fontMode, rasterize: makeRasterizer() });
+async function capturePage(fontMode: FontMode, mode: OutputMode, scope: Scope) {
+  const svg =
+    scope === 'full'
+      ? await captureCurrentPage({ fontMode, rasterize: makeRasterizer() })
+      : await captureCurrentPage({ fontMode, viewportOnly: true, rasterize: makeViewportRasterizer() });
   output(svg, safeName(document.title), mode);
   return svg.length;
 }
@@ -193,8 +224,9 @@ if (!(window as any).__fhInstalled) {
   chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     const mode: OutputMode = msg?.output ?? 'both';
     const fontMode: FontMode = msg?.fontMode ?? 'embed';
+    const scope: Scope = msg?.scope === 'full' ? 'full' : 'viewport';
     if (msg?.type === 'fh:capture') {
-      capturePage(fontMode, mode)
+      capturePage(fontMode, mode, scope)
         .then((bytes) => sendResponse({ ok: true, bytes }))
         .catch((e) => sendResponse({ ok: false, error: String(e) }));
       return true; // async response

@@ -19,11 +19,12 @@ chrome.runtime.onInstalled.addListener(() => {
 async function send(tabId: number, type: 'fh:capture' | 'fh:pick') {
   try {
     await chrome.scripting.executeScript({ target: { tabId }, files: ['content.js'] });
-    const prefs = await chrome.storage.local.get(['fhOutput', 'fhFont']);
+    const prefs = await chrome.storage.local.get(['fhOutput', 'fhFont', 'fhScope']);
     await chrome.tabs.sendMessage(tabId, {
       type,
       output: prefs.fhOutput ?? 'both',
       fontMode: prefs.fhFont ?? 'embed',
+      scope: prefs.fhScope ?? 'viewport',
     });
   } catch (e) {
     console.error('[fitting-html]', e);
