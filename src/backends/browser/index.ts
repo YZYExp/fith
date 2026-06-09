@@ -55,16 +55,16 @@ async function run(opts: InPageOptions, root?: Element): Promise<string> {
       deviceScaleFactor: opts.deviceScaleFactor ?? window.devicePixelRatio ?? 1,
       fontMode: opts.fontMode === 'none' ? 'none' : 'embed',
       collectGlyphX: opts.fontMode === 'outline',
-      // Rasterize non-leaf containers that have un-vectorizable box effects
-      // (pseudo-elements, complex background images) only when a rasterize backend
-      // is available AND we're doing a full-page capture.
-      // In viewport-only mode, containerRasterFallback must be OFF: it emits a
-      // full-container screenshot (which already includes all children) PLUS walks
-      // the children for a vector pass — the overlap produces visible ghosting on
-      // pages with complex CSS (e.g. GitHub). Viewport-only already has a single
-      // clean screenshot available for true raster nodes (canvas, video); complex
-      // container effects are left to best-effort vector + tryPseudoBox.
-      containerRasterFallback: !viewportOnly && !!opts.rasterize,
+      // containerRasterFallback is intentionally OFF for the extension (both
+      // viewport-only and full-page). When it fires, it emits a full-container
+      // screenshot as a raster base layer (which already includes the children),
+      // then walks the children for a vector pass on top — the overlap produces
+      // visible ghosting on any page with complex CSS. captureVisibleTab can't
+      // screenshot just the container's own box (background/borders/pseudo) without
+      // its children, so there is no clean way to combine raster+vector here.
+      // tryPseudoBox covers the common ::before/::after overlay pattern; anything
+      // else falls back to best-effort vector (missing effect > ghosting).
+      containerRasterFallback: false,
       // Full-page export unfurls all scroll containers (resets scroll to 0 and
       // expands overflow clips to scrollWidth × scrollHeight, restored after).
       // Viewport-only skips this so the capture matches what's on screen now.
