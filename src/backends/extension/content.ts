@@ -5,8 +5,8 @@
  * downloaded and/or opened in a preview tab per the chosen mode.
  */
 import { captureCurrentPage, captureElement } from '../browser/index.js';
-import { createTiledRasterizer } from '../browser/tiled-raster.js';
 import { createViewportRasterizer } from '../browser/viewport-raster.js';
+import type { Rect } from '../../core/ir/types.js';
 
 type OutputMode = 'both' | 'download' | 'preview';
 type FontMode = 'embed' | 'outline' | 'none';
@@ -21,6 +21,21 @@ interface BitmapShot {
 function shootViewport(): Promise<string | null> {
   return new Promise((resolve) => {
     chrome.runtime.sendMessage({ type: 'fh:shoot' }, (resp) => resolve(resp?.dataUrl ?? null));
+  });
+}
+
+/**
+ * Ask the service worker for an exact-region screenshot via chrome.debugger
+ * (Page.captureScreenshot + captureBeyondViewport): captures any document region
+ * — including below the fold — in one shot, WITHOUT scrolling. Returns null when
+ * the optional `debugger` permission isn't granted (caller falls back to a
+ * viewport crop), so this never forces the permission.
+ */
+function shootRegion(rect: Rect, scale: number): Promise<string | null> {
+  return new Promise((resolve) => {
+    chrome.runtime.sendMessage({ type: 'fh:shootRegion', rect, scale }, (resp) =>
+      resolve(resp?.dataUrl ?? null),
+    );
   });
 }
 
@@ -60,36 +75,29 @@ function makeCanvas(width: number, height: number) {
 }
 
 /**
- * Full-page rasterizer (fresh screenshot cache per capture): resolves
- * document-coordinate regions by scrolling them through the viewport,
- * screenshotting via the service worker, and compositing with OffscreenCanvas.
- * All tiling/sequencing lives in the shared createTiledRasterizer; this is just
- * the browser-environment adapter.
+ * Viewport-only rasterizer: coords are viewport-relative (origin {0,0}); crop
+ * each region out of one current-viewport screenshot, no scrolling.
  */
-function makeRasterizer() {
-  return createTiledRasterizer<BitmapShot>({
+function makeViewportRasterizer() {
+  return createViewportRasterizer<BitmapShot>({
     getViewport: () => ({ width: window.innerWidth, height: window.innerHeight }),
-    getMaxScroll: () => ({
-      x: Math.max(0, document.documentElement.scrollWidth - window.innerWidth),
-      y: Math.max(0, document.documentElement.scrollHeight - window.innerHeight),
-    }),
-    getScroll: () => ({ x: window.scrollX, y: window.scrollY }),
-    scrollTo: (x, y) => window.scrollTo(x, y),
-    // Wait for layout + paint to settle after a programmatic scroll.
-    settle: () => new Promise<void>((r) => requestAnimationFrame(() => requestAnimationFrame(() => r()))),
     shoot: shootBitmap,
     createCanvas: makeCanvas,
   });
 }
 
 /**
- * Viewport-only rasterizer: one screenshot, crop each (viewport-relative) region
- * out of it, no scrolling. All cropping/clamping lives in the shared
- * createViewportRasterizer; this is just the browser-environment adapter.
+ * Full-page rasterizer (no scrolling). Coords are document-absolute, so the
+ * viewport origin is the current scroll position. Prefers an exact chrome.debugger
+ * region shot (reaches below the fold) when the permission is granted; otherwise
+ * falls back to cropping the current viewport (off-screen raster is then omitted).
+ * `useDebugger` is decided once up front from the granted permissions.
  */
-function makeViewportRasterizer() {
+function makeFullPageRasterizer(useDebugger: boolean) {
   return createViewportRasterizer<BitmapShot>({
     getViewport: () => ({ width: window.innerWidth, height: window.innerHeight }),
+    getOrigin: () => ({ x: window.scrollX, y: window.scrollY }),
+    shootRegion: useDebugger ? (rect) => shootRegion(rect, window.devicePixelRatio || 1) : undefined,
     shoot: shootBitmap,
     createCanvas: makeCanvas,
   });
@@ -115,10 +123,17 @@ function output(svg: string, name: string, mode: OutputMode) {
 }
 
 async function capturePage(fontMode: FontMode, mode: OutputMode, scope: Scope) {
-  const svg =
-    scope === 'full'
-      ? await captureCurrentPage({ fontMode, rasterize: makeRasterizer() })
-      : await captureCurrentPage({ fontMode, viewportOnly: true, rasterize: makeViewportRasterizer() });
+  let svg: string;
+  if (scope === 'full') {
+    // Use the exact-region debugger shot only if the permission is already
+    // granted (the popup requests it on a user gesture); never block on it here.
+    const useDebugger = await chrome.permissions
+      .contains({ permissions: ['debugger'] })
+      .catch(() => false);
+    svg = await captureCurrentPage({ fontMode, rasterize: makeFullPageRasterizer(useDebugger) });
+  } else {
+    svg = await captureCurrentPage({ fontMode, viewportOnly: true, rasterize: makeViewportRasterizer() });
+  }
   output(svg, safeName(document.title), mode);
   return svg.length;
 }
@@ -200,7 +215,7 @@ function startPicker(fontMode: FontMode, mode: OutputMode) {
     const chosen = current;
     cleanup();
     if (chosen) {
-      captureElement(chosen, { fontMode, rasterize: makeRasterizer() })
+      captureElement(chosen, { fontMode, rasterize: makeViewportRasterizer() })
         .then((svg) => output(svg, safeName((chosen as HTMLElement).id || chosen.tagName.toLowerCase()), mode))
         .catch((err) => console.error('[fitting-html]', err));
     }

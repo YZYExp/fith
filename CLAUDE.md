@@ -47,7 +47,8 @@ Fix the root cause — never skip hooks or suppress errors.
 ```
 test/
   emit.test.ts              # unit tests for the SVG emitter
-  tiles.test.ts             # pure unit: planRegionTiles tiling/clamp math
+  viewport-raster.test.ts   # pure unit: createViewportRasterizer (origin offset,
+                            #   shootRegion precedence, off-screen → null)
   shot-scheduler.test.ts    # pure unit: createShotScheduler rate-limit/retry (virtual clock)
   extension-bundle.test.ts  # builds the MV3 bundle, asserts manifest/file integrity
   fixtures/                 # HTML pages used by visual tests
@@ -58,10 +59,8 @@ test/
     element.test.ts         # subtree (single-element) capture
     inpage.test.ts          # in-page backend
     webfont.test.ts         # @font-face embed / outline modes
-    extension.test.ts       # full-page scope: drives the shared tiled rasterizer with a
-                            #   viewport-only (captureVisibleTab-like) screenshot env
-    extension-viewport.test.ts # "visible area" scope: drives the shared
-                            #   createViewportRasterizer (single shot, no scroll)
+    extension-viewport.test.ts # drives the shared createViewportRasterizer end-to-end
+                            #   (single shot, no scroll) with a Playwright pngjs env
     extension-e2e.test.ts   # gated (EXTENSION_E2E=1): loads the real extension into a
                             #   full Chromium and exercises the full download pipeline
     realworld.test.ts       # gated (REALWORLD_TESTS=1): live external URLs
@@ -71,23 +70,34 @@ test/
 Visual tests use `scripts/validate.ts` which renders the SVG in a second Chromium
 page and pixel-diffs it against the original. Threshold is per-test (typically < 1–5%).
 
-**Extension testing layers:** pure logic (`tiles`, `shot-scheduler`) → in-page
-integration (`extension.test.ts`, which runs the *shared* `createTiledRasterizer`
-so production code is covered, not a copy) → gated full E2E (`extension-e2e.test.ts`,
-needs a full Chromium that can load extensions — set `E2E_CHROME_PATH` or install a
-Playwright "Chrome for Testing"; the headless shell used by other tests can't load
-extensions).
+**Extension testing layers:** pure logic (`viewport-raster`, `shot-scheduler`) →
+in-page integration (`extension-viewport.test.ts`, which runs the *shared*
+`createViewportRasterizer` so production code is covered, not a copy) → gated full
+E2E (`extension-e2e.test.ts`, needs a full Chromium that can load extensions — set
+`E2E_CHROME_PATH` or install a Playwright "Chrome for Testing"; the headless shell
+used by other tests can't load extensions).
 
 ## Common Pitfalls
 
-- The extension popup has two capture **scopes**: "Visible area" (default — single
-  `captureVisibleTab` shot via `createViewportRasterizer`, coords viewport-relative,
-  `captureScrollableContent: false`, off-screen content culled) and "Full page"
-  (scroll-and-stitch via `createTiledRasterizer`). Viewport-only avoids the slow,
-  artifact-prone scrolling on long pages.
+- **The extension never scrolls the page** — scrolling triggers sticky/fixed
+  repositioning, lazy-load, and scroll animations, corrupting captures (these target
+  relatively static pages). Both popup **scopes** rasterize via the shared
+  non-scrolling `createViewportRasterizer`:
+  - "Visible area" (default): viewport-only vector + a single `captureVisibleTab`
+    crop; coords viewport-relative (`viewportOnly: true`, origin {0,0}), off-screen
+    content culled at capture time.
+  - "Full page": full-document vector (no scroll needed for vector) + raster from
+    either an exact `chrome.debugger` `Page.captureScreenshot`
+    (`captureBeyondViewport`, reaches below the fold in one shot — optional
+    `debugger` permission, requested by the popup) or, if not granted, a
+    current-viewport crop (origin = scroll position, off-screen raster omitted).
+- `containerRasterFallback` is **always false for the extension**: a screenshot of a
+  container includes its children, so rastering it as a base layer then vectoring the
+  children on top double-paints → ghosting. Pseudo-elements are vectorized by
+  `tryPseudoBox`; other un-vectorizable container effects are left as best-effort vector.
 - `captureScrollableContent` and `containerRasterFallback` are not passed by the
-  Playwright backend (defaults to false). The browser backend passes them explicitly
-  (`captureScrollableContent` only in full-page scope, not viewport-only).
+  Playwright backend (defaults to false). The browser backend passes
+  `captureScrollableContent` only in full-page scope (not viewport-only).
 - `guaranteeFloor: true` embeds a full-page PNG as a `<image>` base layer (~150–800 KB).
 - `diffPatch: true` renders the SVG back in Chromium and patches divergent regions
   with raster screenshots; adds one extra page load per render.

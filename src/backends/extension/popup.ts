@@ -57,5 +57,18 @@ async function trigger(type: 'fh:capture' | 'fh:pick') {
   }
 }
 
-$('page').addEventListener('click', () => trigger('fh:capture'));
+$('page').addEventListener('click', async () => {
+  // Full-page capture can reach below-the-fold raster content (canvas/video/…)
+  // without scrolling via chrome.debugger. Request that optional permission on
+  // this user gesture (no-op if already granted). Capture proceeds either way —
+  // if denied, off-screen raster is simply omitted (full vector is unaffected).
+  if (scopeSel.value === 'full') {
+    try {
+      await chrome.permissions.request({ permissions: ['debugger'] });
+    } catch {
+      /* proceed with the viewport-crop fallback */
+    }
+  }
+  trigger('fh:capture');
+});
 $('pick').addEventListener('click', () => trigger('fh:pick'));
