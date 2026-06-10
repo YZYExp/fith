@@ -4,6 +4,7 @@
   "version": "0.1.0",
   "description": "Capture the current tab — or a picked element — as a self-contained, vector-first SVG.",
   "permissions": ["activeTab", "tabs", "scripting", "contextMenus", "storage"],
+  "optional_permissions": ["debugger"],
   "host_permissions": ["<all_urls>"],
   "background": { "service_worker": "background.js", "type": "module" },
   "action": { "default_title": "fitting-html", "default_popup": "popup.html" },

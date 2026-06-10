@@ -27,6 +27,12 @@
   <body>
     <h1>Convert page to SVG</h1>
 
+    <label for="scope">Capture area</label>
+    <select id="scope">
+      <option value="viewport">Visible area (fast)</option>
+      <option value="full">Full page (scrolls, slower)</option>
+    </select>
+
     <label for="output">Output</label>
     <select id="output">
       <option value="both">Download + preview</option>
@@ -42,7 +48,7 @@
     </select>
 
     <div class="btns">
-      <button id="page">Whole page</button>
+      <button id="page">Capture page</button>
       <button id="pick" class="secondary">Pick element</button>
     </div>
 

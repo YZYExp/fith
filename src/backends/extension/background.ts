@@ -1,9 +1,10 @@
 /**
- * Service worker: triggers capture on the toolbar action, and screenshots the
- * visible tab on demand. The content script scrolls each fallback region into
- * view and composites the slices, so this worker only needs to capture the
- * *current* viewport — it never crops. captureVisibleTab is rate-limited
- * (~2 calls/sec), so calls are serialized, spaced, and retried on quota errors.
+ * Service worker: triggers capture on the toolbar action and screenshots on
+ * demand. The content script never scrolls; it asks for either the current
+ * viewport (fh:shoot, captureVisibleTab — rate-limited, so calls are serialized,
+ * spaced, and retried) or an exact document region (fh:shootRegion), the latter
+ * via chrome.debugger Page.captureScreenshot with captureBeyondViewport, which
+ * reaches below the fold in a single shot without scrolling.
  */
 import { createShotScheduler } from './shot-scheduler.js';
 
@@ -19,11 +20,12 @@ chrome.runtime.onInstalled.addListener(() => {
 async function send(tabId: number, type: 'fh:capture' | 'fh:pick') {
   try {
     await chrome.scripting.executeScript({ target: { tabId }, files: ['content.js'] });
-    const prefs = await chrome.storage.local.get(['fhOutput', 'fhFont']);
+    const prefs = await chrome.storage.local.get(['fhOutput', 'fhFont', 'fhScope']);
     await chrome.tabs.sendMessage(tabId, {
       type,
       output: prefs.fhOutput ?? 'both',
       fontMode: prefs.fhFont ?? 'embed',
+      scope: prefs.fhScope ?? 'viewport',
     });
   } catch (e) {
     console.error('[fitting-html]', e);
@@ -46,11 +48,93 @@ const shootViewport = createShotScheduler({
   capture: () => chrome.tabs.captureVisibleTab({ format: 'png' }),
 });
 
+// ── chrome.debugger exact-region screenshot (optional permission) ────────────
+// Attach lazily and detach after a short idle so the "is debugging" banner stays
+// stable for the duration of a capture instead of flickering per region.
+let attachedTab: number | null = null;
+let detachTimer: ReturnType<typeof setTimeout> | undefined;
+
+async function ensureAttached(tabId: number) {
+  if (attachedTab === tabId) return;
+  if (attachedTab !== null) {
+    try {
+      await chrome.debugger.detach({ tabId: attachedTab });
+    } catch {
+      /* already gone */
+    }
+  }
+  await chrome.debugger.attach({ tabId }, '1.3');
+  attachedTab = tabId;
+}
+
+function scheduleDetach() {
+  clearTimeout(detachTimer);
+  detachTimer = setTimeout(async () => {
+    if (attachedTab === null) return;
+    const id = attachedTab;
+    attachedTab = null;
+    try {
+      await chrome.debugger.detach({ tabId: id });
+    } catch {
+      /* tab closed */
+    }
+  }, 4000);
+}
+
+/** Reject if `p` doesn't settle within `ms` (so a stalled debugger call can't hang). */
+function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
+  return Promise.race([
+    p,
+    new Promise<T>((_, reject) => setTimeout(() => reject(new Error('timeout')), ms)),
+  ]);
+}
+
+// captureBeyondViewport renders the whole clip at `scale` device px; cap the
+// device-pixel area so an enormous below-the-fold region can't OOM/stall Chrome
+// (caller then falls back to a viewport crop, or omits the node).
+const MAX_REGION_DEVICE_PX = 40_000_000; // ~ 4000 × 10000
+
+/** Screenshot an exact document-coords region (CSS px) at `scale` device px/CSS px. */
+async function shootRegion(
+  tabId: number,
+  rect: { x: number; y: number; width: number; height: number },
+  scale: number,
+): Promise<string | null> {
+  if (!(await chrome.permissions.contains({ permissions: ['debugger'] }).catch(() => false))) return null;
+  if (!(rect.width > 0 && rect.height > 0)) return null;
+  const s = scale || 1;
+  if (rect.width * rect.height * s * s > MAX_REGION_DEVICE_PX) return null; // too big → fall back
+  try {
+    await ensureAttached(tabId);
+    scheduleDetach();
+    const res = (await withTimeout(
+      chrome.debugger.sendCommand({ tabId }, 'Page.captureScreenshot', {
+        format: 'png',
+        captureBeyondViewport: true,
+        clip: { x: rect.x, y: rect.y, width: rect.width, height: rect.height, scale: s },
+      }),
+      12_000,
+    )) as { data?: string } | undefined;
+    return res?.data ? 'data:image/png;base64,' + res.data : null;
+  } catch {
+    return null; // fall back to the viewport crop in the content script
+  }
+}
+
 let previewSeq = 0;
 
-chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg?.type === 'fh:shoot') {
     shootViewport().then((dataUrl) => sendResponse({ dataUrl }));
+    return true; // async response
+  }
+  if (msg?.type === 'fh:shootRegion') {
+    const tabId = sender.tab?.id;
+    if (tabId == null) {
+      sendResponse({ dataUrl: null });
+      return; // sync
+    }
+    shootRegion(tabId, msg.rect, msg.scale).then((dataUrl) => sendResponse({ dataUrl }));
     return true; // async response
   }
   if (msg?.type === 'fh:preview') {
