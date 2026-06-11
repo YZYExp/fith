@@ -6,100 +6,12 @@ import type {
   ImageNode,
   InlineSvgNode,
   RasterNode,
-  Clip,
   CornerRadii,
   BorderEdges,
-  LinearGradientFill,
 } from '../ir/types.js';
 import type { Outliner } from './outline.js';
-
-const n = (v: number) => {
-  const r = Math.round(v * 100) / 100;
-  return Object.is(r, -0) ? 0 : r;
-};
-
-const esc = (s: string) =>
-  s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-
-function roundedRectPath(x: number, y: number, w: number, h: number, radii: CornerRadii): string {
-  let [tl, tr, br, bl] = radii;
-  const maxR = Math.min(w, h) / 2;
-  tl = Math.min(tl, maxR);
-  tr = Math.min(tr, maxR);
-  br = Math.min(br, maxR);
-  bl = Math.min(bl, maxR);
-  return [
-    `M${n(x + tl)},${n(y)}`,
-    `H${n(x + w - tr)}`,
-    tr ? `A${n(tr)},${n(tr)} 0 0 1 ${n(x + w)},${n(y + tr)}` : '',
-    `V${n(y + h - br)}`,
-    br ? `A${n(br)},${n(br)} 0 0 1 ${n(x + w - br)},${n(y + h)}` : '',
-    `H${n(x + bl)}`,
-    bl ? `A${n(bl)},${n(bl)} 0 0 1 ${n(x)},${n(y + h - bl)}` : '',
-    `V${n(y + tl)}`,
-    tl ? `A${n(tl)},${n(tl)} 0 0 1 ${n(x + tl)},${n(y)}` : '',
-    'Z',
-  ]
-    .filter(Boolean)
-    .join(' ');
-}
-
-const uniformRadii = (r: CornerRadii) => r[0] === r[1] && r[1] === r[2] && r[2] === r[3];
-const noRadii = (r: CornerRadii) => r[0] === 0 && r[1] === 0 && r[2] === 0 && r[3] === 0;
-
-class Defs {
-  private items = new Map<string, string>();
-  private seq = 0;
-  add(content: string): string {
-    const existing = this.items.get(content);
-    if (existing) return existing;
-    const id = 'd' + this.seq++;
-    this.items.set(content, id);
-    return id;
-  }
-  render(): string {
-    if (this.items.size === 0) return '';
-    const body = Array.from(this.items.entries())
-      .map(([content, id]) => content.replace('{ID}', id))
-      .join('');
-    return `<defs>${body}</defs>`;
-  }
-}
-
-function clipId(defs: Defs, clip: Clip): string {
-  const inner = noRadii(clip.radii)
-    ? `<rect x="${n(clip.x)}" y="${n(clip.y)}" width="${n(clip.width)}" height="${n(clip.height)}"/>`
-    : `<path d="${roundedRectPath(clip.x, clip.y, clip.width, clip.height, clip.radii)}"/>`;
-  return defs.add(`<clipPath id="{ID}">${inner}</clipPath>`);
-}
-
-function shadowFilterId(defs: Defs, blur: number): string {
-  const std = n(blur / 2);
-  return defs.add(
-    `<filter id="{ID}" x="-50%" y="-50%" width="200%" height="200%">` +
-      `<feGaussianBlur stdDeviation="${std}"/></filter>`,
-  );
-}
-
-// CSS box-shadow is always drawn OUTSIDE the element's border box (the element
-// acts as a "cutout"). We replicate this with an SVG mask: white everywhere
-// (show shadow), but black inside the element box (hide shadow).
-function shadowMaskId(
-  defs: Defs,
-  rect: { x: number; y: number; width: number; height: number },
-  radii: CornerRadii,
-): string {
-  const innerPath = noRadii(radii)
-    ? `M${n(rect.x)},${n(rect.y)} H${n(rect.x + rect.width)} V${n(rect.y + rect.height)} H${n(rect.x)} Z`
-    : roundedRectPath(rect.x, rect.y, rect.width, rect.height, radii);
-  // Large white rect (show everything), then black path inside element box (hide shadow there).
-  return defs.add(
-    `<mask id="{ID}" maskContentUnits="userSpaceOnUse">` +
-      `<rect x="-9999" y="-9999" width="99999" height="99999" fill="white"/>` +
-      `<path d="${innerPath}" fill="black"/>` +
-      `</mask>`,
-  );
-}
+import { n, esc, uniformRadii, noRadii, roundedRectPath } from './primitives.js';
+import { Defs, clipId, shadowFilterId, shadowMaskId, gradientId } from './defs.js';
 
 function emitBox(node: BoxNode, defs: Defs): string {
   const { rect, radii } = node;
@@ -170,43 +82,6 @@ function fillShape(
     )}" rx="${n(radii[0])}" fill="${fill}"/>`;
   }
   return `<path d="${roundedRectPath(rect.x, rect.y, rect.width, rect.height, radii)}" fill="${fill}"/>`;
-}
-
-function splitColor(c: string): { color: string; opacity: string } {
-  const m = c.match(/rgba?\(\s*([\d.]+)[,\s]+([\d.]+)[,\s]+([\d.]+)(?:[,/\s]+([\d.]+))?\s*\)/i);
-  if (m && m[4] !== undefined && parseFloat(m[4]) < 1) {
-    return { color: `rgb(${m[1]}, ${m[2]}, ${m[3]})`, opacity: m[4] };
-  }
-  return { color: c, opacity: '1' };
-}
-
-function gradientId(
-  defs: Defs,
-  g: LinearGradientFill,
-  rect: { x: number; y: number; width: number; height: number },
-): string {
-  // CSS 0deg = to top; direction vector in screen coords (y down) = (sinθ, -cosθ)
-  const dx = Math.sin((g.angle * Math.PI) / 180);
-  const dy = -Math.cos((g.angle * Math.PI) / 180);
-  const cx = rect.x + rect.width / 2;
-  const cy = rect.y + rect.height / 2;
-  const len = (Math.abs(rect.width * dx) + Math.abs(rect.height * dy)) / 2;
-  const x1 = cx - dx * len;
-  const y1 = cy - dy * len;
-  const x2 = cx + dx * len;
-  const y2 = cy + dy * len;
-  const stops = g.stops
-    .map((s) => {
-      const { color, opacity } = splitColor(s.color);
-      const op = opacity !== '1' ? ` stop-opacity="${opacity}"` : '';
-      return `<stop offset="${n(s.offset * 100)}%" stop-color="${esc(color)}"${op}/>`;
-    })
-    .join('');
-  return defs.add(
-    `<linearGradient id="{ID}" gradientUnits="userSpaceOnUse" x1="${n(x1)}" y1="${n(y1)}" x2="${n(
-      x2,
-    )}" y2="${n(y2)}">${stops}</linearGradient>`,
-  );
 }
 
 function dash(style: string, w: number): string {
