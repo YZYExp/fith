@@ -476,6 +476,30 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
     });
   };
 
+  // Bucket each character of a text node into visual lines, keyed by rounded top,
+  // recording every character's left x. Shared by glyph-outline capture (needs the
+  // exact per-glyph xs) and the multi-line fallback (needs the leftmost x). Returns
+  // buckets sorted top→bottom; each bucket always has ≥1 char.
+  const bucketCharsByLine = (child: ChildNode, raw: string) => {
+    const buckets = new Map<number, { chars: string[]; xs: number[]; top: number; height: number }>();
+    for (let i = 0; i < raw.length; i++) {
+      const cr = document.createRange();
+      cr.setStart(child, i);
+      cr.setEnd(child, i + 1);
+      const rb = cr.getBoundingClientRect();
+      if (rb.width === 0 && rb.height === 0) continue;
+      const key = Math.round(rb.top);
+      let b = buckets.get(key);
+      if (!b) {
+        b = { chars: [], xs: [], top: rb.top, height: rb.height };
+        buckets.set(key, b);
+      }
+      b.chars.push(raw[i]);
+      b.xs.push(rb.left);
+    }
+    return Array.from(buckets.values()).sort((a, c) => a.top - c.top);
+  };
+
   const captureText = (el: Element, cs: CSSStyleDeclaration, clip: Clip | null, opacity: number) => {
     const fontSize = num(cs.fontSize);
     if (fontSize <= 0) return;
@@ -512,24 +536,7 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
       if (collectGlyphX) {
         // capture each glyph's exact x so outline mode matches the browser's
         // shaping (kerning/hinting) instead of accumulating advance-width drift
-        const buckets = new Map<number, { chars: string[]; xs: number[]; top: number; height: number }>();
-        for (let i = 0; i < raw.length; i++) {
-          const cr = document.createRange();
-          cr.setStart(child, i);
-          cr.setEnd(child, i + 1);
-          const rb = cr.getBoundingClientRect();
-          if (rb.width === 0 && rb.height === 0) continue;
-          const key = Math.round(rb.top);
-          let b = buckets.get(key);
-          if (!b) {
-            b = { chars: [], xs: [], top: rb.top, height: rb.height };
-            buckets.set(key, b);
-          }
-          b.chars.push(raw[i]);
-          b.xs.push(rb.left);
-        }
-        for (const b of Array.from(buckets.values()).sort((a, c) => a.top - c.top)) {
-          if (b.chars.length === 0) continue;
+        for (const b of bucketCharsByLine(child, raw)) {
           const baseline = b.top + (b.height - (ascent + descent)) / 2 + ascent;
           lines.push({ text: xform(b.chars.join('')), x: b.xs[0], baseline, glyphX: b.xs });
         }
@@ -561,28 +568,12 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
         lines.push({ text, x: r.left, baseline });
       } else {
         // multi-line: bucket characters to lines via per-char ranges
-        const buckets = new Map<number, { chars: string[]; left: number; top: number; height: number }>();
-        const len = raw.length;
-        for (let i = 0; i < len; i++) {
-          const cr = document.createRange();
-          cr.setStart(child, i);
-          cr.setEnd(child, i + 1);
-          const rb = cr.getBoundingClientRect();
-          if (rb.width === 0 && rb.height === 0) continue;
-          const key = Math.round(rb.top);
-          let b = buckets.get(key);
-          if (!b) {
-            b = { chars: [], left: rb.left, top: rb.top, height: rb.height };
-            buckets.set(key, b);
-          }
-          b.left = Math.min(b.left, rb.left);
-          b.chars.push(raw[i]);
-        }
-        for (const b of Array.from(buckets.values()).sort((a, c) => a.top - c.top)) {
+        for (const b of bucketCharsByLine(child, raw)) {
           const text = xform(b.chars.join('').replace(/\s+/g, ' ').trim());
           if (!text) continue;
+          const left = b.xs.reduce((m, v) => Math.min(m, v), Infinity);
           const baseline = b.top + (b.height - (ascent + descent)) / 2 + ascent;
-          lines.push({ text, x: b.left, baseline });
+          lines.push({ text, x: left, baseline });
         }
       }
       if (lines.length === 0) continue;
