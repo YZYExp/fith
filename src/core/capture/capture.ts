@@ -623,24 +623,31 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
     }
   };
 
-  const emitBox = (el: Element, cs: CSSStyleDeclaration, clip: Clip | null, opacity: number) => {
-    const r = el.getBoundingClientRect();
-    const fill = transparent(cs.backgroundColor) ? null : normColor(cs.backgroundColor);
+  // Build a BorderEdges object from any computed style (element or pseudo-element).
+  // Shared by emitBox and tryPseudoBox, which need the same four-edge shape.
+  const buildBorder = (s: CSSStyleDeclaration) => {
     const bw = {
-      top: num(cs.borderTopWidth),
-      right: num(cs.borderRightWidth),
-      bottom: num(cs.borderBottomWidth),
-      left: num(cs.borderLeftWidth),
+      top: num(s.borderTopWidth),
+      right: num(s.borderRightWidth),
+      bottom: num(s.borderBottomWidth),
+      left: num(s.borderLeftWidth),
     };
     const hasBorder = bw.top + bw.right + bw.bottom + bw.left > 0;
     const border = hasBorder
       ? {
-          top: { width: bw.top, color: normColor(cs.borderTopColor), style: cs.borderTopStyle },
-          right: { width: bw.right, color: normColor(cs.borderRightColor), style: cs.borderRightStyle },
-          bottom: { width: bw.bottom, color: normColor(cs.borderBottomColor), style: cs.borderBottomStyle },
-          left: { width: bw.left, color: normColor(cs.borderLeftColor), style: cs.borderLeftStyle },
+          top: { width: bw.top, color: normColor(s.borderTopColor), style: s.borderTopStyle },
+          right: { width: bw.right, color: normColor(s.borderRightColor), style: s.borderRightStyle },
+          bottom: { width: bw.bottom, color: normColor(s.borderBottomColor), style: s.borderBottomStyle },
+          left: { width: bw.left, color: normColor(s.borderLeftColor), style: s.borderLeftStyle },
         }
       : null;
+    return { hasBorder, border };
+  };
+
+  const emitBox = (el: Element, cs: CSSStyleDeclaration, clip: Clip | null, opacity: number) => {
+    const r = el.getBoundingClientRect();
+    const fill = transparent(cs.backgroundColor) ? null : normColor(cs.backgroundColor);
+    const { border } = buildBorder(cs);
     const shadows = parseShadows(cs.boxShadow);
     const gradient =
       cs.backgroundImage && cs.backgroundImage !== 'none' ? parseFirstLinearGradient(cs.backgroundImage) : null;
@@ -711,25 +718,13 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
       ps.backgroundImage && ps.backgroundImage !== 'none' ? parseFirstLinearGradient(ps.backgroundImage) : null;
     if (ps.backgroundImage && ps.backgroundImage !== 'none' && !gradient) return { handled: false }; // url()/radial/conic
     if (ps.boxShadow && ps.boxShadow.includes('inset')) return { handled: false };
-    const bw = {
-      top: num(ps.borderTopWidth), right: num(ps.borderRightWidth),
-      bottom: num(ps.borderBottomWidth), left: num(ps.borderLeftWidth),
-    };
-    const hasBorder = bw.top + bw.right + bw.bottom + bw.left > 0;
+    const { hasBorder, border } = buildBorder(ps);
     if (hasBorder) {
       for (const st of [ps.borderTopStyle, ps.borderRightStyle, ps.borderBottomStyle, ps.borderLeftStyle])
         if (st === 'double' || st === 'groove' || st === 'ridge' || st === 'inset' || st === 'outset')
           return { handled: false };
     }
     const fill = transparent(ps.backgroundColor) ? null : normColor(ps.backgroundColor);
-    const border = hasBorder
-      ? {
-          top: { width: bw.top, color: normColor(ps.borderTopColor), style: ps.borderTopStyle },
-          right: { width: bw.right, color: normColor(ps.borderRightColor), style: ps.borderRightStyle },
-          bottom: { width: bw.bottom, color: normColor(ps.borderBottomColor), style: ps.borderBottomStyle },
-          left: { width: bw.left, color: normColor(ps.borderLeftColor), style: ps.borderLeftStyle },
-        }
-      : null;
     const shadows = parseShadows(ps.boxShadow);
     if (!fill && !gradient && !border && shadows.length === 0) return { handled: true }; // nothing to draw
 
