@@ -143,22 +143,31 @@ pnpm validate ./some.html mypage 800 600 outline
 
 产物统一写到 `test/visual/__out__/<name>.{svg,expected,actual,diff}.png`，可直接肉眼比对。
 实现上：`scripts/validate.ts` 是核心 harness（含静态服务 `serveDir`），`scripts/validate-example.ts`
-在其上封装示例的构建 / serve / 退出码。
+在其上封装示例的构建 / serve / 退出码。另有开发用脚本：`scripts/screenshot-realworld.ts`
+（真实站点 live vs SVG 并排截图）、`scripts/verify-extension.ts`（真实加载扩展的下载冒烟）。
 
-```bash
-pnpm install
-pnpm exec playwright install chromium    # 浏览器（运行时/验证都需要）
-pnpm build
-pnpm test
-```
+**CI（GitHub Actions，`.github/workflows/ci.yml`）**：每次 push / PR 跑 build + 扩展
+bundle + 全部测试；扩展完整 E2E（需可加载扩展的 Chromium）仅在 push 时运行。
 
-> **沙箱说明**：本仓库的开发环境屏蔽了 Playwright 的浏览器 CDN，因此用
-> `@sparticuz/chromium`（经 npm 分发的 Chromium 二进制）作为浏览器源。正常环境用
-> `pnpm exec playwright install chromium` 即可，运行时不依赖 `@sparticuz/chromium`。
+> **沙箱说明**：本仓库的开发环境屏蔽了 Playwright 的浏览器 CDN，因此开发脚本支持用
+> `@sparticuz/chromium`（经 npm 分发的 Chromium 二进制）作为浏览器源（或设
+> `CHROMIUM_PATH`）。正常环境用 `pnpm exec playwright install chromium` 即可，
+> 运行时不依赖 `@sparticuz/chromium`。
 
 ## 状态
 
-已实现 M1–M8 的核心：纯 DOM 捕获、层叠 paint order、盒子/边框/圆角/阴影、逐行文本、
-线性渐变、内联 SVG 图标向量化、图片内联、overflow/圆角裁剪、不透明度、字体三模式
-（embed / outline / none）、子树捕获、栅格回退（变换旋转 / 滤镜 / 表单控件 / canvas 等），
-以及 Node / 页内库 / MV3 扩展三种后端。设计与里程碑见 **[DESIGN.md](./DESIGN.md)**。
+M1–M8 核心已落地，三种后端（Node / 页内库 / MV3 扩展）共用同一捕获核心。
+
+**向量化覆盖**：盒子背景 / 统一与异色边框 / 圆角 / 外阴影（含 spread + 高斯模糊）/
+outline 描边 / 线性渐变 / 逐行文本（letter/word-spacing、text-decoration、
+text-transform、text-overflow:ellipsis、background-clip:text 渐变文字、列表 ::marker）/
+内联 SVG 图标（重复图标 defs+use 去重）/ 图片内联（object-fit）/ 装饰性
+::before/::after / overflow 与圆角裁剪 / 不透明度 / 2D transform /
+现代颜色函数（oklch/oklab/lab/…→sRGB）/ shadow DOM、display:contents、
+content-visibility / 滚动容器内容展开（unfurl）。
+
+**栅格回退**（向量无法忠实表达时局部截图兜底）：conic/radial/多层渐变、inset 阴影、
+`filter` / `backdrop-filter` / `mix-blend-mode` / `mask` / `clip-path`、3D 或旋转/斜切
+transform、表单控件、canvas / video / iframe、closed shadow DOM、CORS 不可读图片。
+
+设计与里程碑见 **[DESIGN.md](./DESIGN.md)**，实施现状详见其 §12。

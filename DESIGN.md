@@ -136,27 +136,32 @@ interface CaptureBackend {
 
 ## 4. 元素转换策略
 
-| HTML/CSS 特性 | SVG 表达 | 说明 |
+（下表已按**实际实现**更新；规划期设想但实测后改走栅格回退的项已标注。）
+
+| HTML/CSS 特性 | 实际 SVG 表达 | 说明 |
 |---|---|---|
 | 块/行盒背景色 | `<rect>` | 圆角→ `rx/ry`，不规则圆角→ `<path>` |
-| `background-image` | `<image>` 或 `<pattern>` | repeat → `<pattern>`；单图按 `background-position/size` 定位 |
-| 边框（四边同色） | `<rect>` + `stroke` | |
-| 边框（四边异色/异宽） | 4 条 `<path>` | SVG 单一 stroke 无法表达异色，需逐边路径 + 斜接处理 |
-| `border-radius` | `<path>`(圆角矩形) / `clipPath` | |
-| `box-shadow` | `<filter>` feDropShadow / feGaussianBlur+feOffset | inset 阴影用 clip+filter 组合 |
-| 文本 | `<text>` 逐行 | 见 §5，最难点 |
-| `<img>` / `<canvas>` | `<image>` base64 | canvas 用 `toDataURL` |
-| 内联 `<svg>` | 直接搬运节点 | 已是 SVG，原样嵌入 |
-| linear/radial gradient | `<linearGradient>` / `<radialGradient>` | 角度/坐标做数学换算 |
-| `conic-gradient` | 栅格回退 或 多扇形近似 | SVG 无原生 conic |
-| `transform` | `transform="matrix(...)"` | 2D 直接；3D 取投影后矩阵 |
-| `opacity` | `opacity` 属性 | |
-| `overflow:hidden/clip` | `clipPath` | |
-| `clip-path` | `clipPath`（多数语法可直译） | |
-| `filter`(blur/drop-shadow…) | `<filter>` | 复杂滤镜回退栅格 |
-| `mix-blend-mode` | `feBlend` / 栅格回退 | 合成语义不完全一致时回退 |
-| 伪元素 `::before/::after` | 作为独立 Paint 节点 | 通过 `getComputedStyle(el,'::before')` 捕获 |
-| 表单控件 | 栅格回退 | 原生控件外观依赖 OS 主题，截图最稳 |
+| `background-image: url()` / repeat | **栅格回退** | 规划的 `<pattern>` 未做——收益低、定位语义复杂 |
+| 边框（四边同色同宽） | `<rect>`/`<path>` + `stroke` | solid / dashed / dotted |
+| 边框（四边异色/异宽） | 逐边 `<rect>` 填充 | double / groove / ridge → 栅格回退 |
+| `border-radius` | `<path>`(圆角矩形) / `clipPath` | 逐角半径 |
+| `box-shadow`（外阴影） | 高斯模糊 filter + mask 防内渗 | **inset 阴影 → 栅格回退** |
+| `outline` | 外扩 `stroke`（含 offset、dash） | |
+| 文本 | `<text>` 逐行 | 见 §5；含 decoration / transform / ellipsis / 渐变文字 / ::marker |
+| `<img>` | `<image>` base64 | object-fit → preserveAspectRatio；CORS 读不到 → 栅格回退 |
+| `<canvas>` / `<video>` / `<iframe>` | **栅格回退** | |
+| 内联 `<svg>` | 直接搬运节点 | 计算样式内联、currentColor 解析；重复图标 symbol+use 去重 |
+| `linear-gradient` | `<linearGradient>` | 单层、百分比 stop、不透明 stop；其余 → 栅格回退 |
+| `radial-` / `conic-gradient` | **栅格回退** | SVG 无原生 conic；radial 未向量化 |
+| `transform` | `matrix(...)`（仅 2D 平移/缩放） | 旋转 / 斜切 / 3D → **栅格回退** |
+| `opacity` | `opacity` 属性（累积） | |
+| `overflow:hidden/clip/scroll/auto` | `clipPath` | 可选 unfurl 展开滚动内容（§6） |
+| `clip-path` | **栅格回退** | 规划的直译未做 |
+| `filter` / `backdrop-filter` / `mask` | **栅格回退** | |
+| `mix-blend-mode`（非 normal） | **栅格回退** | 规划的 feBlend 未做 |
+| 伪元素 `::before/::after` | 装饰性（空 content + 绝对定位）→ 向量盒 | 其余 → 栅格回退（`tryPseudoBox`） |
+| 表单控件 | **栅格回退** | 原生控件外观依赖 OS 主题，截图最稳 |
+| closed shadow DOM 自定义元素 | **栅格回退** | open shadow root 正常向量化 |
 
 ---
 
@@ -182,17 +187,24 @@ interface CaptureBackend {
 
 向量做不到 100% 的特性，用**局部栅格化**兜底：把该元素/子树按 `devicePixelRatio` 截高清图，作为 `<image>` 放到 IR 中它原本的绘制位置和尺寸。
 
-**截图能力由后端注入**（见 §3 `CaptureBackend.rasterize`），core 不直接调用任何环境 API：
-- Node 后端：Playwright/Puppeteer `element.screenshot()` 或 CDP clip 截图。
-- 插件后端：`chrome.tabs.captureVisibleTab`（仅可视区，必要时滚动拼接）。
-- 页内库后端：**无截图能力** → 自动降级 `fallback:'none'`。
+**截图能力由后端注入**（见 §3 `CaptureBackend.rasterize`），core 不直接调用任何环境 API。
+实现方式：capture 把待回退区域记入 `Scene.rasterTargets`（带 id + 文档坐标），由后端逐区填充：
+- Node 后端：`page.screenshot({ clip })` 截取每个区域，base64 内联。
+- 插件后端：可视区走 `captureVisibleTab` 裁剪；整页走可选 `debugger` 权限的
+  `Page.captureScreenshot`（`captureBeyondViewport`）。**从不滚动拼接**（见 §11）。
+- 页内库后端：默认无截图能力 → 回退区域省略；调用方可注入 `rasterize` 选项补上。
 
-回退触发条件（`core/fallback/detector.ts`）：
-- `conic-gradient`、复杂 `filter`/`backdrop-filter`、不可直译的 `mix-blend-mode`；
-- 原生表单控件、`<video>`、插件内容；
-- 任何被标记为 "向量化误差超阈值" 的子树。
+回退触发条件（capture 内联判定，每个 `RasterNode` 带 `reason` 字段便于排查）：
+- 多层/radial/conic/含透明 stop 的渐变、`background-image: url()`、inset 阴影、
+  double/groove/ridge 边框；
+- `filter` / `backdrop-filter` / `mask` / `clip-path`、非 normal 的 `mix-blend-mode`、
+  旋转/斜切/3D transform；
+- 原生表单控件、`<canvas>` / `<video>` / `<iframe>` / `<object>`、closed shadow DOM、
+  CORS 读不到的图片；
+- 非装饰性的 `::before/::after`（装饰性的由 `tryPseudoBox` 向量化）。
 
-回退是**可配置的**：`fallback: 'raster' | 'none'`。`none` 模式（或后端无截图能力时）遇到不可表达特性记录 warning 并尽力近似，适合追求纯向量、或纯页内运行的场景。
+回退不是显式开关：后端提供 `rasterize` 能力即启用，缺席即跳过（区域省略、其余尽力向量）。
+另有两个全局兜底选项：`guaranteeFloor`（整页截图垫底）与 `diffPatch`（生成后差分打补丁），见 §8。
 
 ---
 
@@ -280,7 +292,7 @@ const { svg } = await captureCurrentPage({ fontMode: 'outline' });
 
 语料库 `test/fixtures/` 按特性分目录（boxes / text / gradients / shadows / transforms / clipping / real-world …），CI 全量跑 diff。**新特性必须先有 fixture。**
 
-**paint order 校验（Node-only oracle）**：对每个 fixture，用 CDP `DOMSnapshot.captureSnapshot({includePaintOrder:true})` 取 Chrome 的官方绘制顺序，与我们自实现的 `core/capture/paint-order.ts` 输出逐节点比对。这把"自实现排序"的正确性钉死在 Chrome 行为上，且只在测试期用 CDP、运行期完全不依赖。
+**paint order 校验（Node-only oracle，规划项·未实现）**：排序正确性目前由逐像素视觉回归间接钉死（见 §3 偏差说明）。原设想：对每个 fixture，用 CDP `DOMSnapshot.captureSnapshot({includePaintOrder:true})` 取 Chrome 的官方绘制顺序，与我们自实现的 `core/capture/paint-order.ts` 输出逐节点比对。这把"自实现排序"的正确性钉死在 Chrome 行为上，且只在测试期用 CDP、运行期完全不依赖。
 
 ---
 
@@ -304,7 +316,7 @@ const { svg } = await captureCurrentPage({ fontMode: 'outline' });
 
 M1–M8 的核心已落地并通过端到端验证：
 
-- **捕获**（`src/core/capture/capture.ts`，纯 DOM、可注入）：DOM 遍历、层叠 paint order（positioned + z-index 分组）、逐行文本（`Range.getClientRects` + canvas 字体度量推算基线、可选逐字形 x）、overflow/圆角裁剪栈、累积不透明度、单层 linear-gradient 解析、内联 `<svg>` 转写、`@font-face` 收集与 base64 内联、栅格回退判定。
+- **捕获**（`src/core/capture/capture.ts`，纯 DOM、可注入）：DOM 遍历（含 open shadow DOM、`display:contents`、`content-visibility` 重置）、层叠 paint order（positioned + z-index 分组）、逐行文本（`Range.getClientRects` + canvas 字体度量推算基线、可选逐字形 x、text-decoration / text-transform / text-overflow:ellipsis / background-clip:text 渐变文字 / 列表 `::marker`）、装饰性 `::before/::after` 向量化（`tryPseudoBox`）、overflow/圆角裁剪栈与可选滚动内容展开（`captureScrollableContent`）、累积不透明度、单层 linear-gradient 解析、现代颜色函数归一（oklch/oklab/…→sRGB）、内联 `<svg>` 转写、`@font-face` 收集与 base64 内联、栅格回退判定（`RasterNode.reason` 可溯源）。
 - **发射**（`src/core/emit/svg.ts`，纯函数）：盒子背景、统一/异色边框、圆角（rx 或 path）、外阴影（高斯模糊 filter）、线性渐变 `<linearGradient>`、逐行 `<text>` 或字形轮廓 `<path>`、`<image>` 内联、内联 SVG 图标 defs+use 去重、clipPath/渐变/filter 去重、`@font-face <style>`。
 - **字体**：`embed`（base64 内联 @font-face）/ `outline`（opentype.js 字形轮廓化，Node 经 fontconfig 解析系统字体）/ `none` 三种模式。
 - **后端**：Node（`backends/node`，Playwright + 截图回退 + 系统字体）、浏览器/页内库（`backends/browser`，纯 DOM + 共享的非滚动 `createViewportRasterizer`）、MV3 插件（`backends/extension`，content script + service worker；**从不滚动页面**，可视区走 `captureVisibleTab`，整页栅格走可选 `debugger` 权限的 `Page.captureScreenshot`）。
