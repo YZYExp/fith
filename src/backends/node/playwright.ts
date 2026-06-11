@@ -45,7 +45,7 @@ export interface RenderOptions {
 
 export type RenderInput = { html: string } | { url: string } | { page: Page };
 
-async function withinViewport(page: Page, width: number, height: number | undefined, dsr: number) {
+async function withinViewport(page: Page, width: number, height: number | undefined) {
   await page.setViewportSize({ width, height: height || 800 });
   await page.evaluate(async () => {
     if (document.fonts) await document.fonts.ready;
@@ -124,7 +124,7 @@ async function applyDiffPatch(
 
 async function captureAndEmit(page: Page, opts: RenderOptions): Promise<string> {
   const dsr = opts.deviceScaleFactor || 1;
-  await withinViewport(page, opts.width, opts.height, dsr);
+  await withinViewport(page, opts.width, opts.height);
   if (opts.settleMs) await page.waitForTimeout(opts.settleMs);
 
   // Dev transpilers (tsx/esbuild keepNames) reference a `__name` helper inside

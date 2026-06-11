@@ -150,10 +150,10 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
       angle = sideToAngle[first];
       i = 1;
     } else if (/(rad|turn|grad)$/.test(first)) {
-      const num = parseFloat(first);
-      if (/turn$/.test(first)) angle = num * 360;
-      else if (/grad$/.test(first)) angle = num * 0.9;
-      else angle = (num * 180) / Math.PI;
+      const angleNum = parseFloat(first);
+      if (/turn$/.test(first)) angle = angleNum * 360;
+      else if (/grad$/.test(first)) angle = angleNum * 0.9;
+      else angle = (angleNum * 180) / Math.PI;
       i = 1;
     }
 
