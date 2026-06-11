@@ -39,7 +39,11 @@ await htmlToSvg({ url: 'https://example.com' }, { width: 1280, height: 720 });
 | `height` | 内容高度 | 视口高；省略则按整页高度 |
 | `deviceScaleFactor` | `1` | 栅格回退/图片清晰度 |
 | `fontMode` | `embed` | `embed` 内联字体 / `outline` 字形转 `<path>` / `none` 仅引用字体名 |
+| `settleMs` | `0` | 加载完成后额外等待（ms），给迟到的布局/字体留时间 |
+| `guaranteeFloor` | `false` | 把整页截图作为 `<image>` 底层内嵌（z-order 0），向量盖在其上 —— 视觉保真有了「地板」，代价是体积 +150–800 KB |
+| `diffPatch` | `false` | 生成后做一次差分校正：把 SVG 渲染回 Chromium 与原页逐像素对比，差异区域用截图打补丁；多一次页面加载 |
 | `executablePath` | Playwright 自带 | 指定 Chromium 路径 |
+| `launchArgs` | `[]` | 传给 Chromium 的额外启动参数 |
 
 ### 2. CLI
 
@@ -49,6 +53,7 @@ pnpm build            # 先编译，生成 dist/backends/node/cli.js（bin: fitt
 # 通过 bin 运行（pnpm link --global 或安装后）：
 fitting-html input.html -o out.svg --width 1280 --scale 2 --font-mode outline
 fitting-html https://example.com -o out.svg
+# 环境变量 CHROMIUM_PATH 可指定 Chromium 可执行文件路径
 
 # 或开发期直接跑脚本（用仓库自带的 Chromium 源）：
 pnpm render input.html out.svg 1280
@@ -65,6 +70,12 @@ const pageSvg = await captureCurrentPage({ fontMode: 'embed' });
 const elSvg = await captureElement(document.querySelector('.card')!); // 裁剪到该元素
 ```
 
+进阶选项（扩展即基于这些注入点构建）：
+
+- `viewportOnly: true` —— 只捕获当前可视区（坐标视口相对、不重置滚动），视口外内容裁掉；默认整页。
+- `rasterize: (rect, scale) => Promise<dataURI | null>` —— 注入截图能力供栅格回退（canvas/视频/滤镜/表单控件等）；纯页内无法截图，省略时这些区域被跳过。
+- `outline: Outliner` —— `outline` 字体模式所需的字形轮廓器（`createOutliner`），由调用方传入以免 opentype.js 进默认 bundle。
+
 ### 4. Chrome 扩展（MV3）
 
 ```bash
@@ -74,13 +85,18 @@ pnpm build:extension   # 打包到 dist/extension/
 在 `chrome://extensions` 打开「开发者模式」→「加载已解压的扩展程序」→ 选择 `dist/extension/`，然后：
 
 - **点击工具栏图标弹出面板**，可选择：
+  - **捕获范围**：「可视区域」（默认，仅当前视口）/「整页」（完整文档）；
   - **输出方式**：下载 + 预览 / 仅下载 / 仅预览（即「是否自动下载」）；
   - **字体模式**：embed（可选中文本）/ outline（字形路径）/ 仅引用字体名；
-  - **「整页」** 按钮转换整页；**「选择元素」** 按钮进入 inspect 模式。
+  - **「Capture page」** 按钮按所选范围转换；**「Pick element」** 按钮进入 inspect 模式。
 - **inspect 模式**：鼠标悬停高亮元素，点击即转换该元素子树，`Esc` 取消。也可用 **`Alt+Shift+S`** 或右键菜单「Convert element to SVG…」直接触发。
-- 偏好（输出/字体）记忆在 `chrome.storage`；预览在打包的 `viewer.html` 新标签页中显示。
+- 偏好（范围/输出/字体）记忆在 `chrome.storage`；预览在打包的 `viewer.html` 新标签页中显示。
 - 内容脚本按需注入（`chrome.scripting`），对扩展安装前已打开的标签页也生效。
-- 栅格回退（canvas/视频/滤镜/表单控件等）由 service worker 的 `captureVisibleTab` 提供；inspect 选区裁剪由核心的子树捕获支持。
+- **扩展从不滚动页面**（滚动会触发 sticky/fixed 重定位、懒加载，破坏捕获）。栅格回退（canvas/视频/滤镜/表单控件等）：
+  - 「可视区域」：service worker 的 `captureVisibleTab` 单次截图裁剪；
+  - 「整页」：优先用可选 `debugger` 权限（弹窗按钮点击时申请，可拒绝）走
+    `chrome.debugger` 的 `Page.captureScreenshot`（`captureBeyondViewport`，一次覆盖折叠线以下）；
+    未授权则退化为当前视口裁剪，视口外栅格省略（向量部分不受影响）。
 
 > 在支持扩展的浏览器里可用 `pnpm tsx scripts/verify-extension.ts` 做端到端冒烟（无头沙箱通常不支持加载扩展）。
 
@@ -100,9 +116,12 @@ pnpm build:extension   # 打包到 dist/extension/
 保真度的唯一可信度量是**像素对比**：在同一个 Chromium 里分别渲染「原页面」和「生成的 SVG」，
 用 `pixelmatch` 逐像素求差异比例。整套方案分三层，全部固化为脚本：
 
-**1. 单元 + 视觉回归（CI，`pnpm test`）** — `test/visual/*.test.ts` + `test/fixtures/*.html`：
-发射器单测，以及 smoke / gradients / outline / 字体内嵌 / 子树捕获 / 页内后端 / **oklch 颜色** /
-**容器栅格回退（不空白）** / **text-transform** 等回归。新特性必须先加 fixture。
+**1. 单元 + 视觉回归（CI，`pnpm test`）** — `test/**/*.test.ts` + `test/fixtures/*.html`：
+发射器单测、扩展纯逻辑单测（`viewport-raster` / `shot-scheduler`）、MV3 bundle 完整性测试，
+以及 smoke / gradients / outline / 字体内嵌 / 子树捕获 / 页内后端 / 图片捕获 / **oklch 颜色** /
+**容器栅格回退（不空白）** / **text-transform** / **可见文本不丢失（结构不变量）** 等回归。
+另有两组门控测试：`EXTENSION_E2E=1`（真实加载扩展的完整 Chromium 端到端）与
+`REALWORLD_TESTS=1`（在线真实站点）。新特性必须先加 fixture。
 
 **2. 示例应用端到端（`pnpm validate:example <name>`）** — 一条命令完成「构建 → 起静态服务 →
 渲染对比 → 写产物 → 超阈值则非零退出」：
@@ -124,22 +143,31 @@ pnpm validate ./some.html mypage 800 600 outline
 
 产物统一写到 `test/visual/__out__/<name>.{svg,expected,actual,diff}.png`，可直接肉眼比对。
 实现上：`scripts/validate.ts` 是核心 harness（含静态服务 `serveDir`），`scripts/validate-example.ts`
-在其上封装示例的构建 / serve / 退出码。
+在其上封装示例的构建 / serve / 退出码。另有开发用脚本：`scripts/screenshot-realworld.ts`
+（真实站点 live vs SVG 并排截图）、`scripts/verify-extension.ts`（真实加载扩展的下载冒烟）。
 
-```bash
-pnpm install
-pnpm exec playwright install chromium    # 浏览器（运行时/验证都需要）
-pnpm build
-pnpm test
-```
+**CI（GitHub Actions，`.github/workflows/ci.yml`）**：每次 push / PR 跑 build + 扩展
+bundle + 全部测试；扩展完整 E2E（需可加载扩展的 Chromium）仅在 push 时运行。
 
-> **沙箱说明**：本仓库的开发环境屏蔽了 Playwright 的浏览器 CDN，因此用
-> `@sparticuz/chromium`（经 npm 分发的 Chromium 二进制）作为浏览器源。正常环境用
-> `pnpm exec playwright install chromium` 即可，运行时不依赖 `@sparticuz/chromium`。
+> **沙箱说明**：本仓库的开发环境屏蔽了 Playwright 的浏览器 CDN，因此开发脚本支持用
+> `@sparticuz/chromium`（经 npm 分发的 Chromium 二进制）作为浏览器源（或设
+> `CHROMIUM_PATH`）。正常环境用 `pnpm exec playwright install chromium` 即可，
+> 运行时不依赖 `@sparticuz/chromium`。
 
 ## 状态
 
-已实现 M1–M8 的核心：纯 DOM 捕获、层叠 paint order、盒子/边框/圆角/阴影、逐行文本、
-线性渐变、内联 SVG 图标向量化、图片内联、overflow/圆角裁剪、不透明度、字体三模式
-（embed / outline / none）、子树捕获、栅格回退（变换旋转 / 滤镜 / 表单控件 / canvas 等），
-以及 Node / 页内库 / MV3 扩展三种后端。设计与里程碑见 **[DESIGN.md](./DESIGN.md)**。
+M1–M8 核心已落地，三种后端（Node / 页内库 / MV3 扩展）共用同一捕获核心。
+
+**向量化覆盖**：盒子背景 / 统一与异色边框 / 圆角 / 外阴影（含 spread + 高斯模糊）/
+outline 描边 / 线性渐变 / 逐行文本（letter/word-spacing、text-decoration、
+text-transform、text-overflow:ellipsis、background-clip:text 渐变文字、列表 ::marker）/
+内联 SVG 图标（重复图标 defs+use 去重）/ 图片内联（object-fit）/ 装饰性
+::before/::after / overflow 与圆角裁剪 / 不透明度 / 2D transform /
+现代颜色函数（oklch/oklab/lab/…→sRGB）/ shadow DOM、display:contents、
+content-visibility / 滚动容器内容展开（unfurl）。
+
+**栅格回退**（向量无法忠实表达时局部截图兜底）：conic/radial/多层渐变、inset 阴影、
+`filter` / `backdrop-filter` / `mix-blend-mode` / `mask` / `clip-path`、3D 或旋转/斜切
+transform、表单控件、canvas / video / iframe、closed shadow DOM、CORS 不可读图片。
+
+设计与里程碑见 **[DESIGN.md](./DESIGN.md)**，实施现状详见其 §12。

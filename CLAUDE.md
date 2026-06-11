@@ -27,17 +27,25 @@ The core is a two-phase pipeline:
 
 ## Commands
 
+The project uses **pnpm** (`packageManager` field; CI uses pnpm too).
+
 ```bash
-npm run build    # TypeScript compile (tsc)
-npm test         # Vitest — all visual + unit tests
+pnpm build            # TypeScript compile (tsc)
+pnpm build:extension  # esbuild MV3 bundle → dist/extension/
+pnpm test             # Vitest — all visual + unit tests
+pnpm validate <url|file> [name] [w] [h] [fontMode]   # ad-hoc pixel-diff of any page
+pnpm validate:example <antd-app|mui-app>             # build + serve + pixel-diff an example
 ```
+
+CI (`.github/workflows/ci.yml`) runs build + extension bundle + full test suite on
+every push/PR; the gated extension E2E job runs on pushes only.
 
 ## Acceptance Criteria
 
 **Every commit and PR must satisfy:**
 
-1. **Build passes**: `npm run build` exits 0 with no TypeScript errors.
-2. **Tests pass**: `npm test` exits 0 with all 29+ tests green.
+1. **Build passes**: `pnpm build` exits 0 with no TypeScript errors.
+2. **Tests pass**: `pnpm test` exits 0 with all tests green (50+, plus gated suites).
 
 These are hard gates. Do not merge or push to `main` if either fails.
 Fix the root cause — never skip hooks or suppress errors.

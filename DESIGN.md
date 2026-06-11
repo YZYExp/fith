@@ -78,48 +78,48 @@
 
 分层铁律：**`core/` 必须是纯 TypeScript，零 Node 依赖、零 Puppeteer/Playwright 引用**，这样才能整体打包进浏览器插件。环境差异全部隔离在 `backends/`。
 
+实际落地结构（与早期规划的差异见下方说明）：
+
 ```
 src/
   core/         ★ 纯 TS，跨环境共用，可 bundle 进插件（禁止 import 任何 node/playwright/puppeteer）
-    capture/        页内捕获（只用标准 DOM API）
-      walk.ts           遍历 DOM + getComputedStyle/getBoundingClientRect
-      paint-order.ts    自实现层叠上下文绘制排序（CDP-free）
-      text-runs.ts      Range.getClientRects 取逐行文本盒 + 基线
-      build-ir.ts       测量结果 → Scene IR
+    capture/
+      capture.ts        页内捕获：单个完全自包含的函数（DOM walk、paint order、
+                        文本行盒、渐变解析、裁剪栈、@font-face 收集、回退判定全在其内）
     ir/
       types.ts          Scene / PaintNode / 样式结构（纯类型）
     emit/         SVG 发射器：IR → SVG 字符串
-      document.ts       <svg> 骨架、viewBox、defs 管理、id 分配
-      box.ts            背景 / 边框 / 圆角 / 阴影
-      text.ts           <text> 逐行发射 / 字形轮廓化
-      image.ts          <image> 内联
-      gradient.ts       CSS 渐变 → SVG 渐变 defs
-      clip.ts / transform.ts
-    assets/
-      fonts.ts          @font-face 收集 + base64 内嵌 / opentype.js 轮廓化（浏览器亦可用）
-      images.ts         图片/canvas → base64 data URI
-    fallback/
-      detector.ts       判定某子树是否需要栅格化
-    optimize/         defs 去重、路径精简、可选 minify
-    backend.ts        ★ CaptureBackend 接口（注入"加载/截图"等环境能力）
+      svg.ts            主入口：骨架、viewBox、按 IR 顺序发射
+      primitives.ts     盒子 / 边框 / 文本 / 图片等基元
+      defs.ts           clipPath / 渐变 / filter / 内联 SVG 图标的 defs 管理与去重
+      outline.ts        opentype.js 字形轮廓化（Outliner，浏览器/Node 通用）
+    backend.ts        ★ CaptureBackend 接口（run 注入执行 + 可选 rasterize 截图能力）
 
   backends/     ★ 环境适配（各自只在对应形态打包）
     node/
-      playwright.ts     默认：启动 Chromium、注入 core 捕获脚本、截图回退
-      puppeteer.ts      可选替代实现（同接口）
-      cli.ts            命令行入口
-    extension/
-      content.ts        content script：直接运行 core 捕获
-      rasterize.ts      chrome.tabs.captureVisibleTab 提供截图能力
+      playwright.ts     启动 Chromium、page.evaluate 注入捕获、截图回退
+      fonts.ts          系统字体解析（fontconfig）供 outline 模式
+      diff-patch.ts     diffPatch 选项：渲染回 Chromium 比对并打栅格补丁
+      cli.ts            命令行入口（bin: fitting-html）
     browser/
-      index.ts          页内库：当前页运行 core；无截图 → fallback:'none'
+      index.ts          页内库：当前页直接运行 core；rasterize/outline 为可注入选项
+      viewport-raster.ts 共享的非滚动 createViewportRasterizer（页内 + 扩展共用）
+      raster-types.ts
+    extension/          MV3：manifest.json + popup + content script + service worker
+      content.ts        运行 core 捕获，经消息向 background 要截图
+      background.ts     captureVisibleTab / chrome.debugger 截图、下载、菜单/快捷键
+      shot-scheduler.ts 截图限速与重试调度（纯逻辑，单测覆盖）
+      messages.ts / popup.ts / viewer.ts
 
   index.ts      ★ 默认导出 = core + node 后端（npm 主入口）
-test/
-  fixtures/     HTML 语料库（按特性分类）
-  visual/       视觉回归框架（render→diff）
-  paint-order/  用 CDP paintOrders 作 oracle 校验自实现排序
+test/           布局见 CLAUDE.md（单元 + 视觉回归 + 门控 E2E）
 ```
+
+与规划的主要偏差：
+- **捕获没有拆成多文件**：`captureScene` 经 `.toString()` 序列化后 `page.evaluate` 注入，
+  必须零 import、零闭包外引用，所有 helper 都定义在函数体内 —— 这是硬约束，不是偷懒。
+- **未做 `puppeteer.ts` 备选后端**（Playwright 足够，没有需求驱动）。
+- **paint-order oracle 测试未单独成目录**：排序正确性由视觉回归（逐像素 diff）间接钉死。
 
 后端接口（概念）：core 不关心是谁、怎么提供环境能力，只面向接口编程。
 
@@ -136,27 +136,32 @@ interface CaptureBackend {
 
 ## 4. 元素转换策略
 
-| HTML/CSS 特性 | SVG 表达 | 说明 |
+（下表已按**实际实现**更新；规划期设想但实测后改走栅格回退的项已标注。）
+
+| HTML/CSS 特性 | 实际 SVG 表达 | 说明 |
 |---|---|---|
 | 块/行盒背景色 | `<rect>` | 圆角→ `rx/ry`，不规则圆角→ `<path>` |
-| `background-image` | `<image>` 或 `<pattern>` | repeat → `<pattern>`；单图按 `background-position/size` 定位 |
-| 边框（四边同色） | `<rect>` + `stroke` | |
-| 边框（四边异色/异宽） | 4 条 `<path>` | SVG 单一 stroke 无法表达异色，需逐边路径 + 斜接处理 |
-| `border-radius` | `<path>`(圆角矩形) / `clipPath` | |
-| `box-shadow` | `<filter>` feDropShadow / feGaussianBlur+feOffset | inset 阴影用 clip+filter 组合 |
-| 文本 | `<text>` 逐行 | 见 §5，最难点 |
-| `<img>` / `<canvas>` | `<image>` base64 | canvas 用 `toDataURL` |
-| 内联 `<svg>` | 直接搬运节点 | 已是 SVG，原样嵌入 |
-| linear/radial gradient | `<linearGradient>` / `<radialGradient>` | 角度/坐标做数学换算 |
-| `conic-gradient` | 栅格回退 或 多扇形近似 | SVG 无原生 conic |
-| `transform` | `transform="matrix(...)"` | 2D 直接；3D 取投影后矩阵 |
-| `opacity` | `opacity` 属性 | |
-| `overflow:hidden/clip` | `clipPath` | |
-| `clip-path` | `clipPath`（多数语法可直译） | |
-| `filter`(blur/drop-shadow…) | `<filter>` | 复杂滤镜回退栅格 |
-| `mix-blend-mode` | `feBlend` / 栅格回退 | 合成语义不完全一致时回退 |
-| 伪元素 `::before/::after` | 作为独立 Paint 节点 | 通过 `getComputedStyle(el,'::before')` 捕获 |
-| 表单控件 | 栅格回退 | 原生控件外观依赖 OS 主题，截图最稳 |
+| `background-image: url()` / repeat | **栅格回退** | 规划的 `<pattern>` 未做——收益低、定位语义复杂 |
+| 边框（四边同色同宽） | `<rect>`/`<path>` + `stroke` | solid / dashed / dotted |
+| 边框（四边异色/异宽） | 逐边 `<rect>` 填充 | double / groove / ridge → 栅格回退 |
+| `border-radius` | `<path>`(圆角矩形) / `clipPath` | 逐角半径 |
+| `box-shadow`（外阴影） | 高斯模糊 filter + mask 防内渗 | **inset 阴影 → 栅格回退** |
+| `outline` | 外扩 `stroke`（含 offset、dash） | |
+| 文本 | `<text>` 逐行 | 见 §5；含 decoration / transform / ellipsis / 渐变文字 / ::marker |
+| `<img>` | `<image>` base64 | object-fit → preserveAspectRatio；CORS 读不到 → 栅格回退 |
+| `<canvas>` / `<video>` / `<iframe>` | **栅格回退** | |
+| 内联 `<svg>` | 直接搬运节点 | 计算样式内联、currentColor 解析；重复图标 symbol+use 去重 |
+| `linear-gradient` | `<linearGradient>` | 单层、百分比 stop、不透明 stop；其余 → 栅格回退 |
+| `radial-` / `conic-gradient` | **栅格回退** | SVG 无原生 conic；radial 未向量化 |
+| `transform` | `matrix(...)`（仅 2D 平移/缩放） | 旋转 / 斜切 / 3D → **栅格回退** |
+| `opacity` | `opacity` 属性（累积） | |
+| `overflow:hidden/clip/scroll/auto` | `clipPath` | 可选 unfurl 展开滚动内容（§6） |
+| `clip-path` | **栅格回退** | 规划的直译未做 |
+| `filter` / `backdrop-filter` / `mask` | **栅格回退** | |
+| `mix-blend-mode`（非 normal） | **栅格回退** | 规划的 feBlend 未做 |
+| 伪元素 `::before/::after` | 装饰性（空 content + 绝对定位）→ 向量盒 | 其余 → 栅格回退（`tryPseudoBox`） |
+| 表单控件 | **栅格回退** | 原生控件外观依赖 OS 主题，截图最稳 |
+| closed shadow DOM 自定义元素 | **栅格回退** | open shadow root 正常向量化 |
 
 ---
 
@@ -182,17 +187,24 @@ interface CaptureBackend {
 
 向量做不到 100% 的特性，用**局部栅格化**兜底：把该元素/子树按 `devicePixelRatio` 截高清图，作为 `<image>` 放到 IR 中它原本的绘制位置和尺寸。
 
-**截图能力由后端注入**（见 §3 `CaptureBackend.rasterize`），core 不直接调用任何环境 API：
-- Node 后端：Playwright/Puppeteer `element.screenshot()` 或 CDP clip 截图。
-- 插件后端：`chrome.tabs.captureVisibleTab`（仅可视区，必要时滚动拼接）。
-- 页内库后端：**无截图能力** → 自动降级 `fallback:'none'`。
+**截图能力由后端注入**（见 §3 `CaptureBackend.rasterize`），core 不直接调用任何环境 API。
+实现方式：capture 把待回退区域记入 `Scene.rasterTargets`（带 id + 文档坐标），由后端逐区填充：
+- Node 后端：`page.screenshot({ clip })` 截取每个区域，base64 内联。
+- 插件后端：可视区走 `captureVisibleTab` 裁剪；整页走可选 `debugger` 权限的
+  `Page.captureScreenshot`（`captureBeyondViewport`）。**从不滚动拼接**（见 §11）。
+- 页内库后端：默认无截图能力 → 回退区域省略；调用方可注入 `rasterize` 选项补上。
 
-回退触发条件（`core/fallback/detector.ts`）：
-- `conic-gradient`、复杂 `filter`/`backdrop-filter`、不可直译的 `mix-blend-mode`；
-- 原生表单控件、`<video>`、插件内容；
-- 任何被标记为 "向量化误差超阈值" 的子树。
+回退触发条件（capture 内联判定，每个 `RasterNode` 带 `reason` 字段便于排查）：
+- 多层/radial/conic/含透明 stop 的渐变、`background-image: url()`、inset 阴影、
+  double/groove/ridge 边框；
+- `filter` / `backdrop-filter` / `mask` / `clip-path`、非 normal 的 `mix-blend-mode`、
+  旋转/斜切/3D transform；
+- 原生表单控件、`<canvas>` / `<video>` / `<iframe>` / `<object>`、closed shadow DOM、
+  CORS 读不到的图片；
+- 非装饰性的 `::before/::after`（装饰性的由 `tryPseudoBox` 向量化）。
 
-回退是**可配置的**：`fallback: 'raster' | 'none'`。`none` 模式（或后端无截图能力时）遇到不可表达特性记录 warning 并尽力近似，适合追求纯向量、或纯页内运行的场景。
+回退不是显式开关：后端提供 `rasterize` 能力即启用，缺席即跳过（区域省略、其余尽力向量）。
+另有两个全局兜底选项：`guaranteeFloor`（整页截图垫底）与 `diffPatch`（生成后差分打补丁），见 §8。
 
 ---
 
@@ -203,7 +215,7 @@ interface CaptureBackend {
 - **`backends/node/`**：`playwright`（默认，`playwright install chromium` 拉浏览器）。`puppeteer` 作为同接口的可选替代实现；Node 测试里用 CDP `DOMSnapshot.paintOrders` 仅作校验基准。
 - **`backends/extension/`**：Chrome Extension MV3（`scripting` / `tabs` 权限），无第三方运行时依赖。
 - **测试**：`vitest` + `pixelmatch` + `pngjs`（视觉回归）。
-- **构建**：`tsup`/`tsc` 多目标产物——npm 库（ESM+CJS）、CLI `bin`、插件 bundle（IIFE/单文件）。
+- **构建**：`tsc` 编译 npm 库（ESM）与 CLI `bin`；插件 bundle 由 `esbuild`（`scripts/build-extension.ts`）打包到 `dist/extension/`。
 
 ---
 
@@ -216,12 +228,16 @@ const svg: string = await htmlToSvg(html, {
   width: 1280,            // 视口宽（必填）
   height: 720,            // 视口高；省略则按内容高度
   deviceScaleFactor: 2,   // 栅格回退/图片的清晰度
-  fontMode: 'embed',      // 'embed' | 'outline'
-  fallback: 'raster',     // 'raster' | 'none'
-  background: '#fff',     // 透明背景可设 'transparent'
-  optimize: true,         // defs 去重 + 路径精简
+  fontMode: 'embed',      // 'embed' | 'outline' | 'none'
+  settleMs: 200,          // 加载后额外等待（迟到的布局/字体）
+  guaranteeFloor: false,  // 整页截图作底层 <image>，向量盖其上（保真地板）
+  diffPatch: false,       // 生成后渲染回 Chromium 比对，差异区打栅格补丁
 });
 ```
+
+> 规划期设想的 `fallback: 'raster' | 'none'` 没有成为显式选项：是否栅格回退由后端
+> 能力决定（`CaptureBackend.rasterize` 缺席即自动跳过）。`background` / `optimize`
+> 未实现（defs 去重已默认内建于发射器）。
 
 也支持 URL / 已有 Playwright Page 作为输入：
 
@@ -276,7 +292,7 @@ const { svg } = await captureCurrentPage({ fontMode: 'outline' });
 
 语料库 `test/fixtures/` 按特性分目录（boxes / text / gradients / shadows / transforms / clipping / real-world …），CI 全量跑 diff。**新特性必须先有 fixture。**
 
-**paint order 校验（Node-only oracle）**：对每个 fixture，用 CDP `DOMSnapshot.captureSnapshot({includePaintOrder:true})` 取 Chrome 的官方绘制顺序，与我们自实现的 `core/capture/paint-order.ts` 输出逐节点比对。这把"自实现排序"的正确性钉死在 Chrome 行为上，且只在测试期用 CDP、运行期完全不依赖。
+**paint order 校验（Node-only oracle，规划项·未实现）**：排序正确性目前由逐像素视觉回归间接钉死（见 §3 偏差说明）。原设想：对每个 fixture，用 CDP `DOMSnapshot.captureSnapshot({includePaintOrder:true})` 取 Chrome 的官方绘制顺序，与我们自实现的 `core/capture/paint-order.ts` 输出逐节点比对。这把"自实现排序"的正确性钉死在 Chrome 行为上，且只在测试期用 CDP、运行期完全不依赖。
 
 ---
 
@@ -291,7 +307,7 @@ const { svg } = await captureCurrentPage({ fontMode: 'outline' });
 | conic-gradient / 复杂合成无法向量化 | 局部栅格回退（有截图能力时默认开启）保证忠实 |
 | 字体许可证：内嵌字体可能涉及版权 | 文档提示；提供 `outline` 模式只嵌用到的字形子集，降低暴露 |
 | 插件形态：跨源字体/图片受 CORS 限制无法读取内联 | content script 经 background `fetch` 或声明 `host_permissions`；读不到时退化为字体引用/栅格回退 |
-| 插件形态：`captureVisibleTab` 仅可视区 | 需要整页时滚动分段截图拼接；或仅向量、长页不依赖截图 |
+| 插件形态：`captureVisibleTab` 仅可视区 | **从不滚动页面**（滚动破坏 sticky/lazy-load）：整页栅格走可选 `debugger` 权限的 `Page.captureScreenshot`（`captureBeyondViewport`，单次覆盖全文档）；未授权则省略视口外栅格，向量不受影响 |
 | `core/` 误引入 Node 依赖破坏插件可打包性 | 用 lint/构建规则禁止 `core/` import node 内置模块与 puppeteer/playwright（CI 守门） |
 
 ---
@@ -300,10 +316,10 @@ const { svg } = await captureCurrentPage({ fontMode: 'outline' });
 
 M1–M8 的核心已落地并通过端到端验证：
 
-- **捕获**（`src/core/capture/capture.ts`，纯 DOM、可注入）：DOM 遍历、层叠 paint order（positioned + z-index 分组）、逐行文本（`Range.getClientRects` + canvas 字体度量推算基线、可选逐字形 x）、overflow/圆角裁剪栈、累积不透明度、单层 linear-gradient 解析、内联 `<svg>` 转写、`@font-face` 收集与 base64 内联、栅格回退判定。
+- **捕获**（`src/core/capture/capture.ts`，纯 DOM、可注入）：DOM 遍历（含 open shadow DOM、`display:contents`、`content-visibility` 重置）、层叠 paint order（positioned + z-index 分组）、逐行文本（`Range.getClientRects` + canvas 字体度量推算基线、可选逐字形 x、text-decoration / text-transform / text-overflow:ellipsis / background-clip:text 渐变文字 / 列表 `::marker`）、装饰性 `::before/::after` 向量化（`tryPseudoBox`）、overflow/圆角裁剪栈与可选滚动内容展开（`captureScrollableContent`）、累积不透明度、单层 linear-gradient 解析、现代颜色函数归一（oklch/oklab/…→sRGB）、内联 `<svg>` 转写、`@font-face` 收集与 base64 内联、栅格回退判定（`RasterNode.reason` 可溯源）。
 - **发射**（`src/core/emit/svg.ts`，纯函数）：盒子背景、统一/异色边框、圆角（rx 或 path）、外阴影（高斯模糊 filter）、线性渐变 `<linearGradient>`、逐行 `<text>` 或字形轮廓 `<path>`、`<image>` 内联、内联 SVG 图标 defs+use 去重、clipPath/渐变/filter 去重、`@font-face <style>`。
 - **字体**：`embed`（base64 内联 @font-face）/ `outline`（opentype.js 字形轮廓化，Node 经 fontconfig 解析系统字体）/ `none` 三种模式。
-- **后端**：Node（`backends/node`，Playwright + 截图回退 + 系统字体）、浏览器/页内库（`backends/browser`，纯 DOM）、MV3 插件（`backends/extension`，content script + service worker 截图回退）。
-- **验证**：`examples/antd-app`（Vite+React+Antd 复杂仪表盘）端到端逐像素对比，embed **差异 < 0.01%**；`test/` 含发射器单测、视觉回归（smoke/gradients/outline）、字体内嵌、in-page 后端等共 18 项。
+- **后端**：Node（`backends/node`，Playwright + 截图回退 + 系统字体）、浏览器/页内库（`backends/browser`，纯 DOM + 共享的非滚动 `createViewportRasterizer`）、MV3 插件（`backends/extension`，content script + service worker；**从不滚动页面**，可视区走 `captureVisibleTab`，整页栅格走可选 `debugger` 权限的 `Page.captureScreenshot`）。
+- **验证**：`examples/antd-app`（Vite+React+Antd 复杂仪表盘）端到端逐像素对比，embed **差异 < 0.01%**；`examples/mui-app`（MUI Dashboard）~0.34%；`test/` 含发射器单测、扩展纯逻辑单测（viewport-raster / shot-scheduler）、MV3 bundle 完整性、视觉回归（smoke/gradients/outline/图片/子树/页内/文本不丢失等）共 50+ 项，另有门控的扩展 E2E 与真实站点测试。
 
 设计取舍：inset 阴影、conic/radial 渐变、滤镜、表单控件、canvas/video 维持栅格回退（已像素级忠实，向量化收益低/风险高）。
