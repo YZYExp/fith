@@ -7,6 +7,7 @@
  * reaches below the fold in a single shot without scrolling.
  */
 import { createShotScheduler } from './shot-scheduler.js';
+import { MAX_REGION_DEVICE_PX, DEFAULT_PREFS, PREF_KEYS } from './messages.js';
 
 // The toolbar action opens the popup (default_popup in the manifest), so there's
 // no action.onClicked here. Context menus and the keyboard command still work and
@@ -20,12 +21,12 @@ chrome.runtime.onInstalled.addListener(() => {
 async function send(tabId: number, type: 'fh:capture' | 'fh:pick') {
   try {
     await chrome.scripting.executeScript({ target: { tabId }, files: ['content.js'] });
-    const prefs = await chrome.storage.local.get(['fhOutput', 'fhFont', 'fhScope']);
+    const prefs = await chrome.storage.local.get([...PREF_KEYS]);
     await chrome.tabs.sendMessage(tabId, {
       type,
-      output: prefs.fhOutput ?? 'both',
-      fontMode: prefs.fhFont ?? 'embed',
-      scope: prefs.fhScope ?? 'viewport',
+      output: prefs.fhOutput ?? DEFAULT_PREFS.fhOutput,
+      fontMode: prefs.fhFont ?? DEFAULT_PREFS.fhFont,
+      scope: prefs.fhScope ?? DEFAULT_PREFS.fhScope,
     });
   } catch (e) {
     console.error('[fitting-html]', e);
@@ -88,11 +89,6 @@ function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
     new Promise<T>((_, reject) => setTimeout(() => reject(new Error('timeout')), ms)),
   ]);
 }
-
-// captureBeyondViewport renders the whole clip at `scale` device px; cap the
-// device-pixel area so an enormous below-the-fold region can't OOM/stall Chrome
-// (caller then falls back to a viewport crop, or omits the node).
-const MAX_REGION_DEVICE_PX = 40_000_000; // ~ 4000 × 10000
 
 /** Screenshot an exact document-coords region (CSS px) at `scale` device px/CSS px. */
 async function shootRegion(

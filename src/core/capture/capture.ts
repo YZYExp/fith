@@ -150,10 +150,10 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
       angle = sideToAngle[first];
       i = 1;
     } else if (/(rad|turn|grad)$/.test(first)) {
-      const num = parseFloat(first);
-      if (/turn$/.test(first)) angle = num * 360;
-      else if (/grad$/.test(first)) angle = num * 0.9;
-      else angle = (num * 180) / Math.PI;
+      const angleNum = parseFloat(first);
+      if (/turn$/.test(first)) angle = angleNum * 360;
+      else if (/grad$/.test(first)) angle = angleNum * 0.9;
+      else angle = (angleNum * 180) / Math.PI;
       i = 1;
     }
 
@@ -366,17 +366,21 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
     }
   };
 
-  const pushRaster = (rect: DOMRect, clip: Clip | null, opacity: number, reason: string) => {
+  // Clamp a DOMRect to the captured region (whole-px snap); null when nothing overlaps.
+  const clampToCapture = (rect: DOMRect) => {
     const x = Math.max(cullLeft, Math.floor(rect.left));
     const y = Math.max(cullTop, Math.floor(rect.top));
-    const right = Math.min(cullRight, Math.ceil(rect.right));
-    const bottom = Math.min(cullBottom, Math.ceil(rect.bottom));
-    const width = right - x;
-    const height = bottom - y;
-    if (width <= 0 || height <= 0) return;
+    const width = Math.min(cullRight, Math.ceil(rect.right)) - x;
+    const height = Math.min(cullBottom, Math.ceil(rect.bottom)) - y;
+    return width > 0 && height > 0 ? { x, y, width, height } : null;
+  };
+
+  const pushRaster = (rect: DOMRect, clip: Clip | null, opacity: number, reason: string) => {
+    const r = clampToCapture(rect);
+    if (!r) return;
     const id = nid();
-    nodes.push({ kind: 'raster', id, rect: { x, y, width, height }, opacity, clip, reason });
-    rasterTargets.push({ id, x, y, width, height });
+    nodes.push({ kind: 'raster', id, rect: r, opacity, clip, reason });
+    rasterTargets.push({ id, ...r });
   };
 
   const parseShadows = (value: string) => {
@@ -476,6 +480,30 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
     });
   };
 
+  // Bucket each character of a text node into visual lines, keyed by rounded top,
+  // recording every character's left x. Shared by glyph-outline capture (needs the
+  // exact per-glyph xs) and the multi-line fallback (needs the leftmost x). Returns
+  // buckets sorted top→bottom; each bucket always has ≥1 char.
+  const bucketCharsByLine = (child: ChildNode, raw: string) => {
+    const buckets = new Map<number, { chars: string[]; xs: number[]; top: number; height: number }>();
+    for (let i = 0; i < raw.length; i++) {
+      const cr = document.createRange();
+      cr.setStart(child, i);
+      cr.setEnd(child, i + 1);
+      const rb = cr.getBoundingClientRect();
+      if (rb.width === 0 && rb.height === 0) continue;
+      const key = Math.round(rb.top);
+      let b = buckets.get(key);
+      if (!b) {
+        b = { chars: [], xs: [], top: rb.top, height: rb.height };
+        buckets.set(key, b);
+      }
+      b.chars.push(raw[i]);
+      b.xs.push(rb.left);
+    }
+    return Array.from(buckets.values()).sort((a, c) => a.top - c.top);
+  };
+
   const captureText = (el: Element, cs: CSSStyleDeclaration, clip: Clip | null, opacity: number) => {
     const fontSize = num(cs.fontSize);
     if (fontSize <= 0) return;
@@ -512,24 +540,7 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
       if (collectGlyphX) {
         // capture each glyph's exact x so outline mode matches the browser's
         // shaping (kerning/hinting) instead of accumulating advance-width drift
-        const buckets = new Map<number, { chars: string[]; xs: number[]; top: number; height: number }>();
-        for (let i = 0; i < raw.length; i++) {
-          const cr = document.createRange();
-          cr.setStart(child, i);
-          cr.setEnd(child, i + 1);
-          const rb = cr.getBoundingClientRect();
-          if (rb.width === 0 && rb.height === 0) continue;
-          const key = Math.round(rb.top);
-          let b = buckets.get(key);
-          if (!b) {
-            b = { chars: [], xs: [], top: rb.top, height: rb.height };
-            buckets.set(key, b);
-          }
-          b.chars.push(raw[i]);
-          b.xs.push(rb.left);
-        }
-        for (const b of Array.from(buckets.values()).sort((a, c) => a.top - c.top)) {
-          if (b.chars.length === 0) continue;
+        for (const b of bucketCharsByLine(child, raw)) {
           const baseline = b.top + (b.height - (ascent + descent)) / 2 + ascent;
           lines.push({ text: xform(b.chars.join('')), x: b.xs[0], baseline, glyphX: b.xs });
         }
@@ -561,28 +572,12 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
         lines.push({ text, x: r.left, baseline });
       } else {
         // multi-line: bucket characters to lines via per-char ranges
-        const buckets = new Map<number, { chars: string[]; left: number; top: number; height: number }>();
-        const len = raw.length;
-        for (let i = 0; i < len; i++) {
-          const cr = document.createRange();
-          cr.setStart(child, i);
-          cr.setEnd(child, i + 1);
-          const rb = cr.getBoundingClientRect();
-          if (rb.width === 0 && rb.height === 0) continue;
-          const key = Math.round(rb.top);
-          let b = buckets.get(key);
-          if (!b) {
-            b = { chars: [], left: rb.left, top: rb.top, height: rb.height };
-            buckets.set(key, b);
-          }
-          b.left = Math.min(b.left, rb.left);
-          b.chars.push(raw[i]);
-        }
-        for (const b of Array.from(buckets.values()).sort((a, c) => a.top - c.top)) {
+        for (const b of bucketCharsByLine(child, raw)) {
           const text = xform(b.chars.join('').replace(/\s+/g, ' ').trim());
           if (!text) continue;
+          const left = b.xs.reduce((m, v) => Math.min(m, v), Infinity);
           const baseline = b.top + (b.height - (ascent + descent)) / 2 + ascent;
-          lines.push({ text, x: b.left, baseline });
+          lines.push({ text, x: left, baseline });
         }
       }
       if (lines.length === 0) continue;
@@ -628,24 +623,31 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
     }
   };
 
-  const emitBox = (el: Element, cs: CSSStyleDeclaration, clip: Clip | null, opacity: number) => {
-    const r = el.getBoundingClientRect();
-    const fill = transparent(cs.backgroundColor) ? null : normColor(cs.backgroundColor);
+  // Build a BorderEdges object from any computed style (element or pseudo-element).
+  // Shared by emitBox and tryPseudoBox, which need the same four-edge shape.
+  const buildBorder = (s: CSSStyleDeclaration) => {
     const bw = {
-      top: num(cs.borderTopWidth),
-      right: num(cs.borderRightWidth),
-      bottom: num(cs.borderBottomWidth),
-      left: num(cs.borderLeftWidth),
+      top: num(s.borderTopWidth),
+      right: num(s.borderRightWidth),
+      bottom: num(s.borderBottomWidth),
+      left: num(s.borderLeftWidth),
     };
     const hasBorder = bw.top + bw.right + bw.bottom + bw.left > 0;
     const border = hasBorder
       ? {
-          top: { width: bw.top, color: normColor(cs.borderTopColor), style: cs.borderTopStyle },
-          right: { width: bw.right, color: normColor(cs.borderRightColor), style: cs.borderRightStyle },
-          bottom: { width: bw.bottom, color: normColor(cs.borderBottomColor), style: cs.borderBottomStyle },
-          left: { width: bw.left, color: normColor(cs.borderLeftColor), style: cs.borderLeftStyle },
+          top: { width: bw.top, color: normColor(s.borderTopColor), style: s.borderTopStyle },
+          right: { width: bw.right, color: normColor(s.borderRightColor), style: s.borderRightStyle },
+          bottom: { width: bw.bottom, color: normColor(s.borderBottomColor), style: s.borderBottomStyle },
+          left: { width: bw.left, color: normColor(s.borderLeftColor), style: s.borderLeftStyle },
         }
       : null;
+    return { hasBorder, border };
+  };
+
+  const emitBox = (el: Element, cs: CSSStyleDeclaration, clip: Clip | null, opacity: number) => {
+    const r = el.getBoundingClientRect();
+    const fill = transparent(cs.backgroundColor) ? null : normColor(cs.backgroundColor);
+    const { border } = buildBorder(cs);
     const shadows = parseShadows(cs.boxShadow);
     const gradient =
       cs.backgroundImage && cs.backgroundImage !== 'none' ? parseFirstLinearGradient(cs.backgroundImage) : null;
@@ -716,25 +718,13 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
       ps.backgroundImage && ps.backgroundImage !== 'none' ? parseFirstLinearGradient(ps.backgroundImage) : null;
     if (ps.backgroundImage && ps.backgroundImage !== 'none' && !gradient) return { handled: false }; // url()/radial/conic
     if (ps.boxShadow && ps.boxShadow.includes('inset')) return { handled: false };
-    const bw = {
-      top: num(ps.borderTopWidth), right: num(ps.borderRightWidth),
-      bottom: num(ps.borderBottomWidth), left: num(ps.borderLeftWidth),
-    };
-    const hasBorder = bw.top + bw.right + bw.bottom + bw.left > 0;
+    const { hasBorder, border } = buildBorder(ps);
     if (hasBorder) {
       for (const st of [ps.borderTopStyle, ps.borderRightStyle, ps.borderBottomStyle, ps.borderLeftStyle])
         if (st === 'double' || st === 'groove' || st === 'ridge' || st === 'inset' || st === 'outset')
           return { handled: false };
     }
     const fill = transparent(ps.backgroundColor) ? null : normColor(ps.backgroundColor);
-    const border = hasBorder
-      ? {
-          top: { width: bw.top, color: normColor(ps.borderTopColor), style: ps.borderTopStyle },
-          right: { width: bw.right, color: normColor(ps.borderRightColor), style: ps.borderRightStyle },
-          bottom: { width: bw.bottom, color: normColor(ps.borderBottomColor), style: ps.borderBottomStyle },
-          left: { width: bw.left, color: normColor(ps.borderLeftColor), style: ps.borderLeftStyle },
-        }
-      : null;
     const shadows = parseShadows(ps.boxShadow);
     if (!fill && !gradient && !border && shadows.length === 0) return { handled: true }; // nothing to draw
 
@@ -808,6 +798,77 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
 
   const containerRasterFallback = !!(opts as any).containerRasterFallback;
 
+  // Transplant an <svg> element: clone it, position/size it, resolve currentColor
+  // and inline computed presentation styles so it survives without the page's CSS.
+  const captureSvgEl = (el: Element, cs: CSSStyleDeclaration, r: DOMRect, clip: Clip | null, opacity: number) => {
+    const clone = el.cloneNode(true) as SVGElement;
+    clone.setAttribute('x', String(r.left));
+    clone.setAttribute('y', String(r.top));
+    clone.setAttribute('width', String(r.width));
+    clone.setAttribute('height', String(r.height));
+    // resolve currentColor used by icon fonts/icons
+    (clone as any).style.color = normColor(cs.color);
+    if (!clone.getAttribute('xmlns')) clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+    // Inline computed presentation styles so CSS-class-styled SVG (e.g. MUI
+    // x-charts line strokes / bar fills) survives transplanting without the
+    // page's stylesheet. Walk original + clone in lockstep (same structure).
+    inlineSvgStyles(el, clone);
+    nodes.push({
+      kind: 'inline-svg',
+      id: nid(),
+      rect: { x: r.left, y: r.top, width: r.width, height: r.height },
+      opacity,
+      clip,
+      markup: clone.outerHTML,
+    });
+  };
+
+  // Capture an <img>: emit an image node now and resolve its href asynchronously
+  // (canvas extraction → fetch → in-place raster fallback for tainted/failed loads).
+  const captureImageEl = (el: Element, cs: CSSStyleDeclaration, r: DOMRect, clip: Clip | null, opacity: number) => {
+    const img = el as HTMLImageElement;
+    const objFit = cs.objectFit || 'fill';
+    const preserveAspectRatio =
+      objFit === 'contain' || objFit === 'scale-down'
+        ? 'xMidYMid meet'
+        : objFit === 'cover'
+          ? 'xMidYMid slice'
+          : 'none';
+    const id = nid();
+    const node: any = {
+      kind: 'image',
+      id,
+      rect: { x: r.left, y: r.top, width: r.width, height: r.height },
+      opacity,
+      clip,
+      href: null,
+      preserveAspectRatio,
+    };
+    nodes.push(node);
+    imgTasks.push(
+      (async () => {
+        const src = img.currentSrc || img.src;
+        // 1) Try canvas extraction (instant, no network, works for decoded images)
+        const canvas = canvasExtractDataURL(img);
+        if (canvas) { node.href = canvas; return; }
+        // 2) Fall back to fetch
+        const fetched = await fetchDataURL(src);
+        if (fetched) { node.href = fetched; return; }
+        // 3) CORS / network failure: convert this node in-place to a raster target
+        //    so it keeps its paint-order position rather than appending at the end.
+        const clamped = clampToCapture(r);
+        if (clamped) {
+          Object.assign(node, { kind: 'raster', rect: clamped, reason: 'img-cors' });
+          rasterTargets.push({ id, ...clamped });
+        } else {
+          // image is entirely outside the capture bounds — remove the placeholder
+          const idx = nodes.indexOf(node);
+          if (idx >= 0) nodes.splice(idx, 1);
+        }
+      })(),
+    );
+  };
+
   const walk = async (el: Element, clip: Clip | null, inheritedOpacity: number) => {
     const cs = getComputedStyle(el);
 
@@ -842,78 +903,12 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
     }
 
     if (!skipRender && el.tagName.toLowerCase() === 'svg') {
-      if (!visHidden) {
-        const clone = el.cloneNode(true) as SVGElement;
-        clone.setAttribute('x', String(r.left));
-        clone.setAttribute('y', String(r.top));
-        clone.setAttribute('width', String(r.width));
-        clone.setAttribute('height', String(r.height));
-        // resolve currentColor used by icon fonts/icons
-        (clone as any).style.color = normColor(cs.color);
-        if (!clone.getAttribute('xmlns')) clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
-        // Inline computed presentation styles so CSS-class-styled SVG (e.g. MUI
-        // x-charts line strokes / bar fills) survives transplanting without the
-        // page's stylesheet. Walk original + clone in lockstep (same structure).
-        inlineSvgStyles(el, clone);
-        nodes.push({
-          kind: 'inline-svg',
-          id: nid(),
-          rect: { x: r.left, y: r.top, width: r.width, height: r.height },
-          opacity,
-          clip,
-          markup: clone.outerHTML,
-        });
-      }
+      if (!visHidden) captureSvgEl(el, cs, r, clip, opacity);
       return;
     }
 
     if (!skipRender && el.tagName.toUpperCase() === 'IMG') {
-      const img = el as HTMLImageElement;
-      const objFit = cs.objectFit || 'fill';
-      const preserveAspectRatio =
-        objFit === 'contain' || objFit === 'scale-down'
-          ? 'xMidYMid meet'
-          : objFit === 'cover'
-            ? 'xMidYMid slice'
-            : 'none';
-      const id = nid();
-      const node: any = {
-        kind: 'image',
-        id,
-        rect: { x: r.left, y: r.top, width: r.width, height: r.height },
-        opacity,
-        clip,
-        href: null,
-        preserveAspectRatio,
-      };
-      nodes.push(node);
-      imgTasks.push(
-        (async () => {
-          const src = img.currentSrc || img.src;
-          // 1) Try canvas extraction (instant, no network, works for decoded images)
-          const canvas = canvasExtractDataURL(img);
-          if (canvas) { node.href = canvas; return; }
-          // 2) Fall back to fetch
-          const fetched = await fetchDataURL(src);
-          if (fetched) { node.href = fetched; return; }
-          // 3) CORS / network failure: convert this node in-place to a raster target
-          //    so it keeps its paint-order position rather than appending at the end.
-          const x = Math.max(cullLeft, Math.floor(r.left));
-          const y = Math.max(cullTop, Math.floor(r.top));
-          const right = Math.min(cullRight, Math.ceil(r.right));
-          const bottom = Math.min(cullBottom, Math.ceil(r.bottom));
-          const rw = right - x;
-          const rh = bottom - y;
-          if (rw > 0 && rh > 0) {
-            Object.assign(node, { kind: 'raster', rect: { x, y, width: rw, height: rh }, reason: 'img-cors' });
-            rasterTargets.push({ id, x, y, width: rw, height: rh });
-          } else {
-            // image is entirely outside the capture bounds — remove the placeholder
-            const idx = nodes.indexOf(node);
-            if (idx >= 0) nodes.splice(idx, 1);
-          }
-        })(),
-      );
+      captureImageEl(el, cs, r, clip, opacity);
       return;
     }
 

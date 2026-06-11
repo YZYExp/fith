@@ -6,11 +6,8 @@
  */
 import { captureCurrentPage, captureElement } from '../browser/index.js';
 import { createViewportRasterizer } from '../browser/viewport-raster.js';
+import { MAX_REGION_DEVICE_PX, type OutputMode, type FontMode, type Scope } from './messages.js';
 import type { Rect } from '../../core/ir/types.js';
-
-type OutputMode = 'both' | 'download' | 'preview';
-type FontMode = 'embed' | 'outline' | 'none';
-type Scope = 'viewport' | 'full';
 
 interface BitmapShot {
   scale: number;
@@ -109,8 +106,6 @@ function makeViewportRasterizer() {
     createCanvas: makeCanvas,
   });
 }
-
-const MAX_REGION_DEVICE_PX = 40_000_000;
 
 /** One full-document chrome.debugger screenshot, decoded once and cached. */
 async function shootFullPageBitmap(): Promise<BitmapShot | null> {
