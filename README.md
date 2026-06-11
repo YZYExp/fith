@@ -74,13 +74,18 @@ pnpm build:extension   # 打包到 dist/extension/
 在 `chrome://extensions` 打开「开发者模式」→「加载已解压的扩展程序」→ 选择 `dist/extension/`，然后：
 
 - **点击工具栏图标弹出面板**，可选择：
+  - **捕获范围**：「可视区域」（默认，仅当前视口）/「整页」（完整文档）；
   - **输出方式**：下载 + 预览 / 仅下载 / 仅预览（即「是否自动下载」）；
   - **字体模式**：embed（可选中文本）/ outline（字形路径）/ 仅引用字体名；
-  - **「整页」** 按钮转换整页；**「选择元素」** 按钮进入 inspect 模式。
+  - **「Capture page」** 按钮按所选范围转换；**「Pick element」** 按钮进入 inspect 模式。
 - **inspect 模式**：鼠标悬停高亮元素，点击即转换该元素子树，`Esc` 取消。也可用 **`Alt+Shift+S`** 或右键菜单「Convert element to SVG…」直接触发。
-- 偏好（输出/字体）记忆在 `chrome.storage`；预览在打包的 `viewer.html` 新标签页中显示。
+- 偏好（范围/输出/字体）记忆在 `chrome.storage`；预览在打包的 `viewer.html` 新标签页中显示。
 - 内容脚本按需注入（`chrome.scripting`），对扩展安装前已打开的标签页也生效。
-- 栅格回退（canvas/视频/滤镜/表单控件等）由 service worker 的 `captureVisibleTab` 提供；inspect 选区裁剪由核心的子树捕获支持。
+- **扩展从不滚动页面**（滚动会触发 sticky/fixed 重定位、懒加载，破坏捕获）。栅格回退（canvas/视频/滤镜/表单控件等）：
+  - 「可视区域」：service worker 的 `captureVisibleTab` 单次截图裁剪；
+  - 「整页」：优先用可选 `debugger` 权限（弹窗按钮点击时申请，可拒绝）走
+    `chrome.debugger` 的 `Page.captureScreenshot`（`captureBeyondViewport`，一次覆盖折叠线以下）；
+    未授权则退化为当前视口裁剪，视口外栅格省略（向量部分不受影响）。
 
 > 在支持扩展的浏览器里可用 `pnpm tsx scripts/verify-extension.ts` 做端到端冒烟（无头沙箱通常不支持加载扩展）。
 
@@ -100,9 +105,12 @@ pnpm build:extension   # 打包到 dist/extension/
 保真度的唯一可信度量是**像素对比**：在同一个 Chromium 里分别渲染「原页面」和「生成的 SVG」，
 用 `pixelmatch` 逐像素求差异比例。整套方案分三层，全部固化为脚本：
 
-**1. 单元 + 视觉回归（CI，`pnpm test`）** — `test/visual/*.test.ts` + `test/fixtures/*.html`：
-发射器单测，以及 smoke / gradients / outline / 字体内嵌 / 子树捕获 / 页内后端 / **oklch 颜色** /
-**容器栅格回退（不空白）** / **text-transform** 等回归。新特性必须先加 fixture。
+**1. 单元 + 视觉回归（CI，`pnpm test`）** — `test/**/*.test.ts` + `test/fixtures/*.html`：
+发射器单测、扩展纯逻辑单测（`viewport-raster` / `shot-scheduler`）、MV3 bundle 完整性测试，
+以及 smoke / gradients / outline / 字体内嵌 / 子树捕获 / 页内后端 / 图片捕获 / **oklch 颜色** /
+**容器栅格回退（不空白）** / **text-transform** / **可见文本不丢失（结构不变量）** 等回归。
+另有两组门控测试：`EXTENSION_E2E=1`（真实加载扩展的完整 Chromium 端到端）与
+`REALWORLD_TESTS=1`（在线真实站点）。新特性必须先加 fixture。
 
 **2. 示例应用端到端（`pnpm validate:example <name>`）** — 一条命令完成「构建 → 起静态服务 →
 渲染对比 → 写产物 → 超阈值则非零退出」：

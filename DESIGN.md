@@ -291,7 +291,7 @@ const { svg } = await captureCurrentPage({ fontMode: 'outline' });
 | conic-gradient / 复杂合成无法向量化 | 局部栅格回退（有截图能力时默认开启）保证忠实 |
 | 字体许可证：内嵌字体可能涉及版权 | 文档提示；提供 `outline` 模式只嵌用到的字形子集，降低暴露 |
 | 插件形态：跨源字体/图片受 CORS 限制无法读取内联 | content script 经 background `fetch` 或声明 `host_permissions`；读不到时退化为字体引用/栅格回退 |
-| 插件形态：`captureVisibleTab` 仅可视区 | 需要整页时滚动分段截图拼接；或仅向量、长页不依赖截图 |
+| 插件形态：`captureVisibleTab` 仅可视区 | **从不滚动页面**（滚动破坏 sticky/lazy-load）：整页栅格走可选 `debugger` 权限的 `Page.captureScreenshot`（`captureBeyondViewport`，单次覆盖全文档）；未授权则省略视口外栅格，向量不受影响 |
 | `core/` 误引入 Node 依赖破坏插件可打包性 | 用 lint/构建规则禁止 `core/` import node 内置模块与 puppeteer/playwright（CI 守门） |
 
 ---
@@ -303,7 +303,7 @@ M1–M8 的核心已落地并通过端到端验证：
 - **捕获**（`src/core/capture/capture.ts`，纯 DOM、可注入）：DOM 遍历、层叠 paint order（positioned + z-index 分组）、逐行文本（`Range.getClientRects` + canvas 字体度量推算基线、可选逐字形 x）、overflow/圆角裁剪栈、累积不透明度、单层 linear-gradient 解析、内联 `<svg>` 转写、`@font-face` 收集与 base64 内联、栅格回退判定。
 - **发射**（`src/core/emit/svg.ts`，纯函数）：盒子背景、统一/异色边框、圆角（rx 或 path）、外阴影（高斯模糊 filter）、线性渐变 `<linearGradient>`、逐行 `<text>` 或字形轮廓 `<path>`、`<image>` 内联、内联 SVG 图标 defs+use 去重、clipPath/渐变/filter 去重、`@font-face <style>`。
 - **字体**：`embed`（base64 内联 @font-face）/ `outline`（opentype.js 字形轮廓化，Node 经 fontconfig 解析系统字体）/ `none` 三种模式。
-- **后端**：Node（`backends/node`，Playwright + 截图回退 + 系统字体）、浏览器/页内库（`backends/browser`，纯 DOM）、MV3 插件（`backends/extension`，content script + service worker 截图回退）。
-- **验证**：`examples/antd-app`（Vite+React+Antd 复杂仪表盘）端到端逐像素对比，embed **差异 < 0.01%**；`test/` 含发射器单测、视觉回归（smoke/gradients/outline）、字体内嵌、in-page 后端等共 18 项。
+- **后端**：Node（`backends/node`，Playwright + 截图回退 + 系统字体）、浏览器/页内库（`backends/browser`，纯 DOM + 共享的非滚动 `createViewportRasterizer`）、MV3 插件（`backends/extension`，content script + service worker；**从不滚动页面**，可视区走 `captureVisibleTab`，整页栅格走可选 `debugger` 权限的 `Page.captureScreenshot`）。
+- **验证**：`examples/antd-app`（Vite+React+Antd 复杂仪表盘）端到端逐像素对比，embed **差异 < 0.01%**；`examples/mui-app`（MUI Dashboard）~0.34%；`test/` 含发射器单测、扩展纯逻辑单测（viewport-raster / shot-scheduler）、MV3 bundle 完整性、视觉回归（smoke/gradients/outline/图片/子树/页内/文本不丢失等）共 50+ 项，另有门控的扩展 E2E 与真实站点测试。
 
 设计取舍：inset 阴影、conic/radial 渐变、滤镜、表单控件、canvas/video 维持栅格回退（已像素级忠实，向量化收益低/风险高）。
