@@ -78,48 +78,48 @@
 
 分层铁律：**`core/` 必须是纯 TypeScript，零 Node 依赖、零 Puppeteer/Playwright 引用**，这样才能整体打包进浏览器插件。环境差异全部隔离在 `backends/`。
 
+实际落地结构（与早期规划的差异见下方说明）：
+
 ```
 src/
   core/         ★ 纯 TS，跨环境共用，可 bundle 进插件（禁止 import 任何 node/playwright/puppeteer）
-    capture/        页内捕获（只用标准 DOM API）
-      walk.ts           遍历 DOM + getComputedStyle/getBoundingClientRect
-      paint-order.ts    自实现层叠上下文绘制排序（CDP-free）
-      text-runs.ts      Range.getClientRects 取逐行文本盒 + 基线
-      build-ir.ts       测量结果 → Scene IR
+    capture/
+      capture.ts        页内捕获：单个完全自包含的函数（DOM walk、paint order、
+                        文本行盒、渐变解析、裁剪栈、@font-face 收集、回退判定全在其内）
     ir/
       types.ts          Scene / PaintNode / 样式结构（纯类型）
     emit/         SVG 发射器：IR → SVG 字符串
-      document.ts       <svg> 骨架、viewBox、defs 管理、id 分配
-      box.ts            背景 / 边框 / 圆角 / 阴影
-      text.ts           <text> 逐行发射 / 字形轮廓化
-      image.ts          <image> 内联
-      gradient.ts       CSS 渐变 → SVG 渐变 defs
-      clip.ts / transform.ts
-    assets/
-      fonts.ts          @font-face 收集 + base64 内嵌 / opentype.js 轮廓化（浏览器亦可用）
-      images.ts         图片/canvas → base64 data URI
-    fallback/
-      detector.ts       判定某子树是否需要栅格化
-    optimize/         defs 去重、路径精简、可选 minify
-    backend.ts        ★ CaptureBackend 接口（注入"加载/截图"等环境能力）
+      svg.ts            主入口：骨架、viewBox、按 IR 顺序发射
+      primitives.ts     盒子 / 边框 / 文本 / 图片等基元
+      defs.ts           clipPath / 渐变 / filter / 内联 SVG 图标的 defs 管理与去重
+      outline.ts        opentype.js 字形轮廓化（Outliner，浏览器/Node 通用）
+    backend.ts        ★ CaptureBackend 接口（run 注入执行 + 可选 rasterize 截图能力）
 
   backends/     ★ 环境适配（各自只在对应形态打包）
     node/
-      playwright.ts     默认：启动 Chromium、注入 core 捕获脚本、截图回退
-      puppeteer.ts      可选替代实现（同接口）
-      cli.ts            命令行入口
-    extension/
-      content.ts        content script：直接运行 core 捕获
-      rasterize.ts      chrome.tabs.captureVisibleTab 提供截图能力
+      playwright.ts     启动 Chromium、page.evaluate 注入捕获、截图回退
+      fonts.ts          系统字体解析（fontconfig）供 outline 模式
+      diff-patch.ts     diffPatch 选项：渲染回 Chromium 比对并打栅格补丁
+      cli.ts            命令行入口（bin: fitting-html）
     browser/
-      index.ts          页内库：当前页运行 core；无截图 → fallback:'none'
+      index.ts          页内库：当前页直接运行 core；rasterize/outline 为可注入选项
+      viewport-raster.ts 共享的非滚动 createViewportRasterizer（页内 + 扩展共用）
+      raster-types.ts
+    extension/          MV3：manifest.json + popup + content script + service worker
+      content.ts        运行 core 捕获，经消息向 background 要截图
+      background.ts     captureVisibleTab / chrome.debugger 截图、下载、菜单/快捷键
+      shot-scheduler.ts 截图限速与重试调度（纯逻辑，单测覆盖）
+      messages.ts / popup.ts / viewer.ts
 
   index.ts      ★ 默认导出 = core + node 后端（npm 主入口）
-test/
-  fixtures/     HTML 语料库（按特性分类）
-  visual/       视觉回归框架（render→diff）
-  paint-order/  用 CDP paintOrders 作 oracle 校验自实现排序
+test/           布局见 CLAUDE.md（单元 + 视觉回归 + 门控 E2E）
 ```
+
+与规划的主要偏差：
+- **捕获没有拆成多文件**：`captureScene` 经 `.toString()` 序列化后 `page.evaluate` 注入，
+  必须零 import、零闭包外引用，所有 helper 都定义在函数体内 —— 这是硬约束，不是偷懒。
+- **未做 `puppeteer.ts` 备选后端**（Playwright 足够，没有需求驱动）。
+- **paint-order oracle 测试未单独成目录**：排序正确性由视觉回归（逐像素 diff）间接钉死。
 
 后端接口（概念）：core 不关心是谁、怎么提供环境能力，只面向接口编程。
 
@@ -203,7 +203,7 @@ interface CaptureBackend {
 - **`backends/node/`**：`playwright`（默认，`playwright install chromium` 拉浏览器）。`puppeteer` 作为同接口的可选替代实现；Node 测试里用 CDP `DOMSnapshot.paintOrders` 仅作校验基准。
 - **`backends/extension/`**：Chrome Extension MV3（`scripting` / `tabs` 权限），无第三方运行时依赖。
 - **测试**：`vitest` + `pixelmatch` + `pngjs`（视觉回归）。
-- **构建**：`tsup`/`tsc` 多目标产物——npm 库（ESM+CJS）、CLI `bin`、插件 bundle（IIFE/单文件）。
+- **构建**：`tsc` 编译 npm 库（ESM）与 CLI `bin`；插件 bundle 由 `esbuild`（`scripts/build-extension.ts`）打包到 `dist/extension/`。
 
 ---
 
@@ -216,12 +216,16 @@ const svg: string = await htmlToSvg(html, {
   width: 1280,            // 视口宽（必填）
   height: 720,            // 视口高；省略则按内容高度
   deviceScaleFactor: 2,   // 栅格回退/图片的清晰度
-  fontMode: 'embed',      // 'embed' | 'outline'
-  fallback: 'raster',     // 'raster' | 'none'
-  background: '#fff',     // 透明背景可设 'transparent'
-  optimize: true,         // defs 去重 + 路径精简
+  fontMode: 'embed',      // 'embed' | 'outline' | 'none'
+  settleMs: 200,          // 加载后额外等待（迟到的布局/字体）
+  guaranteeFloor: false,  // 整页截图作底层 <image>，向量盖其上（保真地板）
+  diffPatch: false,       // 生成后渲染回 Chromium 比对，差异区打栅格补丁
 });
 ```
+
+> 规划期设想的 `fallback: 'raster' | 'none'` 没有成为显式选项：是否栅格回退由后端
+> 能力决定（`CaptureBackend.rasterize` 缺席即自动跳过）。`background` / `optimize`
+> 未实现（defs 去重已默认内建于发射器）。
 
 也支持 URL / 已有 Playwright Page 作为输入：
 

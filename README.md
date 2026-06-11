@@ -39,7 +39,11 @@ await htmlToSvg({ url: 'https://example.com' }, { width: 1280, height: 720 });
 | `height` | 内容高度 | 视口高；省略则按整页高度 |
 | `deviceScaleFactor` | `1` | 栅格回退/图片清晰度 |
 | `fontMode` | `embed` | `embed` 内联字体 / `outline` 字形转 `<path>` / `none` 仅引用字体名 |
+| `settleMs` | `0` | 加载完成后额外等待（ms），给迟到的布局/字体留时间 |
+| `guaranteeFloor` | `false` | 把整页截图作为 `<image>` 底层内嵌（z-order 0），向量盖在其上 —— 视觉保真有了「地板」，代价是体积 +150–800 KB |
+| `diffPatch` | `false` | 生成后做一次差分校正：把 SVG 渲染回 Chromium 与原页逐像素对比，差异区域用截图打补丁；多一次页面加载 |
 | `executablePath` | Playwright 自带 | 指定 Chromium 路径 |
+| `launchArgs` | `[]` | 传给 Chromium 的额外启动参数 |
 
 ### 2. CLI
 
@@ -49,6 +53,7 @@ pnpm build            # 先编译，生成 dist/backends/node/cli.js（bin: fitt
 # 通过 bin 运行（pnpm link --global 或安装后）：
 fitting-html input.html -o out.svg --width 1280 --scale 2 --font-mode outline
 fitting-html https://example.com -o out.svg
+# 环境变量 CHROMIUM_PATH 可指定 Chromium 可执行文件路径
 
 # 或开发期直接跑脚本（用仓库自带的 Chromium 源）：
 pnpm render input.html out.svg 1280
@@ -64,6 +69,12 @@ import { captureCurrentPage, captureElement } from 'fitting-html/browser';
 const pageSvg = await captureCurrentPage({ fontMode: 'embed' });
 const elSvg = await captureElement(document.querySelector('.card')!); // 裁剪到该元素
 ```
+
+进阶选项（扩展即基于这些注入点构建）：
+
+- `viewportOnly: true` —— 只捕获当前可视区（坐标视口相对、不重置滚动），视口外内容裁掉；默认整页。
+- `rasterize: (rect, scale) => Promise<dataURI | null>` —— 注入截图能力供栅格回退（canvas/视频/滤镜/表单控件等）；纯页内无法截图，省略时这些区域被跳过。
+- `outline: Outliner` —— `outline` 字体模式所需的字形轮廓器（`createOutliner`），由调用方传入以免 opentype.js 进默认 bundle。
 
 ### 4. Chrome 扩展（MV3）
 
