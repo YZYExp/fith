@@ -366,17 +366,21 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
     }
   };
 
-  const pushRaster = (rect: DOMRect, clip: Clip | null, opacity: number, reason: string) => {
+  // Clamp a DOMRect to the captured region (whole-px snap); null when nothing overlaps.
+  const clampToCapture = (rect: DOMRect) => {
     const x = Math.max(cullLeft, Math.floor(rect.left));
     const y = Math.max(cullTop, Math.floor(rect.top));
-    const right = Math.min(cullRight, Math.ceil(rect.right));
-    const bottom = Math.min(cullBottom, Math.ceil(rect.bottom));
-    const width = right - x;
-    const height = bottom - y;
-    if (width <= 0 || height <= 0) return;
+    const width = Math.min(cullRight, Math.ceil(rect.right)) - x;
+    const height = Math.min(cullBottom, Math.ceil(rect.bottom)) - y;
+    return width > 0 && height > 0 ? { x, y, width, height } : null;
+  };
+
+  const pushRaster = (rect: DOMRect, clip: Clip | null, opacity: number, reason: string) => {
+    const r = clampToCapture(rect);
+    if (!r) return;
     const id = nid();
-    nodes.push({ kind: 'raster', id, rect: { x, y, width, height }, opacity, clip, reason });
-    rasterTargets.push({ id, x, y, width, height });
+    nodes.push({ kind: 'raster', id, rect: r, opacity, clip, reason });
+    rasterTargets.push({ id, ...r });
   };
 
   const parseShadows = (value: string) => {
@@ -889,15 +893,10 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
           if (fetched) { node.href = fetched; return; }
           // 3) CORS / network failure: convert this node in-place to a raster target
           //    so it keeps its paint-order position rather than appending at the end.
-          const x = Math.max(cullLeft, Math.floor(r.left));
-          const y = Math.max(cullTop, Math.floor(r.top));
-          const right = Math.min(cullRight, Math.ceil(r.right));
-          const bottom = Math.min(cullBottom, Math.ceil(r.bottom));
-          const rw = right - x;
-          const rh = bottom - y;
-          if (rw > 0 && rh > 0) {
-            Object.assign(node, { kind: 'raster', rect: { x, y, width: rw, height: rh }, reason: 'img-cors' });
-            rasterTargets.push({ id, x, y, width: rw, height: rh });
+          const clamped = clampToCapture(r);
+          if (clamped) {
+            Object.assign(node, { kind: 'raster', rect: clamped, reason: 'img-cors' });
+            rasterTargets.push({ id, ...clamped });
           } else {
             // image is entirely outside the capture bounds — remove the placeholder
             const idx = nodes.indexOf(node);
