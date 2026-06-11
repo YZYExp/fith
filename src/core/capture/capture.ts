@@ -798,6 +798,77 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
 
   const containerRasterFallback = !!(opts as any).containerRasterFallback;
 
+  // Transplant an <svg> element: clone it, position/size it, resolve currentColor
+  // and inline computed presentation styles so it survives without the page's CSS.
+  const captureSvgEl = (el: Element, cs: CSSStyleDeclaration, r: DOMRect, clip: Clip | null, opacity: number) => {
+    const clone = el.cloneNode(true) as SVGElement;
+    clone.setAttribute('x', String(r.left));
+    clone.setAttribute('y', String(r.top));
+    clone.setAttribute('width', String(r.width));
+    clone.setAttribute('height', String(r.height));
+    // resolve currentColor used by icon fonts/icons
+    (clone as any).style.color = normColor(cs.color);
+    if (!clone.getAttribute('xmlns')) clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+    // Inline computed presentation styles so CSS-class-styled SVG (e.g. MUI
+    // x-charts line strokes / bar fills) survives transplanting without the
+    // page's stylesheet. Walk original + clone in lockstep (same structure).
+    inlineSvgStyles(el, clone);
+    nodes.push({
+      kind: 'inline-svg',
+      id: nid(),
+      rect: { x: r.left, y: r.top, width: r.width, height: r.height },
+      opacity,
+      clip,
+      markup: clone.outerHTML,
+    });
+  };
+
+  // Capture an <img>: emit an image node now and resolve its href asynchronously
+  // (canvas extraction → fetch → in-place raster fallback for tainted/failed loads).
+  const captureImageEl = (el: Element, cs: CSSStyleDeclaration, r: DOMRect, clip: Clip | null, opacity: number) => {
+    const img = el as HTMLImageElement;
+    const objFit = cs.objectFit || 'fill';
+    const preserveAspectRatio =
+      objFit === 'contain' || objFit === 'scale-down'
+        ? 'xMidYMid meet'
+        : objFit === 'cover'
+          ? 'xMidYMid slice'
+          : 'none';
+    const id = nid();
+    const node: any = {
+      kind: 'image',
+      id,
+      rect: { x: r.left, y: r.top, width: r.width, height: r.height },
+      opacity,
+      clip,
+      href: null,
+      preserveAspectRatio,
+    };
+    nodes.push(node);
+    imgTasks.push(
+      (async () => {
+        const src = img.currentSrc || img.src;
+        // 1) Try canvas extraction (instant, no network, works for decoded images)
+        const canvas = canvasExtractDataURL(img);
+        if (canvas) { node.href = canvas; return; }
+        // 2) Fall back to fetch
+        const fetched = await fetchDataURL(src);
+        if (fetched) { node.href = fetched; return; }
+        // 3) CORS / network failure: convert this node in-place to a raster target
+        //    so it keeps its paint-order position rather than appending at the end.
+        const clamped = clampToCapture(r);
+        if (clamped) {
+          Object.assign(node, { kind: 'raster', rect: clamped, reason: 'img-cors' });
+          rasterTargets.push({ id, ...clamped });
+        } else {
+          // image is entirely outside the capture bounds — remove the placeholder
+          const idx = nodes.indexOf(node);
+          if (idx >= 0) nodes.splice(idx, 1);
+        }
+      })(),
+    );
+  };
+
   const walk = async (el: Element, clip: Clip | null, inheritedOpacity: number) => {
     const cs = getComputedStyle(el);
 
@@ -832,73 +903,12 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
     }
 
     if (!skipRender && el.tagName.toLowerCase() === 'svg') {
-      if (!visHidden) {
-        const clone = el.cloneNode(true) as SVGElement;
-        clone.setAttribute('x', String(r.left));
-        clone.setAttribute('y', String(r.top));
-        clone.setAttribute('width', String(r.width));
-        clone.setAttribute('height', String(r.height));
-        // resolve currentColor used by icon fonts/icons
-        (clone as any).style.color = normColor(cs.color);
-        if (!clone.getAttribute('xmlns')) clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
-        // Inline computed presentation styles so CSS-class-styled SVG (e.g. MUI
-        // x-charts line strokes / bar fills) survives transplanting without the
-        // page's stylesheet. Walk original + clone in lockstep (same structure).
-        inlineSvgStyles(el, clone);
-        nodes.push({
-          kind: 'inline-svg',
-          id: nid(),
-          rect: { x: r.left, y: r.top, width: r.width, height: r.height },
-          opacity,
-          clip,
-          markup: clone.outerHTML,
-        });
-      }
+      if (!visHidden) captureSvgEl(el, cs, r, clip, opacity);
       return;
     }
 
     if (!skipRender && el.tagName.toUpperCase() === 'IMG') {
-      const img = el as HTMLImageElement;
-      const objFit = cs.objectFit || 'fill';
-      const preserveAspectRatio =
-        objFit === 'contain' || objFit === 'scale-down'
-          ? 'xMidYMid meet'
-          : objFit === 'cover'
-            ? 'xMidYMid slice'
-            : 'none';
-      const id = nid();
-      const node: any = {
-        kind: 'image',
-        id,
-        rect: { x: r.left, y: r.top, width: r.width, height: r.height },
-        opacity,
-        clip,
-        href: null,
-        preserveAspectRatio,
-      };
-      nodes.push(node);
-      imgTasks.push(
-        (async () => {
-          const src = img.currentSrc || img.src;
-          // 1) Try canvas extraction (instant, no network, works for decoded images)
-          const canvas = canvasExtractDataURL(img);
-          if (canvas) { node.href = canvas; return; }
-          // 2) Fall back to fetch
-          const fetched = await fetchDataURL(src);
-          if (fetched) { node.href = fetched; return; }
-          // 3) CORS / network failure: convert this node in-place to a raster target
-          //    so it keeps its paint-order position rather than appending at the end.
-          const clamped = clampToCapture(r);
-          if (clamped) {
-            Object.assign(node, { kind: 'raster', rect: clamped, reason: 'img-cors' });
-            rasterTargets.push({ id, ...clamped });
-          } else {
-            // image is entirely outside the capture bounds — remove the placeholder
-            const idx = nodes.indexOf(node);
-            if (idx >= 0) nodes.splice(idx, 1);
-          }
-        })(),
-      );
+      captureImageEl(el, cs, r, clip, opacity);
       return;
     }
 
