@@ -835,6 +835,9 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
     // x-charts line strokes / bar fills) survives transplanting without the
     // page's stylesheet. Walk original + clone in lockstep (same structure).
     inlineSvgStyles(el, clone);
+    // walk() already includes the SVG root's opacity in the Scene wrapper.
+    // Keep descendant opacity, but avoid applying the root opacity twice.
+    clone.style.opacity = '1';
     nodes.push({
       kind: 'inline-svg',
       id: nid(),

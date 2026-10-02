@@ -8,6 +8,14 @@ const FIXTURES = resolve(__dirname, '../fixtures');
 const OUT = resolve(__dirname, '__out__');
 
 describe('visual regression', () => {
+  it('applies inline SVG root opacity once while preserving child opacity', async () => {
+    const r = await validate(
+      { url: pathToFileURL(resolve(FIXTURES, 'svg-opacity.html')).href },
+      { width: 300, height: 140, name: 'svg-opacity', outDir: OUT },
+    );
+    expect(r.ratio).toBeLessThan(0.001);
+  }, 60_000);
+
   it('positions text gradients across the background area rather than individual lines', async () => {
     const r = await validate(
       { url: pathToFileURL(resolve(FIXTURES, 'text-gradient-geometry.html')).href },
