@@ -584,23 +584,24 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
       }
       if (lines.length === 0) continue;
 
-      // Detect background-clip:text gradient pattern (e.g. gradient headings).
-      // When color is transparent and the background is clipped to text shape,
-      // use the gradient as the SVG text fill instead of rendering invisible text.
+      // A transparent text fill reveals the background clipped to the glyphs.
+      // Preserve both gradient headings and solid background colors.
       let textColor = normColor(cs.webkitTextFillColor || cs.color);
       let gradientFill = null;
       const bgClip = cs.backgroundClip || (cs as any).webkitBackgroundClip;
       if (
         transparent(textColor) &&
-        (bgClip === 'text' || bgClip === '-webkit-text') &&
-        cs.backgroundImage &&
-        cs.backgroundImage !== 'none'
+        (bgClip === 'text' || bgClip === '-webkit-text')
       ) {
-        const grad = parseFirstLinearGradient(cs.backgroundImage);
+        const grad = cs.backgroundImage && cs.backgroundImage !== 'none'
+          ? parseFirstLinearGradient(cs.backgroundImage)
+          : null;
         if (grad) {
           gradientFill = grad;
           // Solid fallback: midpoint stop color for renderers that ignore gradientFill.
           textColor = grad.stops[Math.floor(grad.stops.length / 2)].color;
+        } else if (!cs.backgroundImage || cs.backgroundImage === 'none') {
+          textColor = normColor(cs.backgroundColor);
         }
       }
 

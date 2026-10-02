@@ -28,7 +28,7 @@ describe('visual regression', () => {
   it('uses text fill color and clips gradient backgrounds to glyphs', async () => {
     const r = await validate(
       { url: pathToFileURL(resolve(FIXTURES, 'text-fill.html')).href },
-      { width: 640, height: 180, name: 'text-fill', outDir: OUT },
+      { width: 640, height: 220, name: 'text-fill', outDir: OUT },
     );
     expect(r.ratio).toBeLessThan(0.005);
   }, 60_000);
