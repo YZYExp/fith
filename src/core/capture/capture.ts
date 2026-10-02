@@ -588,6 +588,7 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
       // Preserve both gradient headings and solid background colors.
       let textColor = normColor(cs.webkitTextFillColor || cs.color);
       let gradientFill = null;
+      let gradientRect;
       const bgClip = cs.backgroundClip || (cs as any).webkitBackgroundClip;
       if (
         transparent(textColor) &&
@@ -598,6 +599,21 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
           : null;
         if (grad) {
           gradientFill = grad;
+          // CSS gradients are sized against the background positioning area,
+          // not the first line's text bounds. Preserve that area across wraps.
+          const r = el.getBoundingClientRect();
+          const origin = cs.backgroundOrigin;
+          const borderBox = origin === 'border-box';
+          const contentBox = origin === 'content-box';
+          const left = (borderBox ? 0 : num(cs.borderLeftWidth)) + (contentBox ? num(cs.paddingLeft) : 0);
+          const right = (borderBox ? 0 : num(cs.borderRightWidth)) + (contentBox ? num(cs.paddingRight) : 0);
+          const top = (borderBox ? 0 : num(cs.borderTopWidth)) + (contentBox ? num(cs.paddingTop) : 0);
+          const bottom = (borderBox ? 0 : num(cs.borderBottomWidth)) + (contentBox ? num(cs.paddingBottom) : 0);
+          gradientRect = {
+            x: r.left + left, y: r.top + top,
+            width: Math.max(0, r.width - left - right),
+            height: Math.max(0, r.height - top - bottom),
+          };
           // Solid fallback: midpoint stop color for renderers that ignore gradientFill.
           textColor = grad.stops[Math.floor(grad.stops.length / 2)].color;
         } else if (!cs.backgroundImage || cs.backgroundImage === 'none') {
@@ -622,6 +638,7 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
         decoration,
         decorationColor: normColor(cs.textDecorationColor || cs.color),
         gradientFill,
+        gradientRect,
       });
     }
   };

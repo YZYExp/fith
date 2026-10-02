@@ -8,6 +8,14 @@ const FIXTURES = resolve(__dirname, '../fixtures');
 const OUT = resolve(__dirname, '__out__');
 
 describe('visual regression', () => {
+  it('positions text gradients across the background area rather than individual lines', async () => {
+    const r = await validate(
+      { url: pathToFileURL(resolve(FIXTURES, 'text-gradient-geometry.html')).href },
+      { width: 540, height: 500, name: 'text-gradient-geometry', outDir: OUT },
+    );
+    expect(r.ratio).toBeLessThan(0.003);
+  }, 60_000);
+
   it('compares settled viewport transitions after expanding to full-page height', async () => {
     const r = await validate(
       { url: pathToFileURL(resolve(FIXTURES, 'viewport-transition.html')).href },
