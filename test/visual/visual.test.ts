@@ -8,6 +8,31 @@ const FIXTURES = resolve(__dirname, '../fixtures');
 const OUT = resolve(__dirname, '__out__');
 
 describe('visual regression', () => {
+  it('compares settled viewport transitions after expanding to full-page height', async () => {
+    const r = await validate(
+      { url: pathToFileURL(resolve(FIXTURES, 'viewport-transition.html')).href },
+      { width: 420, name: 'viewport-transition', outDir: OUT },
+    );
+    expect(r.height).toBe(1200);
+    expect(r.ratio).toBeLessThan(0.001);
+  }, 60_000);
+
+  it('respects invisible and partially transparent pseudo-element overlays', async () => {
+    const r = await validate(
+      { url: pathToFileURL(resolve(FIXTURES, 'pseudo-visibility.html')).href },
+      { width: 420, height: 300, name: 'pseudo-visibility', outDir: OUT },
+    );
+    expect(r.ratio).toBeLessThan(0.005);
+  }, 60_000);
+
+  it('uses text fill color and clips gradient backgrounds to glyphs', async () => {
+    const r = await validate(
+      { url: pathToFileURL(resolve(FIXTURES, 'text-fill.html')).href },
+      { width: 640, height: 180, name: 'text-fill', outDir: OUT },
+    );
+    expect(r.ratio).toBeLessThan(0.005);
+  }, 60_000);
+
   it(
     'renders the smoke fixture within the fidelity threshold',
     async () => {

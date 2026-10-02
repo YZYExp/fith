@@ -104,7 +104,12 @@ export async function validate(
     await page.setViewportSize({ width: opts.width, height });
 
     // expected: screenshot of the real page
-    const expectedBuf = await page.screenshot({ clip: { x: 0, y: 0, width: opts.width, height } });
+    // Resizing can start CSS transitions (for example a fixed 100vh sidebar).
+    // Finish finite animations before measuring geometry and capturing the scene.
+    const expectedBuf = await page.screenshot({
+      clip: { x: 0, y: 0, width: opts.width, height },
+      animations: 'disabled',
+    });
 
     // generate SVG
     await page.evaluate(() => {
@@ -126,7 +131,10 @@ export async function validate(
       const t = byId.get(node.id);
       if (!t || t.width <= 0 || t.height <= 0) continue;
       try {
-        const buf = await page.screenshot({ clip: { x: t.x, y: t.y, width: t.width, height: t.height } });
+        const buf = await page.screenshot({
+          clip: { x: t.x, y: t.y, width: t.width, height: t.height },
+          animations: 'disabled',
+        });
         node.href = 'data:image/png;base64,' + buf.toString('base64');
       } catch {
         node.href = null;

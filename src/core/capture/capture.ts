@@ -253,7 +253,9 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
 
   const pseudoVisible = (el: Element, sel: string) => {
     const cs = getComputedStyle(el, sel);
+    if (cs.display === 'none' || cs.visibility !== 'visible' || num(cs.opacity) === 0) return false;
     const content = cs.content;
+    if (content === 'none' || content === 'normal') return false;
     const hasText = content && content !== 'none' && content !== 'normal' && content !== '""' && content !== "''";
     const hasBg = !transparent(cs.backgroundColor) || (cs.backgroundImage && cs.backgroundImage !== 'none');
     const hasBorder =
@@ -585,7 +587,7 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
       // Detect background-clip:text gradient pattern (e.g. gradient headings).
       // When color is transparent and the background is clipped to text shape,
       // use the gradient as the SVG text fill instead of rendering invisible text.
-      let textColor = normColor(cs.color);
+      let textColor = normColor(cs.webkitTextFillColor || cs.color);
       let gradientFill = null;
       const bgClip = cs.backgroundClip || (cs as any).webkitBackgroundClip;
       if (
@@ -646,11 +648,12 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
 
   const emitBox = (el: Element, cs: CSSStyleDeclaration, clip: Clip | null, opacity: number) => {
     const r = el.getBoundingClientRect();
-    const fill = transparent(cs.backgroundColor) ? null : normColor(cs.backgroundColor);
+    const textClipped = cs.backgroundClip === 'text' || cs.backgroundClip === '-webkit-text';
+    const fill = textClipped || transparent(cs.backgroundColor) ? null : normColor(cs.backgroundColor);
     const { border } = buildBorder(cs);
     const shadows = parseShadows(cs.boxShadow);
     const gradient =
-      cs.backgroundImage && cs.backgroundImage !== 'none' ? parseFirstLinearGradient(cs.backgroundImage) : null;
+      !textClipped && cs.backgroundImage && cs.backgroundImage !== 'none' ? parseFirstLinearGradient(cs.backgroundImage) : null;
     const outlineW = num(cs.outlineWidth);
     const outlineStyle = cs.outlineStyle;
     const outline =
@@ -690,6 +693,7 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
     opacity: number,
   ): { handled: boolean; node?: PaintNode } => {
     const ps = getComputedStyle(el, sel);
+    if (ps.display === 'none' || ps.visibility !== 'visible' || num(ps.opacity) === 0) return { handled: true };
     const content = ps.content;
     if (content === 'none') return { handled: true }; // generates no box at all
     // Only empty content yields a pure decorative box; text/url()/counter()/attr()
@@ -739,7 +743,7 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
         kind: 'box',
         id: nid(),
         rect: { x, y, width, height },
-        opacity,
+        opacity: opacity * num(ps.opacity),
         clip: pseudoClip,
         fill,
         gradient,
