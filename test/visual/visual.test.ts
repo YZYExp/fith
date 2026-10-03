@@ -58,8 +58,14 @@ describe('visual regression', () => {
   }, 60_000);
 
   it('uses text fill color and clips gradient backgrounds to glyphs', async () => {
+    // Generic sans-serif may resolve differently for HTML and standalone SVG on
+    // CI runners. Embed the same font in both so this tests paint, not fallback.
+    const font = readFileSync('/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf').toString('base64');
+    const html = readFileSync(resolve(FIXTURES, 'text-fill.html'), 'utf8')
+      .replace('<style>', `<style>@font-face { font-family: 'TextFillTest'; src: url(data:font/ttf;base64,${font}); }`)
+      .replace('font: 28px sans-serif', "font: 28px 'TextFillTest'");
     const r = await validate(
-      { url: pathToFileURL(resolve(FIXTURES, 'text-fill.html')).href },
+      { html },
       { width: 640, height: 220, name: 'text-fill', outDir: OUT },
     );
     expect(r.ratio).toBeLessThan(0.005);
