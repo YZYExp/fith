@@ -91,12 +91,14 @@ pnpm build:extension   # 打包到 dist/extension/
   - **「Capture page」** 按钮按所选范围转换；**「Pick element」** 按钮进入 inspect 模式。
 - **inspect 模式**：鼠标悬停高亮元素，点击即转换该元素子树，`Esc` 取消。也可用 **`Alt+Shift+S`** 或右键菜单「Convert element to SVG…」直接触发。
 - 偏好（范围/输出/字体）记忆在 `chrome.storage`；预览在打包的 `viewer.html` 新标签页中显示。
+- 转换期间面板选项与按钮暂时禁用，同一标签页不会并发转换；偏好保存或预览打开失败会在面板显示错误，可重试。
+- 预览以 SVG 图片显示，页面中的 SVG 脚本或 HTML 不会进入扩展页面；下载仍保留原始 SVG 内容。
 - 内容脚本按需注入（`chrome.scripting`），对扩展安装前已打开的标签页也生效。
 - **扩展从不滚动页面**（滚动会触发 sticky/fixed 重定位、懒加载，破坏捕获）。栅格回退（canvas/视频/滤镜/表单控件等）：
   - 「可视区域」：service worker 的 `captureVisibleTab` 单次截图裁剪；
   - 「整页」：优先用可选 `debugger` 权限（弹窗按钮点击时申请，可拒绝）走
     `chrome.debugger` 的 `Page.captureScreenshot`（`captureBeyondViewport`，一次覆盖折叠线以下）；
-    未授权则退化为当前视口裁剪，视口外栅格省略（向量部分不受影响）。
+    权限检查由 service worker 执行（content script 无 `chrome.permissions`）；未授权则退化为当前视口裁剪，视口外栅格省略（向量部分不受影响）。
 
 > 在支持扩展的浏览器里可用 `pnpm tsx scripts/verify-extension.ts` 做端到端冒烟（无头沙箱通常不支持加载扩展）。
 
@@ -117,7 +119,8 @@ pnpm build:extension   # 打包到 dist/extension/
 用 `pixelmatch` 逐像素求差异比例。整套方案分三层，全部固化为脚本：
 
 **1. 单元 + 视觉回归（CI，`pnpm test`）** — `test/**/*.test.ts` + `test/fixtures/*.html`：
-发射器单测、扩展纯逻辑单测（`viewport-raster` / `shot-scheduler`）、MV3 bundle 完整性测试，
+发射器单测、扩展纯逻辑单测（`viewport-raster` / `shot-scheduler`）、MV3 bundle 完整性测试、
+打包后扩展脚本的 Chromium 回归（整页截图与权限降级、并发保护、预览错误回传、预览隔离与原始下载），
 以及 smoke / gradients / outline / 字体内嵌 / 子树捕获 / 页内后端 / 图片捕获 / **oklch 颜色** /
 **容器栅格回退（不空白）** / **text-transform** / **可见文本不丢失（结构不变量）** 等回归。
 另有两组门控测试：`EXTENSION_E2E=1`（真实加载扩展的完整 Chromium 端到端）与

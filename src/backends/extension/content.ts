@@ -128,27 +128,27 @@ async function shootFullPageBitmap(): Promise<BitmapShot | null> {
  * page too large, timeout), it falls back to cropping the current viewport, so
  * off-screen raster is simply omitted. Either way it always completes.
  */
-function makeFullPageRasterizer(useDebugger: boolean) {
+function makeFullPageRasterizer() {
   let full: Promise<BitmapShot | null> | null = null;
   const getFull = () => (full ??= shootFullPageBitmap());
 
   return createViewportRasterizer<BitmapShot>({
     getViewport: () => ({ width: window.innerWidth, height: window.innerHeight }),
     getOrigin: () => ({ x: window.scrollX, y: window.scrollY }),
-    shootRegion: useDebugger
-      ? async (rect) => {
-          const f = await getFull();
-          if (!f) return null; // → viewport-crop fallback
-          const s = f.scale;
-          const w = Math.max(1, Math.round(rect.width * s));
-          const h = Math.max(1, Math.round(rect.height * s));
-          const canvas = new OffscreenCanvas(w, h);
-          const ctx = canvas.getContext('2d');
-          if (!ctx) return null;
-          ctx.drawImage(f.bitmap, rect.x * s, rect.y * s, rect.width * s, rect.height * s, 0, 0, w, h);
-          return canvasToDataUrl(canvas);
-        }
-      : undefined,
+    // Only the service worker has chrome.permissions; it returns null when the
+    // optional debugger permission is unavailable, enabling the viewport fallback.
+    shootRegion: async (rect) => {
+      const f = await getFull();
+      if (!f) return null; // → viewport-crop fallback
+      const s = f.scale;
+      const w = Math.max(1, Math.round(rect.width * s));
+      const h = Math.max(1, Math.round(rect.height * s));
+      const canvas = new OffscreenCanvas(w, h);
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return null;
+      ctx.drawImage(f.bitmap, rect.x * s, rect.y * s, rect.width * s, rect.height * s, 0, 0, w, h);
+      return canvasToDataUrl(canvas);
+    },
     shoot: shootBitmap,
     createCanvas: makeCanvas,
   });
@@ -158,7 +158,7 @@ function safeName(base: string): string {
   return (base || 'page').replace(/[^\w.-]+/g, '_').slice(0, 60) + '.svg';
 }
 
-function output(svg: string, name: string, mode: OutputMode) {
+async function output(svg: string, name: string, mode: OutputMode) {
   if (mode !== 'preview') {
     const blob = new Blob([svg], { type: 'image/svg+xml' });
     const url = URL.createObjectURL(blob);
@@ -166,32 +166,29 @@ function output(svg: string, name: string, mode: OutputMode) {
     a.href = url;
     a.download = name;
     a.click();
-    URL.revokeObjectURL(url);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
   if (mode !== 'download') {
-    chrome.runtime.sendMessage({ type: 'fh:preview', svg, name });
+    const response = await chrome.runtime.sendMessage({ type: 'fh:preview', svg, name });
+    if (!response?.ok) throw new Error(response?.error ?? 'Could not open SVG preview.');
   }
 }
 
 async function capturePage(fontMode: FontMode, mode: OutputMode, scope: Scope) {
   let svg: string;
   if (scope === 'full') {
-    // Use the exact-region debugger shot only if the permission is already
-    // granted (the popup requests it on a user gesture); never block on it here.
-    const useDebugger = await chrome.permissions
-      .contains({ permissions: ['debugger'] })
-      .catch(() => false);
-    svg = await captureCurrentPage({ fontMode, rasterize: makeFullPageRasterizer(useDebugger) });
+    svg = await captureCurrentPage({ fontMode, rasterize: makeFullPageRasterizer() });
   } else {
     svg = await captureCurrentPage({ fontMode, viewportOnly: true, rasterize: makeViewportRasterizer() });
   }
-  output(svg, safeName(document.title), mode);
-  return svg.length;
+  await output(svg, safeName(document.title), mode);
+  return new Blob([svg]).size;
 }
 
 // ── element picker ───────────────────────────────────────────────────────────
 
 let pickerActive = false;
+let captureActive = false;
 
 function startPicker(fontMode: FontMode, mode: OutputMode) {
   if (pickerActive) return;
@@ -266,9 +263,11 @@ function startPicker(fontMode: FontMode, mode: OutputMode) {
     const chosen = current;
     cleanup();
     if (chosen) {
+      captureActive = true;
       captureElement(chosen, { fontMode, rasterize: makeViewportRasterizer() })
         .then((svg) => output(svg, safeName((chosen as HTMLElement).id || chosen.tagName.toLowerCase()), mode))
-        .catch((err) => console.error('[fitting-html]', err));
+        .catch((err) => console.error('[fitting-html]', err))
+        .finally(() => { captureActive = false; });
     }
   };
 
@@ -292,12 +291,22 @@ if (!(window as any).__fhInstalled) {
     const fontMode: FontMode = msg?.fontMode ?? 'embed';
     const scope: Scope = msg?.scope === 'full' ? 'full' : 'viewport';
     if (msg?.type === 'fh:capture') {
+      if (captureActive || pickerActive) {
+        sendResponse({ ok: false, error: 'A capture or element selection is already in progress.' });
+        return;
+      }
+      captureActive = true;
       capturePage(fontMode, mode, scope)
+        .finally(() => { captureActive = false; })
         .then((bytes) => sendResponse({ ok: true, bytes }))
         .catch((e) => sendResponse({ ok: false, error: String(e) }));
       return true; // async response
     }
     if (msg?.type === 'fh:pick') {
+      if (captureActive) {
+        sendResponse({ ok: false, error: 'A capture is already in progress.' });
+        return;
+      }
       startPicker(fontMode, mode);
       sendResponse({ ok: true });
     }

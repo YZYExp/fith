@@ -20,6 +20,7 @@
         border: 1px solid #1677ff; background: #1677ff; color: #fff;
       }
       button.secondary { background: #fff; color: #1677ff; }
+      button:disabled, select:disabled { opacity: .6; cursor: wait; }
       .hint { margin: 10px 0 0; color: #9ca3af; font-size: 11px; }
       #status { margin-top: 8px; font-size: 12px; color: #16a34a; min-height: 16px; }
     </style>
@@ -30,7 +31,7 @@
     <label for="scope">Capture area</label>
     <select id="scope">
       <option value="viewport">Visible area (fast)</option>
-      <option value="full">Full page (scrolls, slower)</option>
+      <option value="full">Full page (no scrolling)</option>
     </select>
 
     <label for="output">Output</label>
@@ -52,7 +53,7 @@
       <button id="pick" class="secondary">Pick element</button>
     </div>
 
-    <div id="status"></div>
+    <div id="status" role="status" aria-live="polite"></div>
     <p class="hint">Pick element: hover to highlight, click to convert, Esc to cancel.</p>
 
     <script type="module" src="popup.js"></script>

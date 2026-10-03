@@ -135,10 +135,16 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   }
   if (msg?.type === 'fh:preview') {
     const id = 'svg' + Date.now() + '_' + previewSeq++;
-    chrome.storage.session.set({ [id]: { svg: msg.svg, name: msg.name } }).then(() => {
-      chrome.tabs.create({ url: chrome.runtime.getURL('viewer.html?id=' + id) });
-      sendResponse({ ok: true });
-    });
+    (async () => {
+      try {
+        await chrome.storage.session.set({ [id]: { svg: msg.svg, name: msg.name } });
+        await chrome.tabs.create({ url: chrome.runtime.getURL('viewer.html?id=' + id) });
+        sendResponse({ ok: true });
+      } catch (e) {
+        await chrome.storage.session.remove(id).catch(() => {});
+        sendResponse({ ok: false, error: String(e) });
+      }
+    })();
     return true; // async response
   }
 });

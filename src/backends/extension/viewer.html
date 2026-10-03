@@ -16,7 +16,8 @@
         background: #1677ff; color: #fff; cursor: pointer;
       }
       #stage { padding: 24px; }
-      #stage svg { background: #fff; box-shadow: 0 1px 8px rgba(0,0,0,0.12); max-width: 100%; height: auto; }
+      #stage img { background: #fff; box-shadow: 0 1px 8px rgba(0,0,0,0.12); max-width: 100%; height: auto; }
+      button:disabled { opacity: .6; cursor: default; }
       #empty { padding: 40px; color: #888; }
     </style>
   </head>
@@ -25,7 +26,7 @@
       <span class="title">fitting-html</span>
       <span id="meta"></span>
       <span class="spacer"></span>
-      <button id="download">Download .svg</button>
+      <button id="download" disabled>Download .svg</button>
     </header>
     <div id="stage"><div id="empty">Loading…</div></div>
     <script type="module" src="viewer.js"></script>

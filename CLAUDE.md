@@ -69,6 +69,8 @@ test/
     webfont.test.ts         # @font-face embed / outline modes
     extension-viewport.test.ts # drives the shared createViewportRasterizer end-to-end
                             #   (single shot, no scroll) with a Playwright pngjs env
+    extension-runtime.test.ts # built content/popup/viewer scripts in Chromium with
+                            #   API shims; worker preview handoff with Chrome mocks
     extension-e2e.test.ts   # gated (EXTENSION_E2E=1): loads the real extension into a
                             #   full Chromium and exercises the full download pipeline
     realworld.test.ts       # gated (REALWORLD_TESTS=1): live external URLs
