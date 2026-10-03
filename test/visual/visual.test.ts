@@ -8,6 +8,14 @@ const FIXTURES = resolve(__dirname, '../fixtures');
 const OUT = resolve(__dirname, '__out__');
 
 describe('visual regression', () => {
+  it('preserves ancestor-clipped backgrounds on nested styled text', async () => {
+    const r = await validate(
+      { url: pathToFileURL(resolve(FIXTURES, 'nested-text-background.html')).href },
+      { width: 520, height: 320, name: 'nested-text-background', outDir: OUT },
+    );
+    expect(r.ratio).toBeLessThan(0.003);
+  }, 60_000);
+
   it('applies inline SVG root opacity once while preserving child opacity', async () => {
     const r = await validate(
       { url: pathToFileURL(resolve(FIXTURES, 'svg-opacity.html')).href },
