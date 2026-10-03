@@ -1,0 +1,74 @@
+name: Homepage
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'homepage/**'
+      - '.github/workflows/homepage.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'homepage/**'
+      - '.github/workflows/homepage.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: read
+    defaults:
+      run:
+        working-directory: homepage
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.0
+          run_install: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: pnpm
+          cache-dependency-path: homepage/pnpm-lock.yaml
+      - name: Install homepage dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Type-check and build
+        run: pnpm build
+      - name: Upload preview build
+        uses: actions/upload-artifact@v4
+        with:
+          name: homepage-build
+          path: homepage/dist/
+          include-hidden-files: true
+      - name: Configure Pages
+        if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+        uses: actions/configure-pages@v5
+      - name: Upload Pages artifact
+        if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: homepage/dist/
+
+  deploy:
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    concurrency:
+      group: homepage-pages
+      cancel-in-progress: false
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

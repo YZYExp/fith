@@ -1,34 +1,55 @@
-RECURSION — STATIC HOMEPAGE
+RECURSION — VITE / REACT / TYPESCRIPT HOMEPAGE
 
-The site lives in homepage/index.html. CSS, JavaScript, artwork, and the
-favicon are embedded in the HTML. There is no build step or external asset
-dependency. Open index.html directly in a browser to preview it.
+An independent pnpm project in homepage/. Requires Node.js >=22.12.0 and
+pnpm 10.33.0. The root fitting-html package and its lockfile are unchanged.
 
-DEPLOY FROM THIS REPOSITORY
-1. Merge the homepage pull request into main.
-2. Open the repository's Settings > Pages.
-3. Choose Deploy from a branch, select main and / (root), and Save.
-4. Wait for the Pages deployment to finish.
-5. Visit https://0x0079.github.io/fitting-html/homepage/.
+DEVELOP AND PREVIEW
+  cd homepage
+  pnpm install --frozen-lockfile
+  pnpm dev
 
-GitHub Pages does not offer /homepage as a branch source directory. Selecting
-the repository root serves this folder at /homepage/. If the repository is
-private, Pages availability depends on the owner's GitHub plan.
+Open the Local URL printed by Vite. For the production preview:
+  pnpm build
+  pnpm preview
 
-TO SERVE THE HOMEPAGE AT THE SITE ROOT INSTEAD
-Configure a GitHub Actions Pages workflow to upload only the homepage folder
-as its Pages artifact, and choose GitHub Actions as the Pages source. The
-included .nojekyll file is suitable for publishing this folder as static
-output. No deployment settings are changed by this pull request.
+Rendered snapshots are in preview/desktop.png (full page) and
+preview/mobile.png (first screen). These are review images, not deployed
+assets; regenerate them when the layout changes.
 
-CUSTOMIZE
-Edit the title, description, brand, headings, and content in index.html.
-Colors are CSS variables in :root. Feedback-loop descriptions are in the
-stages array at the bottom. Update the initial stage-panel HTML too so it
-matches the first stage when JavaScript is disabled.
+pnpm build checks TypeScript and produces static files in homepage/dist/.
+Opening the source index.html directly does not run the React application.
+
+MAINTAIN
+  src/App.tsx                    Page composition
+  src/components/                Header, hero, artwork, and page sections
+  src/components/FeedbackLoop.tsx Interactive stages, managed with React state
+  src/content.ts                 Typed stage descriptions
+  src/styles.css                 Theme, layouts, and responsive styles
+  index.html                     Document title, metadata, and favicon
+  public/                        Files copied unchanged to dist/
+
+DEPLOY TO GITHUB PAGES
+1. Merge the PR into main.
+2. Open Settings > Pages and select GitHub Actions as the source.
+3. Open Actions > Homepage > Run workflow, select main, and run it.
+4. The manual run builds homepage/dist and publishes only that directory.
+5. Visit https://0x0079.github.io/fitting-html/ after deployment succeeds.
+
+The Homepage workflow builds and uploads a homepage-build artifact on
+homepage pull requests and changes to main. Deployment only runs when the
+workflow is manually started from main. This PR does not change Pages
+settings or publish the site. If the repository is private, Pages
+availability depends on the owner's GitHub plan.
+
+Vite's relative base ('./') also supports publishing dist at
+/fitting-html/homepage/ if you prefer to upload the built files there.
+Never deploy the unbuilt React/TypeScript source as branch-based Pages.
 
 CONTENT
 This is an original editorial design about recursive self-improvement,
 with independently written introductory copy and links to the Anthropic
 Institute article. It is not a verified reproduction or summary of that
 article, and uses no Anthropic logo or assets.
+
+JavaScript is required for the React page. A noscript message links readers
+to the original article. Motion respects prefers-reduced-motion.
