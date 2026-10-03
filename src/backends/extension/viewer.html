@@ -1,33 +1,70 @@
 <!doctype html>
-<html>
+<html lang="en">
   <head>
     <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>fitting-html · SVG preview</title>
+    <link rel="stylesheet" href="ui.css" />
     <style>
-      body { margin: 0; font: 14px system-ui, sans-serif; background: #f0f2f5; color: #222; }
-      header {
-        display: flex; align-items: center; gap: 12px;
-        padding: 10px 16px; background: #fff; border-bottom: 1px solid #e5e7eb; position: sticky; top: 0;
+      body { height: 100dvh; display: flex; flex-direction: column; }
+      header { display: flex; align-items: center; gap: 24px; padding: 16px 24px; background: var(--surface); border-bottom: 1px solid var(--line); flex-shrink: 0; }
+      .file { flex: 1; min-width: 0; }
+      #file-name { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 650; }
+      #meta { color: var(--muted); font-size: 12px; }
+      .toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 24px; border-bottom: 1px solid var(--line); background: var(--surface); flex-shrink: 0; }
+      .tools { display: flex; align-items: center; gap: 6px; }
+      .tools button { min-height: 32px; padding: 5px 10px; font-size: 12px; }
+      #zoom-level { min-width: 58px; font-variant-numeric: tabular-nums; }
+      #fit[aria-pressed="true"] { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
+      .background-label { color: var(--muted); font-size: 12px; }
+      #background { width: auto; min-height: 32px; padding: 5px 8px; font-size: 12px; }
+      #stage { flex: 1; min-height: 0; overflow: auto; background: #e9edf4; }
+      #stage[data-background="checkerboard"] { background-color: #fff; background-image: conic-gradient(#e8ecf2 25%, #fff 0 50%, #e8ecf2 0 75%, #fff 0); background-size: 20px 20px; }
+      #stage[data-background="light"] { background: #fff; }
+      #stage[data-background="dark"] { background: #202635; }
+      .canvas { display: grid; place-items: start center; padding: 32px; width: max-content; min-width: 100%; min-height: 100%; }
+      #stage img { display: block; max-width: none; flex-shrink: 0; box-shadow: 0 4px 24px #15213b26; }
+      #empty { display: grid; place-content: center; min-height: 100%; padding: 40px; text-align: center; background: var(--bg); color: var(--muted); }
+      #empty h1 { font-size: 18px; color: var(--text); margin: 0 0 8px; }
+      #empty p { max-width: 360px; margin: 0; }
+      footer { display: flex; justify-content: space-between; gap: 12px; padding: 8px 24px; border-top: 1px solid var(--line); background: var(--surface); color: var(--muted); font-size: 11px; flex-shrink: 0; }
+      @media (max-width: 640px) {
+        header { padding: 12px; gap: 12px; flex-wrap: wrap; }
+        header .brand-name { display: none; }
+        .toolbar { padding: 8px 12px; flex-wrap: wrap; }
+        .background-label { display: none; }
+        footer { padding: 8px 12px; }
+        .shortcuts { display: none; }
       }
-      header .title { font-weight: 600; }
-      header .spacer { flex: 1; }
-      button {
-        font: inherit; padding: 6px 14px; border-radius: 6px; border: 1px solid #1677ff;
-        background: #1677ff; color: #fff; cursor: pointer;
-      }
-      #stage { padding: 24px; }
-      #stage svg { background: #fff; box-shadow: 0 1px 8px rgba(0,0,0,0.12); max-width: 100%; height: auto; }
-      #empty { padding: 40px; color: #888; }
     </style>
   </head>
   <body>
     <header>
-      <span class="title">fitting-html</span>
-      <span id="meta"></span>
-      <span class="spacer"></span>
-      <button id="download">Download .svg</button>
+      <div class="brand">
+        <span class="brand-mark" aria-hidden="true"><svg class="icon" viewBox="0 0 24 24"><path d="M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5M8 12l4-4 4 4-4 4z"/></svg></span>
+        <span class="brand-name">fitting-html</span>
+      </div>
+      <div class="file"><span id="file-name">SVG preview</span><span id="meta">Preparing your export…</span></div>
+      <button id="download" class="primary" disabled><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12m-4-4 4 4 4-4M5 16v5h14v-5"/></svg>Download SVG</button>
     </header>
-    <div id="stage"><div id="empty">Loading…</div></div>
+    <div class="toolbar" role="toolbar" aria-label="Preview controls">
+      <div class="tools">
+        <button id="zoom-out" aria-label="Zoom out" title="Zoom out (−)" disabled>−</button>
+        <button id="zoom-level" aria-label="View at actual size" title="Actual size (0)" disabled>100%</button>
+        <button id="zoom-in" aria-label="Zoom in" title="Zoom in (+)" disabled>+</button>
+        <button id="fit" aria-pressed="true" title="Fit width (F)" disabled>Fit width</button>
+      </div>
+      <div class="tools">
+        <label for="background" class="background-label">Background</label>
+        <select id="background" aria-label="Preview background" disabled>
+          <option value="checkerboard">Checkerboard</option>
+          <option value="light">Light</option>
+          <option value="dark">Dark</option>
+        </select>
+      </div>
+    </div>
+    <main id="stage" tabindex="0" aria-label="SVG preview" data-background="checkerboard"><div id="empty"><h1>Loading your SVG…</h1><p>The preview will appear here.</p></div></main>
+    <footer><span id="viewer-status" role="status" aria-live="polite">Loading preview…</span><span class="shortcuts"><kbd>+</kbd> / <kbd>−</kbd> Zoom &nbsp; <kbd>0</kbd> Actual size &nbsp; <kbd>F</kbd> Fit width</span></footer>
     <script type="module" src="viewer.js"></script>
   </body>
 </html>
