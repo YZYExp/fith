@@ -7,7 +7,7 @@ import { pathToFileURL } from 'node:url';
 const src = (f: string) => resolve('src/backends/extension', f);
 
 /** Static files copied verbatim into the bundle (HTML pages + manifest). */
-export const COPIED_FILES = ['manifest.json', 'popup.html', 'viewer.html'];
+export const COPIED_FILES = ['manifest.json', 'popup.html', 'viewer.html', 'ui.css'];
 
 /**
  * Build the extension. `content.js` is injected via chrome.scripting and must be

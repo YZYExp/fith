@@ -46,6 +46,13 @@ describe('extension bundle integrity', () => {
     }
   });
 
+  it('bundles the shared stylesheet referenced by both interfaces', () => {
+    expect(has('ui.css')).toBe(true);
+    for (const page of ['popup.html', 'viewer.html']) {
+      expect(read(page)).toContain('href="ui.css"');
+    }
+  });
+
   it('bundles the on-demand-injected content script', () => {
     // background.ts / popup.ts inject 'content.js' via chrome.scripting.
     expect(has('content.js')).toBe(true);

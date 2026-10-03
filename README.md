@@ -87,12 +87,14 @@ pnpm build:extension   # 打包到 dist/extension/
 - **点击工具栏图标弹出面板**，可选择：
   - **捕获范围**：「可视区域」（默认，仅当前视口）/「整页」（完整文档）；
   - **输出方式**：下载 + 预览 / 仅下载 / 仅预览（即「是否自动下载」）；
-  - **字体模式**：embed（可选中文本）/ outline（字形路径）/ 仅引用字体名；
-  - **「Capture page」** 按钮按所选范围转换；**「Pick element」** 按钮进入 inspect 模式。
+  - **「Text & fonts」** 中选择 embed（可选中文本）/ 仅引用字体名；扩展尚未接入字形轮廓器，outline 显示为不可用，历史 outline 偏好自动回到 embed（Node/CLI 支持 outline）；
+  - 主按钮随范围显示 **「Capture visible area」/「Capture full page」**；**「Pick an element」** 按钮进入 inspect 模式。
 - **inspect 模式**：鼠标悬停高亮元素，点击即转换该元素子树，`Esc` 取消。也可用 **`Alt+Shift+S`** 或右键菜单「Convert element to SVG…」直接触发。
 - 偏好（范围/输出/字体）记忆在 `chrome.storage`；预览在打包的 `viewer.html` 新标签页中显示。
 - 转换期间面板选项与按钮暂时禁用，同一标签页不会并发转换；偏好保存或预览打开失败会在面板显示错误，可重试。
+- 面板显示当前标签页、选项说明、准备/转换/完成状态与失败后的「Retry capture」；浏览器内部页面和扩展商店页面会提前禁用捕获。界面支持深色主题、键盘焦点和减少动画的系统偏好。
 - 预览以 SVG 图片显示，页面中的 SVG 脚本或 HTML 不会进入扩展页面；下载仍保留原始 SVG 内容。
+- 预览页显示文件名、尺寸、大小，提供缩放、实际尺寸、适应宽度和棋盘格/浅色/深色背景；快捷键 `+` / `-` 缩放、`0` 实际尺寸、`F` 适应宽度，背景与缩放只影响预览。
 - 内容脚本按需注入（`chrome.scripting`），对扩展安装前已打开的标签页也生效。
 - **扩展从不滚动页面**（滚动会触发 sticky/fixed 重定位、懒加载，破坏捕获）。栅格回退（canvas/视频/滤镜/表单控件等）：
   - 「可视区域」：service worker 的 `captureVisibleTab` 单次截图裁剪；

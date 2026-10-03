@@ -1,0 +1,42 @@
+:root {
+  color-scheme: light dark;
+  --bg: #f6f8fc; --surface: #fff; --text: #18243b; --muted: #64728a;
+  --line: #dde4ef; --accent: #245de8; --accent-hover: #174ac8; --accent-soft: #edf3ff; --on-accent: #fff;
+  --error: #b42336; --error-soft: #fff0f1; --success: #16704a; --success-soft: #ecf8f1;
+  font: 13px/1.5 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  color: var(--text); background: var(--bg);
+}
+* { box-sizing: border-box; }
+body { margin: 0; }
+button, select { font: inherit; }
+button, select, summary { -webkit-tap-highlight-color: transparent; }
+button, select { border: 1px solid var(--line); border-radius: 9px; }
+button {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  min-height: 38px; padding: 8px 12px; color: var(--text);
+  background: var(--surface); cursor: pointer; font-weight: 600;
+}
+button:hover:not(:disabled) { background: var(--accent-soft); border-color: var(--accent); }
+button.primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+button.primary:hover:not(:disabled) { background: var(--accent-hover); }
+button:disabled, select:disabled { opacity: .55; cursor: default; }
+button:focus-visible, select:focus-visible, summary:focus-visible, [tabindex]:focus-visible {
+  outline: 3px solid var(--accent); outline-offset: 3px;
+}
+select { width: 100%; min-height: 40px; padding: 8px 10px; background: var(--surface); color: var(--text); }
+.brand { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+.brand-mark { display: grid; place-items: center; width: 34px; height: 34px; background: var(--accent); color: var(--on-accent); border-radius: 10px; }
+.brand-name { font-size: 15px; font-weight: 750; letter-spacing: -.3px; }
+.badge { padding: 2px 7px; border: 1px solid var(--line); border-radius: 6px; color: var(--muted); font-size: 10px; font-weight: 700; letter-spacing: .5px; }
+.icon { width: 18px; height: 18px; flex-shrink: 0; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.muted { color: var(--muted); }
+kbd { font-family: inherit; font-size: 10px; line-height: 1.6; padding: 1px 4px; border: 1px solid var(--line); border-radius: 4px; background: var(--surface); }
+[hidden] { display: none !important; }
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #111827; --surface: #1b2537; --text: #e7edf7; --muted: #a2afc4;
+    --line: #344059; --accent: #83aaff; --accent-hover: #6997fb; --accent-soft: #223659; --on-accent: #111827;
+    --error: #ffabb6; --error-soft: #392332; --success: #88dbb2; --success-soft: #19362e;
+  }
+}
+@media (prefers-reduced-motion: reduce) { *, *::before { animation: none !important; } }

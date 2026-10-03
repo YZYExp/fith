@@ -15,6 +15,9 @@ let browser: Browser;
 let context: BrowserContext;
 let outdir: string;
 const read = (file: string) => readFileSync(join(outdir, file), 'utf8');
+const readPage = (file: string) => read(file)
+  .replace('<link rel="stylesheet" href="ui.css" />', `<style>${read('ui.css')}</style>`)
+  .replace(/<script[^>]*>[\s\S]*?<\/script>/g, '');
 
 beforeAll(async () => {
   outdir = await buildExtension(mkdtempSync(join(tmpdir(), 'fh-runtime-')));
@@ -126,7 +129,7 @@ describe('built extension viewer', () => {
     const page = await context.newPage();
     const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100"><rect width="100" height="100" fill="red"/><script>parent.injected = true</script><foreignObject width="50" height="50"><div xmlns="http://www.w3.org/1999/xhtml" id="untrusted">中文</div></foreignObject></svg>';
     try {
-      await page.setContent(read('viewer.html').replace(/<script[^>]*>[\s\S]*?<\/script>/g, ''));
+      await page.setContent(readPage('viewer.html'));
       await page.evaluate((svg) => {
         const g = globalThis as any;
         g.URLSearchParams = class { get() { return 'preview-id'; } };
@@ -155,7 +158,7 @@ describe('built extension viewer', () => {
   it('shows storage failures with download disabled', async () => {
     const page = await context.newPage();
     try {
-      await page.setContent(read('viewer.html').replace(/<script[^>]*>[\s\S]*?<\/script>/g, ''));
+      await page.setContent(readPage('viewer.html'));
       await page.evaluate(() => {
         const g = globalThis as any;
         g.URLSearchParams = class { get() { return 'preview-id'; } };
@@ -166,12 +169,54 @@ describe('built extension viewer', () => {
       expect(await page.locator('#download').isDisabled()).toBe(true);
     } finally { await page.close(); }
   });
+
+  it('fits large exports, zooms with buttons and keys, and keeps background changes in the preview', async () => {
+    const page = await context.newPage();
+    const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1200"><rect width="1600" height="1200" fill="red"/></svg>';
+    try {
+      await page.setContent(readPage('viewer.html'));
+      await page.evaluate((svg) => {
+        const g = globalThis as any;
+        g.URLSearchParams = class { get() { return 'preview-id'; } };
+        g.chrome = { storage: { session: {
+          get: async () => ({ 'preview-id': { svg, name: 'large.svg' } }),
+          remove: async () => {},
+        } } };
+      }, svg);
+      await page.addScriptTag({ type: 'module', content: read('viewer.js') });
+      await page.waitForFunction(() => !(document.getElementById('download') as HTMLButtonElement).disabled);
+      expect(await page.locator('#meta').textContent()).toContain('1600 × 1200 px');
+      const initialWidth = await page.locator('#stage img').evaluate((image) => image.getBoundingClientRect().width);
+      expect(initialWidth).toBeLessThan(400);
+      await page.click('#zoom-in');
+      expect(await page.locator('#stage img').evaluate((image) => image.getBoundingClientRect().width)).toBeGreaterThan(initialWidth);
+      expect(await page.locator('#fit').getAttribute('aria-pressed')).toBe('false');
+      await page.locator('#stage').press('0');
+      expect(await page.locator('#zoom-level').textContent()).toBe('100%');
+      expect(await page.locator('#stage img').evaluate((image) => image.getBoundingClientRect().width)).toBe(1600);
+      await page.selectOption('#background', 'dark');
+      expect(await page.locator('#stage').getAttribute('data-background')).toBe('dark');
+      await page.locator('#background').focus();
+      await page.keyboard.press('f');
+      expect(await page.locator('#fit').getAttribute('aria-pressed')).toBe('false');
+      await page.locator('#stage').press('f');
+      expect(await page.locator('#fit').getAttribute('aria-pressed')).toBe('true');
+      await page.setViewportSize({ width: 1000, height: 800 });
+      await page.waitForFunction(() => document.querySelector('#stage img')!.getBoundingClientRect().width > 800);
+      const downloadPromise = page.waitForEvent('download');
+      await page.click('#download');
+      const stream = await (await downloadPromise).createReadStream();
+      let downloaded = '';
+      for await (const chunk of stream!) downloaded += chunk;
+      expect(downloaded).toBe(svg);
+    } finally { await page.close(); }
+  });
 });
 
-async function popupPage(saved: Record<string, string> = {}) {
+async function popupPage(saved: Record<string, string> = {}, url = 'https://example.com') {
   const page = await context.newPage();
-  await page.setContent(read('popup.html').replace(/<script[^>]*>[\s\S]*?<\/script>/g, ''));
-  await page.evaluate((saved) => {
+  await page.setContent(readPage('popup.html'));
+  await page.evaluate(({ saved, url }) => {
     const g = globalThis as any;
     g.calls = [];
     g.chrome = {
@@ -184,7 +229,7 @@ async function popupPage(saved: Record<string, string> = {}) {
       } },
       permissions: { request: async () => { g.calls.push('permission'); return false; } },
       tabs: {
-        query: async () => [{ id: 1, url: 'https://example.com' }],
+        query: async () => [{ id: 1, url, title: 'Example page' }],
         sendMessage: async () => {
           g.calls.push('capture');
           return new Promise((resolve) => { g.finishCapture = resolve; });
@@ -192,9 +237,9 @@ async function popupPage(saved: Record<string, string> = {}) {
       },
       scripting: { executeScript: async () => { g.calls.push('inject'); } },
     };
-  }, saved);
+  }, { saved, url });
   await page.addScriptTag({ type: 'module', content: read('popup.js') });
-  await page.waitForFunction(() => !(document.getElementById('page') as HTMLButtonElement).disabled);
+  await page.waitForFunction(() => document.getElementById('status')?.textContent !== 'Getting ready…');
   return page;
 }
 
@@ -215,7 +260,7 @@ describe('built extension popup', () => {
       // Optional permission denial still reaches capture, requested before injection.
       expect(await page.evaluate(() => (globalThis as any).calls.indexOf('permission') < (globalThis as any).calls.indexOf('inject'))).toBe(true);
       await page.evaluate(() => (globalThis as any).finishCapture({ ok: true, bytes: 2048 }));
-      await page.waitForFunction(() => document.getElementById('status')?.textContent === 'Done (2 KB)');
+      await page.waitForFunction(() => document.getElementById('status')?.textContent === 'SVG exported & preview opened · 2.0 KB');
       expect(await page.locator('#page').isEnabled()).toBe(true);
     } finally { await page.close(); }
   });
@@ -227,11 +272,39 @@ describe('built extension popup', () => {
       await page.click('#page');
       await page.waitForFunction(() => document.getElementById('status')?.textContent?.includes('Storage unavailable'));
       expect(await page.locator('#page').isEnabled()).toBe(true);
+      expect(await page.locator('#page-label').textContent()).toBe('Retry capture');
+      expect(await page.locator('#status').getAttribute('data-tone')).toBe('error');
       await page.evaluate(() => { (globalThis as any).failSave = false; });
       await page.click('#page');
       await page.waitForFunction(() => !!(globalThis as any).finishCapture);
       await page.evaluate(() => (globalThis as any).finishCapture({ ok: true }));
-      await page.waitForFunction(() => document.getElementById('status')?.textContent === 'Done');
+      await page.waitForFunction(() => document.getElementById('status')?.textContent === 'SVG exported & preview opened');
+    } finally { await page.close(); }
+  });
+
+  it('explains settings and replaces unavailable outline preferences with embedded fonts', async () => {
+    const page = await popupPage({ fhFont: 'outline' });
+    try {
+      expect(await page.locator('#font').inputValue()).toBe('embed');
+      expect(await page.locator('#tab-name').textContent()).toBe('Example page');
+      await page.selectOption('#scope', 'full');
+      expect(await page.locator('#scope-help').textContent()).toContain('off-screen media');
+      expect(await page.locator('#page-label').textContent()).toBe('Capture full page');
+      await page.selectOption('#output', 'preview');
+      expect(await page.locator('#output-help').textContent()).toContain('Download from the preview');
+      await page.locator('summary').click();
+      await page.selectOption('#font', 'none');
+      expect(await page.locator('#font-help').textContent()).toContain('viewing device');
+    } finally { await page.close(); }
+  });
+
+  it.each(['chrome://settings', 'https://chromewebstore.google.com/detail/test'])('disables capture on unavailable pages: %s', async (url) => {
+    const page = await popupPage({}, url);
+    try {
+      expect(await page.locator('#page').isDisabled()).toBe(true);
+      expect(await page.locator('#pick').isDisabled()).toBe(true);
+      expect(await page.locator('#status').textContent()).toContain('Open a webpage');
+      expect(await page.evaluate(() => (globalThis as any).calls)).toHaveLength(0);
     } finally { await page.close(); }
   });
 });
