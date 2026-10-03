@@ -1,28 +1,28 @@
 import { Header, Footer } from "./components/Layout";
-import { Hero, CentralIdea } from "./components/Hero";
-import { Foundations } from "./components/Foundations";
-import { FeedbackLoop } from "./components/FeedbackLoop";
-import { Questions, Reading } from "./components/Questions";
+import { ProjectHero, ProjectPrinciple } from "./components/ProjectHero";
+import { Features } from "./components/Features";
+import { Usage } from "./components/Usage";
+import { ProjectQuestions, Documentation } from "./components/ProjectQuestions";
 
 export default function App() {
   return (
     <>
       <a className="skip" href="#main">
-        Skip to content
+        跳到正文
       </a>
       <div className="wrap">
         <Header />
       </div>
       <main id="main">
         <div className="wrap">
-          <Hero />
-          <CentralIdea />
-          <Foundations />
+          <ProjectHero />
+          <ProjectPrinciple />
+          <Features />
         </div>
-        <FeedbackLoop />
+        <Usage />
         <div className="wrap">
-          <Questions />
-          <Reading />
+          <ProjectQuestions />
+          <Documentation />
         </div>
       </main>
       <Footer />

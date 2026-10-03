@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>fitting-html conversion example</title>
+    <style>
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        background: #f8f7f1;
+        color: #2c3c30;
+        font-family: "Open Sans", Arial, sans-serif;
+      }
+      .card {
+        position: relative;
+        width: 520px;
+        height: 360px;
+        padding: 33px 37px;
+      }
+      .top {
+        display: flex;
+        justify-content: space-between;
+        padding-bottom: 19px;
+        border-bottom: 1px solid #cdd3c5;
+        font-size: 11px;
+        letter-spacing: 1px;
+      }
+      h1 {
+        margin: 25px 0 18px;
+        font-size: 43px;
+        line-height: 1.14;
+        letter-spacing: -2px;
+        font-weight: 400;
+      }
+      p {
+        margin: 0;
+        font-size: 12px;
+        line-height: 1.7;
+        color: #64705e;
+      }
+      .drawing {
+        position: absolute;
+        right: 37px;
+        top: 106px;
+        width: 155px;
+        height: 140px;
+      }
+      .bottom {
+        position: absolute;
+        left: 37px;
+        right: 37px;
+        bottom: 31px;
+        padding-top: 18px;
+        border-top: 1px solid #cdd3c5;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+      .chip {
+        font-size: 10px;
+        letter-spacing: 1px;
+        border: 1px solid #66785f;
+        padding: 6px 10px;
+        border-radius: 20px;
+      }
+      .gradient {
+        height: 8px;
+        width: 107px;
+        background: linear-gradient(90deg, #354f38, #c4d0a6);
+        border-radius: 4px;
+      }
+    </style>
+  </head>
+  <body>
+    <article class="card">
+      <div class="top"><span>FITTING-HTML</span><span>HTML + CSS</span></div>
+      <h1>Keep the<br />detail.</h1>
+      <p>Type, shapes, and layout.<br />Together in one SVG.</p>
+      <svg
+        class="drawing"
+        viewBox="0 0 155 140"
+        fill="none"
+        aria-label="Vector control points"
+      >
+        <path
+          d="M13 116C24 7 121 7 142 115"
+          stroke="#3b583e"
+          stroke-width="2"
+        />
+        <path
+          d="M13 116L24 7M142 115L121 7M24 7h97"
+          stroke="#8c9b79"
+          stroke-dasharray="3 4"
+        />
+        <rect
+          x="20"
+          y="3"
+          width="8"
+          height="8"
+          fill="#f8f7f1"
+          stroke="#3b583e"
+        />
+        <rect
+          x="117"
+          y="3"
+          width="8"
+          height="8"
+          fill="#f8f7f1"
+          stroke="#3b583e"
+        />
+        <circle cx="13" cy="116" r="5" fill="#3b583e" />
+        <circle cx="142" cy="115" r="5" fill="#3b583e" />
+      </svg>
+      <div class="bottom">
+        <span class="chip">VECTOR FIRST</span>
+        <div class="gradient"></div>
+      </div>
+    </article>
+  </body>
+</html>

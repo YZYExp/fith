@@ -1,5 +1,5 @@
 {
-  "name": "recursion-homepage",
+  "name": "fitting-html-homepage",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -11,7 +11,8 @@
     "dev": "vite",
     "typecheck": "tsc --noEmit",
     "build": "pnpm typecheck && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "generate:example": "node scripts/generate-example.mjs"
   },
   "dependencies": {
     "react": "^19.2.0",
