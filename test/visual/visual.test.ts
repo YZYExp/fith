@@ -8,6 +8,53 @@ const FIXTURES = resolve(__dirname, '../fixtures');
 const OUT = resolve(__dirname, '__out__');
 
 describe('visual regression', () => {
+  it('applies inline SVG root opacity once while preserving child opacity', async () => {
+    const r = await validate(
+      { url: pathToFileURL(resolve(FIXTURES, 'svg-opacity.html')).href },
+      { width: 300, height: 140, name: 'svg-opacity', outDir: OUT },
+    );
+    expect(r.ratio).toBeLessThan(0.001);
+  }, 60_000);
+
+  it('positions text gradients across the background area rather than individual lines', async () => {
+    const r = await validate(
+      { url: pathToFileURL(resolve(FIXTURES, 'text-gradient-geometry.html')).href },
+      { width: 540, height: 500, name: 'text-gradient-geometry', outDir: OUT },
+    );
+    expect(r.ratio).toBeLessThan(0.003);
+  }, 60_000);
+
+  it('compares settled viewport transitions after expanding to full-page height', async () => {
+    const r = await validate(
+      { url: pathToFileURL(resolve(FIXTURES, 'viewport-transition.html')).href },
+      { width: 420, name: 'viewport-transition', outDir: OUT },
+    );
+    expect(r.height).toBe(1200);
+    expect(r.ratio).toBeLessThan(0.001);
+  }, 60_000);
+
+  it('respects invisible and partially transparent pseudo-element overlays', async () => {
+    const r = await validate(
+      { url: pathToFileURL(resolve(FIXTURES, 'pseudo-visibility.html')).href },
+      { width: 420, height: 300, name: 'pseudo-visibility', outDir: OUT },
+    );
+    expect(r.ratio).toBeLessThan(0.005);
+  }, 60_000);
+
+  it('uses text fill color and clips gradient backgrounds to glyphs', async () => {
+    // Generic sans-serif may resolve differently for HTML and standalone SVG on
+    // CI runners. Embed the same font in both so this tests paint, not fallback.
+    const font = readFileSync('/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf').toString('base64');
+    const html = readFileSync(resolve(FIXTURES, 'text-fill.html'), 'utf8')
+      .replace('<style>', `<style>@font-face { font-family: 'TextFillTest'; src: url(data:font/ttf;base64,${font}); }`)
+      .replace('font: 28px sans-serif', "font: 28px 'TextFillTest'");
+    const r = await validate(
+      { html },
+      { width: 640, height: 220, name: 'text-fill', outDir: OUT },
+    );
+    expect(r.ratio).toBeLessThan(0.005);
+  }, 60_000);
+
   it(
     'renders the smoke fixture within the fidelity threshold',
     async () => {

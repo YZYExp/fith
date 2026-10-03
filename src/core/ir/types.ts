@@ -144,6 +144,8 @@ export interface TextNode extends NodeBase {
   textAnchor?: 'start' | 'middle' | 'end';
   /** Gradient fill from background-clip:text pattern; overrides color when set. */
   gradientFill?: LinearGradientFill | null;
+  /** CSS background positioning area, shared by all lines of gradient text. */
+  gradientRect?: Rect;
 }
 
 export interface ImageNode extends NodeBase {

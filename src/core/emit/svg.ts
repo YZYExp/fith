@@ -136,7 +136,7 @@ function emitBorder(b: BorderEdges, rect: { x: number; y: number; width: number;
 
 function emitText(node: TextNode, defs: Defs, outline?: Outliner): string {
   const fill = node.gradientFill
-    ? `url(#${gradientId(defs, node.gradientFill, node.rect)})`
+    ? `url(#${gradientId(defs, node.gradientFill, node.gradientRect ?? node.rect)})`
     : esc(node.color);
 
   if (outline && !node.gradientFill) {

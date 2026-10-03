@@ -1,0 +1,15 @@
+<!doctype html>
+<style>
+body { margin: 20px; font: 28px sans-serif; background: white; }
+.gradient { display: inline-block; padding: 12px; margin-bottom: 16px; color: black;
+  background: linear-gradient(90deg, #2563eb, #ec4899);
+  background-clip: text; -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  border: 2px solid #333; }
+.solid { color: #ef4444; -webkit-text-fill-color: #2563eb; }
+.clipped-solid { display: inline-block; padding: 8px; margin-top: 12px;
+  background: #16a34a; background-clip: text; -webkit-background-clip: text;
+  color: black; -webkit-text-fill-color: transparent; }
+</style>
+<div class="gradient">Gradient without transparent color</div>
+<div class="solid">Text fill overrides color</div>
+<div class="clipped-solid">Solid background clipped to text</div>

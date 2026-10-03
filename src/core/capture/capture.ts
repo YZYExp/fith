@@ -253,7 +253,9 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
 
   const pseudoVisible = (el: Element, sel: string) => {
     const cs = getComputedStyle(el, sel);
+    if (cs.display === 'none' || cs.visibility !== 'visible' || num(cs.opacity) === 0) return false;
     const content = cs.content;
+    if (content === 'none' || content === 'normal') return false;
     const hasText = content && content !== 'none' && content !== 'normal' && content !== '""' && content !== "''";
     const hasBg = !transparent(cs.backgroundColor) || (cs.backgroundImage && cs.backgroundImage !== 'none');
     const hasBorder =
@@ -582,23 +584,40 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
       }
       if (lines.length === 0) continue;
 
-      // Detect background-clip:text gradient pattern (e.g. gradient headings).
-      // When color is transparent and the background is clipped to text shape,
-      // use the gradient as the SVG text fill instead of rendering invisible text.
-      let textColor = normColor(cs.color);
+      // A transparent text fill reveals the background clipped to the glyphs.
+      // Preserve both gradient headings and solid background colors.
+      let textColor = normColor(cs.webkitTextFillColor || cs.color);
       let gradientFill = null;
+      let gradientRect;
       const bgClip = cs.backgroundClip || (cs as any).webkitBackgroundClip;
       if (
         transparent(textColor) &&
-        (bgClip === 'text' || bgClip === '-webkit-text') &&
-        cs.backgroundImage &&
-        cs.backgroundImage !== 'none'
+        (bgClip === 'text' || bgClip === '-webkit-text')
       ) {
-        const grad = parseFirstLinearGradient(cs.backgroundImage);
+        const grad = cs.backgroundImage && cs.backgroundImage !== 'none'
+          ? parseFirstLinearGradient(cs.backgroundImage)
+          : null;
         if (grad) {
           gradientFill = grad;
+          // CSS gradients are sized against the background positioning area,
+          // not the first line's text bounds. Preserve that area across wraps.
+          const r = el.getBoundingClientRect();
+          const origin = cs.backgroundOrigin;
+          const borderBox = origin === 'border-box';
+          const contentBox = origin === 'content-box';
+          const left = (borderBox ? 0 : num(cs.borderLeftWidth)) + (contentBox ? num(cs.paddingLeft) : 0);
+          const right = (borderBox ? 0 : num(cs.borderRightWidth)) + (contentBox ? num(cs.paddingRight) : 0);
+          const top = (borderBox ? 0 : num(cs.borderTopWidth)) + (contentBox ? num(cs.paddingTop) : 0);
+          const bottom = (borderBox ? 0 : num(cs.borderBottomWidth)) + (contentBox ? num(cs.paddingBottom) : 0);
+          gradientRect = {
+            x: r.left + left, y: r.top + top,
+            width: Math.max(0, r.width - left - right),
+            height: Math.max(0, r.height - top - bottom),
+          };
           // Solid fallback: midpoint stop color for renderers that ignore gradientFill.
           textColor = grad.stops[Math.floor(grad.stops.length / 2)].color;
+        } else if (!cs.backgroundImage || cs.backgroundImage === 'none') {
+          textColor = normColor(cs.backgroundColor);
         }
       }
 
@@ -619,6 +638,7 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
         decoration,
         decorationColor: normColor(cs.textDecorationColor || cs.color),
         gradientFill,
+        gradientRect,
       });
     }
   };
@@ -646,11 +666,12 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
 
   const emitBox = (el: Element, cs: CSSStyleDeclaration, clip: Clip | null, opacity: number) => {
     const r = el.getBoundingClientRect();
-    const fill = transparent(cs.backgroundColor) ? null : normColor(cs.backgroundColor);
+    const textClipped = cs.backgroundClip === 'text' || cs.backgroundClip === '-webkit-text';
+    const fill = textClipped || transparent(cs.backgroundColor) ? null : normColor(cs.backgroundColor);
     const { border } = buildBorder(cs);
     const shadows = parseShadows(cs.boxShadow);
     const gradient =
-      cs.backgroundImage && cs.backgroundImage !== 'none' ? parseFirstLinearGradient(cs.backgroundImage) : null;
+      !textClipped && cs.backgroundImage && cs.backgroundImage !== 'none' ? parseFirstLinearGradient(cs.backgroundImage) : null;
     const outlineW = num(cs.outlineWidth);
     const outlineStyle = cs.outlineStyle;
     const outline =
@@ -690,6 +711,7 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
     opacity: number,
   ): { handled: boolean; node?: PaintNode } => {
     const ps = getComputedStyle(el, sel);
+    if (ps.display === 'none' || ps.visibility !== 'visible' || num(ps.opacity) === 0) return { handled: true };
     const content = ps.content;
     if (content === 'none') return { handled: true }; // generates no box at all
     // Only empty content yields a pure decorative box; text/url()/counter()/attr()
@@ -739,7 +761,7 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
         kind: 'box',
         id: nid(),
         rect: { x, y, width, height },
-        opacity,
+        opacity: opacity * num(ps.opacity),
         clip: pseudoClip,
         fill,
         gradient,
@@ -813,6 +835,9 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
     // x-charts line strokes / bar fills) survives transplanting without the
     // page's stylesheet. Walk original + clone in lockstep (same structure).
     inlineSvgStyles(el, clone);
+    // walk() already includes the SVG root's opacity in the Scene wrapper.
+    // Keep descendant opacity, but avoid applying the root opacity twice.
+    clone.style.opacity = '1';
     nodes.push({
       kind: 'inline-svg',
       id: nid(),

@@ -1,0 +1,15 @@
+<!doctype html>
+<style>
+body { margin: 16px; font: 18px sans-serif; background: white; }
+.card { position: relative; padding: 12px; margin-bottom: 12px; width: 320px; background: #dbeafe; }
+.card::after { content: ''; position: absolute; inset: 0; background: white; }
+.zero::after { opacity: 0; }
+.hidden::after { visibility: hidden; }
+.none::after { display: none; }
+.partial { opacity: .8; }
+.partial::after { background: #ef4444; opacity: .25; }
+</style>
+<div class="card zero">Invisible overlay must preserve text</div>
+<div class="card hidden">Hidden overlay must preserve text</div>
+<div class="card none">Absent overlay must preserve text</div>
+<div class="card partial">Partially transparent overlay</div>
