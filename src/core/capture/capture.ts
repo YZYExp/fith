@@ -800,6 +800,7 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
     'stroke-dashoffset',
     'stroke-miterlimit',
     'opacity',
+    'visibility',
     'paint-order',
     'stop-color',
     'stop-opacity',

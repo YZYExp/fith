@@ -8,6 +8,14 @@ const FIXTURES = resolve(__dirname, '../fixtures');
 const OUT = resolve(__dirname, '__out__');
 
 describe('visual regression', () => {
+  it('preserves CSS visibility in transplanted SVG descendants', async () => {
+    const r = await validate(
+      { url: pathToFileURL(resolve(FIXTURES, 'svg-visibility.html')).href },
+      { width: 300, height: 140, name: 'svg-visibility', outDir: OUT },
+    );
+    expect(r.ratio).toBeLessThan(0.001);
+  }, 60_000);
+
   it('preserves ancestor-clipped backgrounds on nested styled text', async () => {
     const r = await validate(
       { url: pathToFileURL(resolve(FIXTURES, 'nested-text-background.html')).href },
