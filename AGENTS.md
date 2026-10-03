@@ -1,3 +1,3 @@
-# PR 标题
+# PR titles
 
-使用 `type(scope): 简短描述`，如 `feat(capture): ...`、`bugfix(capture): ...`、`docs(workflow): ...`。标题概括最终改动。
+Use `type(scope): short description`, e.g. `feat(capture): ...`, `bugfix(capture): ...`, or `docs(workflow): ...`. Summarize the final change.
