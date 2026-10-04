@@ -1,10 +1,10 @@
-# fitting-html
+# fith — HTML to SVG
 
 **将浏览器渲染后的 HTML 转换为便于分享的、向量优先的 SVG。**
 
 [English](./README.md) · [简体中文](./README.zh-CN.md)
 
-fitting-html 读取浏览器计算后的布局，将 HTML 页面或元素捕获为 SVG。文字、盒子、边框、渐变及支持的效果转换为 SVG 图形；复杂区域则在后端具备截图能力时，以局部截图内联兜底。
+fith 读取浏览器计算后的布局，将 HTML 页面或元素捕获为 SVG。文字、盒子、边框、渐变及支持的效果转换为 SVG 图形；复杂区域则在后端具备截图能力时，以局部截图内联兜底。
 
 适合从现有 HTML 导出 UI 卡片、仪表盘、文档插图和页面快照。输出是一份静态 SVG，图片与已捕获的栅格区域内联在同一文件中，字体处理方式可选。
 
@@ -17,6 +17,15 @@ fitting-html 读取浏览器计算后的布局，将 HTML 页面或元素捕获�
 | HTML 截图 | SVG 输出 |
 | --- | --- |
 | ![示例 HTML 卡片截图](./homepage/public/examples/card.png) | ![示例卡片转换后的 SVG](./homepage/public/examples/card.svg) |
+
+## 名称与理念
+
+**fith** 源自 **fitting HTML**：`fit` 表示「拟合」，`h` 表示 HTML。
+「拟合万物」是命名背后的理念；本项目聚焦于已渲染 HTML 页面的视觉重建与 SVG 导出。
+
+项目展示名为 **fith**。仓库链接与克隆说明已按计划迁移到
+[`0x0079/fith`](https://github.com/0x0079/fith) 的地址准备。
+当前包名和 CLI 命令仍为 `fitting-html`，因此导入与命令示例使用现有标识。
 
 ## 项目特点
 
@@ -33,8 +42,8 @@ fitting-html 读取浏览器计算后的布局，将 HTML 页面或元素捕获�
 需要 **Node.js 18+** 和 **pnpm**。仓库在 `package.json` 中指定 pnpm 版本，CI 使用 Node.js 22。Node 后端还需要 Chromium。
 
 ```bash
-git clone https://github.com/0x0079/fitting-html.git
-cd fitting-html
+git clone https://github.com/0x0079/fith.git
+cd fith
 pnpm install
 pnpm exec playwright install chromium
 pnpm build
@@ -244,7 +253,7 @@ REALWORLD_TESTS=1 pnpm exec vitest run test/visual/realworld.test.ts
 
 ## 参与贡献
 
-欢迎提交 [Issue](https://github.com/0x0079/fitting-html/issues) 或 PR。报告渲染问题时，请附上最小 HTML 复现、捕获后端、视口尺寸、字体模式，以及截图或验证产物。
+欢迎提交 [Issue](https://github.com/0x0079/fith/issues) 或 PR。报告渲染问题时，请附上最小 HTML 复现、捕获后端、视口尺寸、字体模式，以及截图或验证产物。
 
 修改渲染行为时，请增加针对性的 fixture 或回归测试。提交前运行 `pnpm build`、`pnpm build:extension` 和 `pnpm test`。PR 标题采用 `docs(readme): improve bilingual setup instructions` 或 `bugfix(capture): preserve clipped text` 这样的格式。
 

@@ -1,4 +1,4 @@
-export const repositoryUrl = "https://github.com/0x0079/fitting-html";
+export const repositoryUrl = "https://github.com/0x0079/fith";
 export const readmeUrl = `${repositoryUrl}/blob/main/README.md`;
 
 export const features = [
@@ -104,8 +104,8 @@ pnpm build:extension
   },
 ];
 
-export const setupCommand = `git clone https://github.com/0x0079/fitting-html.git
-cd fitting-html
+export const setupCommand = `git clone https://github.com/0x0079/fith.git
+cd fith
 pnpm install
 pnpm exec playwright install chromium
 pnpm build`;

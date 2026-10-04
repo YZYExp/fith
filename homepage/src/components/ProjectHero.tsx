@@ -10,7 +10,7 @@ export function ProjectHero() {
   return (
     <section className="hero" aria-labelledby="hero-title">
       <div className="hero-copy">
-        <div className="eyebrow">HTML → SVG · fitting-html</div>
+        <div className="eyebrow">HTML → SVG · fith</div>
         <h1 id="hero-title">
           把 HTML，
           <br />
@@ -30,7 +30,7 @@ export function ProjectHero() {
         </div>
         <p className="hero-meta">Node API / CLI / 页内库 / Chrome 扩展</p>
       </div>
-      <div className="export-preview" aria-label="fitting-html 的真实转换示例">
+      <div className="export-preview" aria-label="fith 的真实转换示例">
         <div className="preview-toolbar">
           <span className="file-label">
             {format === "svg" ? "card.svg" : "card.png"}
@@ -57,7 +57,7 @@ export function ProjectHero() {
             src={`${exampleDirectory}card.${format}`}
             alt={
               format === "svg"
-                ? "由 fitting-html 转换生成的示例 SVG"
+                ? "由 fith 转换生成的示例 SVG"
                 : "同一示例 HTML 的浏览器截图"
             }
             width="520"
@@ -84,7 +84,7 @@ export function ProjectHero() {
           <p>用项目的 htmlToSvg API 生成，切换格式或放大查看。</p>
           <a
             href={`${exampleDirectory}card.svg`}
-            download="fitting-html-card.svg"
+            download="fith-card.svg"
           >
             下载 SVG
           </a>
@@ -101,7 +101,7 @@ export function ProjectPrinciple() {
         项目的核心
       </h2>
       <p>
-        浏览器负责布局，fitting-html 负责转换。
+        浏览器负责布局，fith 负责转换。
         <br />
         以向量表达页面，对复杂效果保留局部截图回退。
       </p>
