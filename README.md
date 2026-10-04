@@ -1,178 +1,253 @@
 # fitting-html
 
-把任意 HTML（含 CSS）**像素级忠实地**转换为一份**纯 SVG**。
+**Turn rendered HTML into a portable, vector-first SVG.**
 
-- 复用浏览器引擎计算布局，只负责把渲染结果翻译成 SVG —— 不自研排版引擎。
-- 向量优先（盒子 / 文本 / 边框 / 圆角 / 阴影 / 线性渐变 / 内联 SVG 图标），SVG 无法忠实表达的特性局部栅格化兜底。
-- 输出单个自包含 `.svg`：`@font-face` 字体 base64 内联（`embed`），或字形轮廓化为 `<path>` 彻底去字体依赖（`outline`）；图片、回退图全部内联。
-- **捕获层用纯 DOM API 实现、与环境解耦**：同一核心可在 Node（headless Chrome）、浏览器插件、页内库三种形态运行。
+[English](./README.md) · [简体中文](./README.zh-CN.md)
 
-## 安装与准备
+fitting-html uses the browser's computed layout to capture HTML pages and elements as SVG. Text, boxes, borders, gradients, and supported effects become SVG graphics; complex regions can fall back to embedded screenshots when the backend provides them.
 
-要求 Node.js ≥ 18，使用 [pnpm](https://pnpm.io)。
+Use it to export UI cards, dashboards, documentation illustrations, and page snapshots from the HTML you already have. The output is a static SVG, with images and captured raster regions inlined into one file. Font handling is configurable.
 
-```bash
-pnpm install                      # 安装依赖
-pnpm exec playwright install chromium  # Node 后端需要的 Chromium（运行时浏览器）
-pnpm build                        # 编译 TS 到 dist/
-```
+> Vector-first does not mean entirely vector or pixel-perfect for every page. Fidelity depends on the page, fonts, capture backend, and SVG viewer. See [supported content and limitations](#supported-content-and-limitations).
 
-> 作为依赖使用时：`pnpm add fitting-html`，并确保目标机器有 Chromium（`pnpm exec playwright install chromium`）。
+## Example
 
-## 用法
+The repository includes a [sample HTML card](./homepage/public/examples/card.html) and its [SVG output](./homepage/public/examples/card.svg).
 
-### 1. Node 库
+| HTML screenshot | SVG output |
+| --- | --- |
+| ![Screenshot of the sample HTML card](./homepage/public/examples/card.png) | ![SVG conversion of the sample HTML card](./homepage/public/examples/card.svg) |
 
-```ts
-import { htmlToSvg } from 'fitting-html';
+## Highlights
 
-const svg = await htmlToSvg('<h1>hello</h1>', { width: 1280 });
-// 也支持 URL / 已有 Playwright Page：
-await htmlToSvg({ url: 'https://example.com' }, { width: 1280, height: 720 });
-```
+- **Browser layout.** Reuse the browser's layout engine instead of reimplementing HTML and CSS layout.
+- **Vector-first output.** Preserve supported text and graphics as SVG elements, with local raster fallback for complex content.
+- **Portable assets.** Inline images and readable `@font-face` fonts, or convert supported glyphs to paths.
+- **Three environments.** Use the Node API/CLI, a browser library, or a Chrome Manifest V3 extension. All share the same DOM capture and SVG emission core.
+- **Measurable fidelity.** Compare the original HTML and generated SVG in Chromium with the included pixel-diff tools.
 
-常用选项：
+## Quick start
 
-| 选项 | 默认 | 说明 |
-|---|---|---|
-| `width` | 必填 | 视口宽（CSS px） |
-| `height` | 内容高度 | 视口高；省略则按整页高度 |
-| `deviceScaleFactor` | `1` | 栅格回退/图片清晰度 |
-| `fontMode` | `embed` | `embed` 内联字体 / `outline` 字形转 `<path>` / `none` 仅引用字体名 |
-| `settleMs` | `0` | 加载完成后额外等待（ms），给迟到的布局/字体留时间 |
-| `guaranteeFloor` | `false` | 把整页截图作为 `<image>` 底层内嵌（z-order 0），向量盖在其上 —— 视觉保真有了「地板」，代价是体积 +150–800 KB |
-| `diffPatch` | `false` | 生成后做一次差分校正：把 SVG 渲染回 Chromium 与原页逐像素对比，差异区域用截图打补丁；多一次页面加载 |
-| `executablePath` | Playwright 自带 | 指定 Chromium 路径 |
-| `launchArgs` | `[]` | 传给 Chromium 的额外启动参数 |
+### Build from source
 
-### 2. CLI
+Requires **Node.js 18+** and **pnpm**. The repository pins pnpm in `package.json`; CI uses Node.js 22. The Node backend also requires Chromium.
 
 ```bash
-pnpm build            # 先编译，生成 dist/backends/node/cli.js（bin: fitting-html）
-
-# 通过 bin 运行（pnpm link --global 或安装后）：
-fitting-html input.html -o out.svg --width 1280 --scale 2 --font-mode outline
-fitting-html https://example.com -o out.svg
-# 环境变量 CHROMIUM_PATH 可指定 Chromium 可执行文件路径
-
-# 或开发期直接跑脚本（用仓库自带的 Chromium 源）：
-pnpm render input.html out.svg 1280
+git clone https://github.com/0x0079/fitting-html.git
+cd fitting-html
+pnpm install
+pnpm exec playwright install chromium
+pnpm build
 ```
 
-### 3. 页内库（浏览器内，纯 DOM，无 Node）
+On Linux, use `pnpm exec playwright install --with-deps chromium` if browser system dependencies are missing.
 
-整页或单个元素子树：
+Convert the included example from the repository root:
+
+```bash
+node dist/backends/node/cli.js homepage/public/examples/card.html \
+  -o card.svg --width 520 --height 360 --font-mode embed
+```
+
+The instructions here use a source checkout; they do not require an npm release or a Chrome Web Store listing.
+
+### Node API
+
+Save this as `convert.mjs` in the repository root and run `node convert.mjs`:
+
+```js
+import { writeFile } from 'node:fs/promises';
+import { htmlToSvg } from './dist/index.js';
+
+const svg = await htmlToSvg(
+  '<html><body><h1>Hello, SVG</h1><p>Made from HTML.</p></body></html>',
+  { width: 800, height: 300, fontMode: 'embed' },
+);
+
+await writeFile('page.svg', svg, 'utf8');
+```
+
+When fitting-html is installed or linked into another project, import from `fitting-html` instead of `./dist/index.js`.
+
+## Usage
+
+### HTML, URL, or an existing Playwright page
+
+```js
+import { htmlToSvg } from './dist/index.js';
+
+// A bare string is HTML. URLs must use the { url } form.
+const fromHtml = await htmlToSvg('<h1>Hello</h1>', { width: 1280 });
+const fromUrl = await htmlToSvg(
+  { url: 'https://example.com' },
+  { width: 1280, height: 720 },
+);
+
+// With an existing Playwright Page, prepare the page before capture:
+// await page.goto(...); await page.waitForSelector(...);
+// const fromPage = await htmlToSvg({ page }, { width: 1280 });
+```
+
+The Node backend waits for `networkidle` when loading HTML or a URL, and for `document.fonts.ready` before capture. Use `settleMs` for an additional delay, or supply an already prepared Playwright page for authenticated or dynamic content. Capturing an existing page changes its viewport; its browser remains owned by the caller.
+
+HTML strings and CLI file input are loaded with `page.setContent`, without a file-based origin. For relative images, stylesheets, or scripts, use absolute URLs, an explicit `<base href>`, or serve the page over HTTP and capture its URL.
+
+#### Node options
+
+| Option | Default | Description |
+| --- | --- | --- |
+| `width` | Required | Viewport width in CSS pixels. |
+| `height` | Document height | Output height in CSS pixels. When omitted, the backend measures the document and expands the viewport. |
+| `deviceScaleFactor` | `1` | Pixel density for the browser context and raster captures; SVG coordinates stay in CSS pixels. For an existing Page, its context controls pixel density. |
+| `fontMode` | `'embed'` | `'embed'`, `'outline'`, or `'none'`; see [fonts](#fonts). |
+| `settleMs` | `0` | Extra wait in milliseconds before capture. |
+| `executablePath` | Playwright Chromium | Path to a custom Chromium executable. |
+| `launchArgs` | Backend defaults | Override Chromium launch arguments. |
+| `guaranteeFloor` | `false` | Embed a full-page screenshot beneath the vectors; increases file size and can expose overlap artifacts. |
+| `diffPatch` | `false` | Render the SVG back in Chromium, compare it with the page, and overlay raster patches on divergent regions; adds capture work and raster content. |
+
+`guaranteeFloor` and `diffPatch` are optional fidelity tools, not guarantees of a fully vector or exact result.
+
+### CLI
+
+Run the compiled CLI directly from the checkout:
+
+```bash
+node dist/backends/node/cli.js input.html -o out.svg \
+  --width 1280 --scale 2 --font-mode outline
+
+node dist/backends/node/cli.js https://example.com \
+  -o example.svg --width 1280 --height 720
+```
+
+The package exposes the same CLI as `fitting-html` when installed or linked. Defaults: width `1280`, scale `1`, font mode `embed`, output `out.svg`. Omit `--height` to use the document height. Set `CHROMIUM_PATH` to select a Chromium executable for the CLI.
+
+The repository also has a development helper, `pnpm render input.html out.svg 1280`, which uses `CHROMIUM_PATH` or the development dependency `@sparticuz/chromium`.
+
+### Browser library
+
+In a browser project that has fitting-html installed or locally linked, bundle the browser entry:
 
 ```ts
 import { captureCurrentPage, captureElement } from 'fitting-html/browser';
 
 const pageSvg = await captureCurrentPage({ fontMode: 'embed' });
-const elSvg = await captureElement(document.querySelector('.card')!); // 裁剪到该元素
+const visibleSvg = await captureCurrentPage({ viewportOnly: true });
+
+const card = document.querySelector('.card');
+if (card) {
+  const cardSvg = await captureElement(card, { fontMode: 'embed' });
+  console.log(cardSvg);
+}
 ```
 
-进阶选项（扩展即基于这些注入点构建）：
+The browser library uses DOM APIs without Node or Playwright at runtime. It captures the current layout; `width` and `height` control capture dimensions rather than creating a new browser viewport.
 
-- `viewportOnly: true` —— 只捕获当前可视区（坐标视口相对、不重置滚动），视口外内容裁掉；默认整页。
-- `rasterize: (rect, scale) => Promise<dataURI | null>` —— 注入截图能力供栅格回退（canvas/视频/滤镜/表单控件等）；纯页内无法截图，省略时这些区域被跳过。
-- `outline: Outliner` —— `outline` 字体模式所需的字形轮廓器（`createOutliner`），由调用方传入以免 opentype.js 进默认 bundle。
+- `viewportOnly: true` captures the current viewport for page captures; the default is the full document. Element capture crops to the selected subtree.
+- `rasterize(rect, scale)` supplies screenshot data as a data URI, or `null`. Without this adapter, regions requiring raster fallback are omitted.
+- `fontMode: 'outline'` requires an `outline` callback supplied by the caller. The browser entry does not export an outliner factory; setting the mode alone does not convert text to paths.
 
-### 4. Chrome 扩展（MV3）
+### Chrome extension
 
 ```bash
-pnpm build:extension   # 打包到 dist/extension/
+pnpm build:extension
 ```
 
-在 `chrome://extensions` 打开「开发者模式」→「加载已解压的扩展程序」→ 选择 `dist/extension/`，然后：
+Open `chrome://extensions`, enable **Developer mode**, choose **Load unpacked**, and select `dist/extension/`.
 
-- **点击工具栏图标弹出面板**，可选择：
-  - **捕获范围**：「可视区域」（默认，仅当前视口）/「整页」（完整文档）；
-  - **输出方式**：下载 + 预览 / 仅下载 / 仅预览（即「是否自动下载」）；
-  - **「Text & fonts」** 中选择 embed（可选中文本）/ 仅引用字体名；扩展尚未接入字形轮廓器，outline 显示为不可用，历史 outline 偏好自动回到 embed（Node/CLI 支持 outline）；
-  - 主按钮随范围显示 **「Capture visible area」/「Capture full page」**；**「Pick an element」** 按钮进入 inspect 模式。
-- **inspect 模式**：鼠标悬停高亮元素，点击即转换该元素子树，`Esc` 取消。也可用 **`Alt+Shift+S`** 或右键菜单「Convert element to SVG…」直接触发。
-- 偏好（范围/输出/字体）记忆在 `chrome.storage`；预览在打包的 `viewer.html` 新标签页中显示。
-- 转换期间面板选项与按钮暂时禁用，同一标签页不会并发转换；偏好保存或预览打开失败会在面板显示错误，可重试。
-- 面板显示当前标签页、选项说明、准备/转换/完成状态与失败后的「Retry capture」；浏览器内部页面和扩展商店页面会提前禁用捕获。界面支持深色主题、键盘焦点和减少动画的系统偏好。
-- 预览以 SVG 图片显示，页面中的 SVG 脚本或 HTML 不会进入扩展页面；下载仍保留原始 SVG 内容。
-- 预览页显示文件名、尺寸、大小，提供缩放、实际尺寸、适应宽度和棋盘格/浅色/深色背景；快捷键 `+` / `-` 缩放、`0` 实际尺寸、`F` 适应宽度，背景与缩放只影响预览。
-- 内容脚本按需注入（`chrome.scripting`），对扩展安装前已打开的标签页也生效。
-- **扩展从不滚动页面**（滚动会触发 sticky/fixed 重定位、懒加载，破坏捕获）。栅格回退（canvas/视频/滤镜/表单控件等）：
-  - 「可视区域」：service worker 的 `captureVisibleTab` 单次截图裁剪；
-  - 「整页」：优先用可选 `debugger` 权限（弹窗按钮点击时申请，可拒绝）走
-    `chrome.debugger` 的 `Page.captureScreenshot`（`captureBeyondViewport`，一次覆盖折叠线以下）；
-    权限检查由 service worker 执行（content script 无 `chrome.permissions`）；未授权则退化为当前视口裁剪，视口外栅格省略（向量部分不受影响）。
+- Capture the **visible area** (default), **full page**, or **a picked element**.
+- Choose download, preview, or both. The preview includes zoom and background controls.
+- Pick an element from the popup, with `Alt+Shift+S`, or through the context menu; press `Esc` to cancel selection.
+- Choose `embed` or `none` for fonts. Outline mode is currently unavailable in the extension.
 
-> 在支持扩展的浏览器里可用 `pnpm tsx scripts/verify-extension.ts` 做端到端冒烟（无头沙箱通常不支持加载扩展）。
+The extension does not scroll the document to stitch screenshots. Visible-area raster fallback uses `captureVisibleTab`. Full-page raster fallback can use the optional **debugger** permission for regions beyond the viewport. If that permission is declined, off-screen raster regions are omitted while supported vectors can still be exported. Browser internal pages and extension store pages cannot be captured.
 
-## 工作原理
+The manifest requests `activeTab`, `tabs`, `scripting`, `contextMenus`, `storage`, and `<all_urls>` host access; `debugger` is optional. See the [manifest](./src/backends/extension/manifest.json) for the exact permissions.
 
+## Fonts
+
+| Mode | Behavior | Tradeoff |
+| --- | --- | --- |
+| `embed` | Keep SVG text and inline readable `@font-face` font data. | Text remains selectable; system fonts are not automatically embedded. Font loading and cross-origin access can affect the result. |
+| `outline` | Convert glyphs to SVG paths when a usable font is available. | Converted text loses text selection and editing. Missing or unsupported fonts can fall back to SVG text. |
+| `none` | Reference font families by name. | Rendering depends on fonts installed in the viewer's environment. |
+
+Node outline mode resolves system fonts through `fontconfig` (`fc-match`). Install fontconfig and the needed fonts when using this path, particularly on Linux. Font formats and complex text shaping can limit outline fidelity; verify the actual output. Only embed or redistribute fonts and other assets you have permission to share.
+
+## Supported content and limitations
+
+**Vector support includes:** box backgrounds; borders and rounded corners; outer shadows; outlines; linear gradients; line-positioned text with spacing, decoration, case transforms, ellipsis, and gradient fills; list markers; inline SVG; images with `object-fit`; supported decorative pseudo-elements; overflow clipping; opacity; translation and scaling; modern CSS colors converted to sRGB; open shadow DOM and `display: contents`.
+
+**Raster fallback candidates include:** radial, conic, and layered gradients; inset shadows; filters and backdrop filters; blend modes; masks and clip paths; rotated, skewed, or 3D transforms; native form controls; canvas, video, iframe, closed shadow DOM, and images that cannot be read directly.
+
+Coverage depends on the backend and DOM structure. In particular:
+
+- The browser library and extension disable container raster fallback to avoid double-painting children; some complex container effects are captured on a best-effort basis.
+- Full-document browser/extension capture expands scroll-container content; viewport-only capture preserves the current view. Node capture uses its own viewport sizing, so outputs can differ.
+- Capture produces a static snapshot. Interactivity, application logic, animation, and lazy-loaded content that has not rendered are not preserved.
+- A single SVG file can contain raster images. Font availability, cross-origin resources, and viewer support still affect portability and appearance.
+- Chromium pixel comparisons measure Chromium rendering. Check the output in the SVG viewer or design tool you intend to use.
+
+## How it works
+
+```text
+Rendered HTML → DOM capture → Scene IR → SVG emitter → SVG file
+                                  ↑
+                       Backend raster captures
 ```
-页面 ──(Playwright 注入)──▶ 纯 DOM 捕获脚本 ──▶ Scene IR ──▶ SVG 发射器 ──▶ 纯 SVG
-                                                  │
-                                       不可向量化的子树 → 后端截图 → 内联 <image>
-```
 
-`src/core/` 是零 Node 依赖的纯 TS（捕获 + IR + SVG 发射），可直接打包进浏览器插件；
-`src/backends/node/` 用 Playwright 启动 Chromium、注入捕获脚本、为回退区域截图。
+The browser computes layout. The capture core reads DOM geometry and computed styles into a scene representation; the emitter translates that scene into SVG. Backends supply browser access, screenshots, and font resolution where available.
 
-## 验证方案
+| Directory | Purpose |
+| --- | --- |
+| `src/core/` | DOM capture, scene types, SVG emission; no Node runtime dependency. |
+| `src/backends/node/` | Playwright integration, font resolution, CLI, and diff patches. |
+| `src/backends/browser/` | In-page API and raster adapter utilities. |
+| `src/backends/extension/` | Manifest V3 popup, capture worker, content script, and viewer. |
+| `test/` | Unit tests, HTML fixtures, and visual regression tests. |
+| `examples/` | Ant Design and MUI example applications. |
+| `homepage/` | Project website and sample assets. |
 
-保真度的唯一可信度量是**像素对比**：在同一个 Chromium 里分别渲染「原页面」和「生成的 SVG」，
-用 `pixelmatch` 逐像素求差异比例。整套方案分三层，全部固化为脚本：
+See [DESIGN.md](./DESIGN.md) for implementation details and [fidelity research](./docs/fidelity-research.md) for additional investigation. These documents are currently in Chinese.
 
-**1. 单元 + 视觉回归（CI，`pnpm test`）** — `test/**/*.test.ts` + `test/fixtures/*.html`：
-发射器单测、扩展纯逻辑单测（`viewport-raster` / `shot-scheduler`）、MV3 bundle 完整性测试、
-打包后扩展脚本的 Chromium 回归（整页截图与权限降级、并发保护、预览错误回传、预览隔离与原始下载），
-以及 smoke / gradients / outline / 字体内嵌 / 子树捕获 / 页内后端 / 图片捕获 / **oklch 颜色** /
-**容器栅格回退（不空白）** / **text-transform** / **可见文本不丢失（结构不变量）** 等回归。
-另有两组门控测试：`EXTENSION_E2E=1`（真实加载扩展的完整 Chromium 端到端）与
-`REALWORLD_TESTS=1`（在线真实站点）。新特性必须先加 fixture。
-
-**2. 示例应用端到端（`pnpm validate:example <name>`）** — 一条命令完成「构建 → 起静态服务 →
-渲染对比 → 写产物 → 超阈值则非零退出」：
+## Development and validation
 
 ```bash
-pnpm validate:example antd-app 1280     # examples/antd-app，差异 ~0.003%
-pnpm validate:example mui-app  1280     # examples/mui-app（MUI Dashboard：Drawer + x-charts 折线/柱/饼 + 表格），~0.34%
-# 字体模式与阈值可调：
-pnpm validate:example mui-app 1280 "" outline
-FH_THRESHOLD=0.01 pnpm validate:example antd-app
+pnpm build
+pnpm build:extension
+pnpm test
+
+# Compare your own HTML or URL with its SVG render
+pnpm validate ./homepage/public/examples/card.html card 520 360 embed
+pnpm validate https://example.com example 1280 720
+
+# Build, serve, and compare the example applications
+pnpm validate:example antd-app 1280
+pnpm validate:example mui-app 1280
 ```
 
-**3. 任意 URL / HTML 即席验证（`pnpm validate`）**：
+Validation writes `<name>.svg`, `<name>.expected.png`, `<name>.actual.png`, and `<name>.diff.png` to `test/visual/__out__/`. Example validation exits with a failure if the pixel-diff ratio exceeds `FH_THRESHOLD` (default `0.02`, or 2%); set `FH_THRESHOLD=0.01` for a 1% threshold. The standalone `pnpm validate` command reports the diff without applying that threshold.
+
+Development and visual-test helpers use `@sparticuz/chromium` or `CHROMIUM_PATH`; the production Node API uses Playwright Chromium unless `executablePath` is supplied.
+
+Optional suites:
 
 ```bash
-pnpm validate https://example.com mypage 1280 720
-pnpm validate ./some.html mypage 800 600 outline
+# Requires a Chromium build capable of loading extensions
+EXTENSION_E2E=1 pnpm exec vitest run test/visual/extension-e2e.test.ts
+
+# Requires access to external sites
+REALWORLD_TESTS=1 pnpm exec vitest run test/visual/realworld.test.ts
 ```
 
-产物统一写到 `test/visual/__out__/<name>.{svg,expected,actual,diff}.png`，可直接肉眼比对。
-实现上：`scripts/validate.ts` 是核心 harness（含静态服务 `serveDir`），`scripts/validate-example.ts`
-在其上封装示例的构建 / serve / 退出码。另有开发用脚本：`scripts/screenshot-realworld.ts`
-（真实站点 live vs SVG 并排截图）、`scripts/verify-extension.ts`（真实加载扩展的下载冒烟）。
+[CI](./.github/workflows/ci.yml) builds TypeScript and the extension and runs the test suite for pull requests to `main` and configured push branches. The full extension E2E job runs on configured pushes.
 
-**CI（GitHub Actions，`.github/workflows/ci.yml`）**：每次 push / PR 跑 build + 扩展
-bundle + 全部测试；扩展完整 E2E（需可加载扩展的 Chromium）仅在 push 时运行。
+## Contributing
 
-> **沙箱说明**：本仓库的开发环境屏蔽了 Playwright 的浏览器 CDN，因此开发脚本支持用
-> `@sparticuz/chromium`（经 npm 分发的 Chromium 二进制）作为浏览器源（或设
-> `CHROMIUM_PATH`）。正常环境用 `pnpm exec playwright install chromium` 即可，
-> 运行时不依赖 `@sparticuz/chromium`。
+[Issues](https://github.com/0x0079/fitting-html/issues) and pull requests are welcome. For rendering bugs, include a minimal HTML reproduction, capture backend, viewport dimensions, font mode, and screenshots or validation artifacts.
 
-## 状态
+For rendering changes, add a focused fixture or regression test. Run `pnpm build`, `pnpm build:extension`, and `pnpm test` before submitting. Use PR titles such as `docs(readme): improve bilingual setup instructions` or `bugfix(capture): preserve clipped text`.
 
-M1–M8 核心已落地，三种后端（Node / 页内库 / MV3 扩展）共用同一捕获核心。
+## License
 
-**向量化覆盖**：盒子背景 / 统一与异色边框 / 圆角 / 外阴影（含 spread + 高斯模糊）/
-outline 描边 / 线性渐变 / 逐行文本（letter/word-spacing、text-decoration、
-text-transform、text-overflow:ellipsis、background-clip:text 渐变文字、列表 ::marker）/
-内联 SVG 图标（重复图标 defs+use 去重）/ 图片内联（object-fit）/ 装饰性
-::before/::after / overflow 与圆角裁剪 / 不透明度 / 2D transform /
-现代颜色函数（oklch/oklab/lab/…→sRGB）/ shadow DOM、display:contents、
-content-visibility / 滚动容器内容展开（unfurl）。
-
-**栅格回退**（向量无法忠实表达时局部截图兜底）：conic/radial/多层渐变、inset 阴影、
-`filter` / `backdrop-filter` / `mix-blend-mode` / `mask` / `clip-path`、3D 或旋转/斜切
-transform、表单控件、canvas / video / iframe、closed shadow DOM、CORS 不可读图片。
-
-设计与里程碑见 **[DESIGN.md](./DESIGN.md)**，实施现状详见其 §12。
+Licensed under the **Mozilla Public License 2.0 (MPL-2.0)**. See [LICENSE](./LICENSE) for the full text. Font, image, and captured page content retain their respective licenses.
