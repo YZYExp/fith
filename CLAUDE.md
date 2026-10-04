@@ -1,8 +1,16 @@
-# fitting-html — Development Guide
+# fith — Development Guide
 
 ## Project Overview
 
-`fitting-html` converts HTML pages or elements into self-contained SVG files.
+**fith** (short for **fitting HTML**: `fit` + `h`) converts rendered HTML pages
+or elements into self-contained, vector-first SVG files. The name comes from the
+idea of fitting anything; this project focuses on HTML visual reconstruction.
+
+Use **fith** as the project display name. Repository links target the planned
+rename to `https://github.com/0x0079/fith`. The package name and CLI command
+currently remain `fitting-html`; imports and command examples must match those
+actual identifiers.
+
 It works in three environments:
 - **Node/Playwright** (`src/backends/node/playwright.ts`) — full-page SVG via a headless Chromium
 - **Browser in-page** (`src/backends/browser/index.ts`) — run directly inside a page (no server)

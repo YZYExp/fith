@@ -72,7 +72,7 @@ export function Usage() {
         <div
           className="usage-tabs"
           role="tablist"
-          aria-label="fitting-html 使用方式"
+          aria-label="fith 使用方式"
         >
           {usageExamples.map((item, index) => (
             <button

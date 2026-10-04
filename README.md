@@ -1,10 +1,10 @@
-# fitting-html
+# fith — HTML to SVG
 
 **Turn rendered HTML into a portable, vector-first SVG.**
 
 [English](./README.md) · [简体中文](./README.zh-CN.md)
 
-fitting-html uses the browser's computed layout to capture HTML pages and elements as SVG. Text, boxes, borders, gradients, and supported effects become SVG graphics; complex regions can fall back to embedded screenshots when the backend provides them.
+fith uses the browser's computed layout to capture HTML pages and elements as SVG. Text, boxes, borders, gradients, and supported effects become SVG graphics; complex regions can fall back to embedded screenshots when the backend provides them.
 
 Use it to export UI cards, dashboards, documentation illustrations, and page snapshots from the HTML you already have. The output is a static SVG, with images and captured raster regions inlined into one file. Font handling is configurable.
 
@@ -17,6 +17,17 @@ The repository includes a [sample HTML card](./homepage/public/examples/card.htm
 | HTML screenshot | SVG output |
 | --- | --- |
 | ![Screenshot of the sample HTML card](./homepage/public/examples/card.png) | ![SVG conversion of the sample HTML card](./homepage/public/examples/card.svg) |
+
+## Name and naming philosophy
+
+**fith** is short for **fitting HTML**: `fit` means fitting, and `h` stands for HTML.
+The name comes from the idea of fitting anything; this project focuses on
+reconstructing the visual appearance of rendered HTML as SVG.
+
+The project display name is **fith**. Repository links and clone instructions
+anticipate the planned rename to [`0x0079/fith`](https://github.com/0x0079/fith).
+The package name and CLI command currently remain `fitting-html`, so imports
+and command examples use those existing identifiers.
 
 ## Highlights
 
@@ -33,8 +44,8 @@ The repository includes a [sample HTML card](./homepage/public/examples/card.htm
 Requires **Node.js 18+** and **pnpm**. The repository pins pnpm in `package.json`; CI uses Node.js 22. The Node backend also requires Chromium.
 
 ```bash
-git clone https://github.com/0x0079/fitting-html.git
-cd fitting-html
+git clone https://github.com/0x0079/fith.git
+cd fith
 pnpm install
 pnpm exec playwright install chromium
 pnpm build
@@ -244,7 +255,7 @@ REALWORLD_TESTS=1 pnpm exec vitest run test/visual/realworld.test.ts
 
 ## Contributing
 
-[Issues](https://github.com/0x0079/fitting-html/issues) and pull requests are welcome. For rendering bugs, include a minimal HTML reproduction, capture backend, viewport dimensions, font mode, and screenshots or validation artifacts.
+[Issues](https://github.com/0x0079/fith/issues) and pull requests are welcome. For rendering bugs, include a minimal HTML reproduction, capture backend, viewport dimensions, font mode, and screenshots or validation artifacts.
 
 For rendering changes, add a focused fixture or regression test. Run `pnpm build`, `pnpm build:extension`, and `pnpm test` before submitting. Use PR titles such as `docs(readme): improve bilingual setup instructions` or `bugfix(capture): preserve clipped text`.
 
