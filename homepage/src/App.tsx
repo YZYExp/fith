@@ -1,0 +1,31 @@
+import { Header, Footer } from "./components/Layout";
+import { ProjectHero, ProjectPrinciple } from "./components/ProjectHero";
+import { Features } from "./components/Features";
+import { Usage } from "./components/Usage";
+import { ProjectQuestions, Documentation } from "./components/ProjectQuestions";
+
+export default function App() {
+  return (
+    <>
+      <a className="skip" href="#main">
+        跳到正文
+      </a>
+      <div className="wrap">
+        <Header />
+      </div>
+      <main id="main">
+        <div className="wrap">
+          <ProjectHero />
+          <ProjectPrinciple />
+          <Features />
+        </div>
+        <Usage />
+        <div className="wrap">
+          <ProjectQuestions />
+          <Documentation />
+        </div>
+      </main>
+      <Footer />
+    </>
+  );
+}
