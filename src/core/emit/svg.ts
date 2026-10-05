@@ -11,7 +11,7 @@ import type {
 } from '../ir/types.js';
 import type { Outliner } from './outline.js';
 import { n, esc, uniformRadii, noRadii, roundedRectPath } from './primitives.js';
-import { Defs, clipId, shadowFilterId, shadowMaskId, gradientId } from './defs.js';
+import { Defs, clipId, shadowFilterId, shadowMaskId, gradientId, maskGradientId } from './defs.js';
 
 function emitBox(node: BoxNode, defs: Defs): string {
   const { rect, radii } = node;
@@ -211,8 +211,10 @@ function wrap(node: PaintNode, inner: string, defs: Defs): string {
   if (node.opacity < 0.999) parts.push(`opacity="${n(node.opacity)}"`);
   if (node.clip && node.clip.width > 0 && node.clip.height > 0)
     parts.push(`clip-path="url(#${clipId(defs, node.clip)})"`);
-  if (parts.length === 0) return inner;
-  return `<g ${parts.join(' ')}>${inner}</g>`;
+  let out = parts.length === 0 ? inner : `<g ${parts.join(' ')}>${inner}</g>`;
+  // one nested <g> per mask: SVG allows a single mask per element
+  for (const m of node.masks ?? []) out = `<g mask="url(#${maskGradientId(defs, m)})">${out}</g>`;
+  return out;
 }
 
 export interface EmitOptions {
