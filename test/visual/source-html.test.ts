@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { resolve } from 'node:path';
 import { readFileSync } from 'node:fs';
 import { chromium, type Browser } from 'playwright';
@@ -8,7 +8,18 @@ import sparticuz from '@sparticuz/chromium';
 import { captureSourceHtml } from '../../src/core/capture/source-html.js';
 import { renderDetailed } from '../../src/backends/node/playwright.js';
 
-const ARGS = ['--no-sandbox', '--disable-setuid-sandbox', '--disable-gpu', '--single-process'];
+// One shared browser for the whole file, and no --single-process: launching a
+// browser per test in single-process mode made screenshots flaky on busy CI runners.
+const ARGS = ['--no-sandbox', '--disable-setuid-sandbox', '--disable-gpu'];
+let browser: Browser;
+let execPath: string;
+beforeAll(async () => {
+  execPath = process.env.CHROMIUM_PATH || (await sparticuz.executablePath());
+  browser = await chromium.launch({ executablePath: execPath, args: ARGS });
+}, 60_000);
+afterAll(async () => {
+  await browser?.close();
+});
 const FIXTURES = resolve(__dirname, '../fixtures');
 
 const PAGE = `<!doctype html><html lang="en" class="theme"><head><title>t</title>
@@ -25,15 +36,14 @@ const g=document.getElementById('c').getContext('2d');g.fillStyle='#00f';g.fillR
 const sr=document.getElementById('host').attachShadow({mode:'open'});sr.innerHTML='<style>p{color:red}</style><p>in shadow</p>';
 </script></body></html>`;
 
-async function withPage<T>(html: string, fn: (page: import('playwright').Page, b: Browser) => Promise<T>) {
-  const execPath = process.env.CHROMIUM_PATH || (await sparticuz.executablePath());
-  const browser = await chromium.launch({ executablePath: execPath, args: ARGS });
+async function withPage<T>(html: string, fn: (page: import('playwright').Page) => Promise<T>) {
+  const ctx = await browser.newContext({ viewport: { width: 400, height: 300 } });
   try {
-    const page = await (await browser.newContext({ viewport: { width: 400, height: 300 } })).newPage();
+    const page = await ctx.newPage();
     await page.setContent(html, { waitUntil: 'load' });
-    return await fn(page, browser);
+    return await fn(page);
   } finally {
-    await browser.close();
+    await ctx.close();
   }
 }
 
@@ -57,10 +67,8 @@ describe('captureSourceHtml', () => {
 
   it('re-renders to the same pixels as the original page', async () => {
     const fixture = readFileSync(resolve(FIXTURES, 'sidebar-rail.html'), 'utf8');
-    const execPath = process.env.CHROMIUM_PATH || (await sparticuz.executablePath());
-    const browser = await chromium.launch({ executablePath: execPath, args: ARGS });
+    const ctx = await browser.newContext({ viewport: { width: 260, height: 700 } });
     try {
-      const ctx = await browser.newContext({ viewport: { width: 260, height: 700 } });
       const a = await ctx.newPage();
       await a.setContent(fixture, { waitUntil: 'load' });
       const snapshot = await a.evaluate(captureSourceHtml, undefined);
@@ -71,7 +79,7 @@ describe('captureSourceHtml', () => {
       const diff = pixelmatch(want.data, got.data, undefined, 260, 700, { threshold: 0.1 });
       expect(diff / (260 * 700)).toBeLessThan(0.001);
     } finally {
-      await browser.close();
+      await ctx.close();
     }
   }, 60_000);
 
@@ -88,12 +96,11 @@ describe('captureSourceHtml', () => {
   }, 60_000);
 
   it('is returned by renderDetailed only when requested', async () => {
-    const execPath = process.env.CHROMIUM_PATH || (await sparticuz.executablePath());
-    const off = await renderDetailed({ html: PAGE }, { width: 400, height: 300, executablePath: execPath, launchArgs: ARGS });
+    const off = await renderDetailed({ html: PAGE }, { width: 400, height: 300, executablePath: execPath });
     expect(off.sourceHtml).toBeUndefined();
     const on = await renderDetailed(
       { html: PAGE },
-      { width: 400, height: 300, executablePath: execPath, launchArgs: ARGS, captureSourceHtml: true },
+      { width: 400, height: 300, executablePath: execPath, captureSourceHtml: true },
     );
     expect(on.sourceHtml).toContain('fith-capture');
     expect(on.svg).toContain('<svg');
