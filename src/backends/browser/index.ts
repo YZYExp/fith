@@ -7,6 +7,7 @@ import { captureScene } from '../../core/capture/capture.js';
 import { emitSvg } from '../../core/emit/svg.js';
 import type { Rect, Scene } from '../../core/ir/types.js';
 import type { Outliner } from '../../core/emit/outline.js';
+import { createDomRasterizer } from './dom-raster.js';
 
 export interface InPageOptions {
   /** Defaults to the current layout viewport width. */
@@ -37,6 +38,20 @@ export interface InPageOptions {
    * is clipped away. Default false (full-page).
    */
   viewportOnly?: boolean;
+  /**
+   * Re-render regions that have no screenshot (no `rasterize`, or it returned
+   * null — e.g. off-screen) by cloning the element with inlined styles into an SVG
+   * <foreignObject> and drawing it to a canvas (see dom-raster.ts). Fills the gaps
+   * so un-vectorizable content isn't silently dropped. Default true.
+   */
+  domRasterFallback?: boolean;
+  /**
+   * Element export only: temporarily expand scrollable containers inside (and
+   * including) the picked element to their full content height, so the SVG holds the
+   * whole list rather than the visible window. Layout is restored afterwards.
+   * Default true; pass false for a "what I see" export.
+   */
+  unfurlScrollContainers?: boolean;
 }
 
 async function run(opts: InPageOptions, root?: Element): Promise<string> {
@@ -44,6 +59,7 @@ async function run(opts: InPageOptions, root?: Element): Promise<string> {
   // unfurl overflow) so one viewport screenshot composites correctly and
   // off-screen content is left out.
   const viewportOnly = !!opts.viewportOnly && !root;
+  const rasterElements = new Map<string, Element>();
   const scene: Scene = await captureScene(
     {
       width: opts.width ?? (viewportOnly ? window.innerWidth : document.documentElement.clientWidth),
@@ -69,6 +85,8 @@ async function run(opts: InPageOptions, root?: Element): Promise<string> {
       // expands overflow clips to scrollWidth × scrollHeight, restored after).
       // Viewport-only skips this so the capture matches what's on screen now.
       captureScrollableContent: !viewportOnly,
+      rasterElements,
+      unfurlScrollContainers: opts.unfurlScrollContainers,
     },
     root,
   );
@@ -83,6 +101,18 @@ async function run(opts: InPageOptions, root?: Element): Promise<string> {
         { x: t.x, y: t.y, width: t.width, height: t.height },
         scene.deviceScaleFactor,
       );
+    }
+  }
+
+  if (opts.domRasterFallback !== false) {
+    const domRaster = createDomRasterizer();
+    const byId = new Map(scene.rasterTargets.map((t) => [t.id, t]));
+    for (const node of scene.nodes) {
+      if (node.kind !== 'raster' || node.href) continue;
+      const t = byId.get(node.id);
+      const el = rasterElements.get(node.id);
+      if (!t || !el || t.width <= 0 || t.height <= 0) continue;
+      node.href = await domRaster(el, { x: t.x, y: t.y, width: t.width, height: t.height }, scene.deviceScaleFactor);
     }
   }
 

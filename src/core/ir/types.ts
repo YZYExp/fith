@@ -67,11 +67,23 @@ export interface Clip {
   radii: CornerRadii;
 }
 
+/**
+ * CSS mask-image over the mask box `rect`: either a linear-gradient (stops are
+ * white with the mask alpha) or a placed raster/SVG image (alpha channel used).
+ */
+export interface MaskGradient {
+  rect: Rect;
+  gradient?: LinearGradientFill;
+  image?: { href: string; x: number; y: number; width: number; height: number };
+}
+
 export interface NodeBase {
   id: string;
   rect: Rect;
   opacity: number;
   clip?: Clip | null;
+  /** Alpha masks (from mask-image on the node or an ancestor) applied multiplicatively. */
+  masks?: MaskGradient[];
 }
 
 export interface GradientStop {
@@ -191,4 +203,12 @@ export interface CaptureOptions {
    * Scroll positions are restored after capture. Default false.
    */
   captureScrollableContent?: boolean;
+  /**
+   * Out-parameter for in-page callers (not serializable, so unused by the Playwright
+   * backend): receives raster target id → source element, so a backend without
+   * screenshots can re-render the element itself.
+   */
+  rasterElements?: Map<string, Element>;
+  /** Element capture: expand inner scroll containers to full content height (default true). */
+  unfurlScrollContainers?: boolean;
 }

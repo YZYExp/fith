@@ -10,6 +10,64 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
   const dpr = opts.deviceScaleFactor || 1;
   const rootEl = root ?? document.documentElement;
   const subtree = rootEl !== document.documentElement;
+
+  // Element export of scrollable content ("unfurl"): a picked container (or one
+  // nested inside it, e.g. a sidebar's session list) only shows its viewport-sized
+  // window, so the export would silently drop everything scrolled out of view.
+  // Temporarily let every vertically-scrolling container grow to its full content
+  // height — and release the fixed-height / flex-constrained ancestors up to the
+  // root — so the root's own box (and thus the export) covers all of it. Inline
+  // styles and scroll positions are restored in the `finally` below.
+  const unfurlSaved: { el: HTMLElement; style: string | null }[] = [];
+  const unfurlScroll: { el: HTMLElement; top: number; left: number }[] = [];
+  if (subtree && (opts as any).captureScrollableContent && (opts as any).unfurlScrollContainers !== false) {
+    const scrollers: HTMLElement[] = [];
+    for (const el of [rootEl, ...Array.from(rootEl.querySelectorAll('*'))]) {
+      const h = el as HTMLElement;
+      if (!(h instanceof HTMLElement)) continue;
+      const oy = getComputedStyle(h).overflowY;
+      if ((oy === 'auto' || oy === 'scroll') && h.scrollHeight > h.clientHeight + 1) scrollers.push(h);
+    }
+    const touched = new Set<HTMLElement>();
+    for (const sc of scrollers) {
+      unfurlScroll.push({ el: sc, top: sc.scrollTop, left: sc.scrollLeft });
+      for (let a: HTMLElement | null = sc; a; a = a.parentElement) {
+        touched.add(a);
+        if (a === rootEl) break;
+      }
+    }
+    for (const el of touched) {
+      const original = el.getAttribute('style');
+      unfurlSaved.push({ el, style: original });
+      const parentFlex = el.parentElement ? /flex/.test(getComputedStyle(el.parentElement).display) : false;
+      const cs0 = getComputedStyle(el);
+      const decl = ['height:auto', 'max-height:none'];
+      if (parentFlex) decl.push('flex:0 0 auto');
+      // visible+hidden on the two axes would compute back to `auto`; clip the x axis instead
+      if (cs0.overflowY !== 'visible') {
+        decl.push('overflow-y:visible');
+        if (cs0.overflowX !== 'visible') decl.push('overflow-x:clip');
+      }
+      // Written through the attribute, not el.style: a CSSOM edit makes Chrome leave
+      // `style=""` behind even after removeAttribute, so the DOM wouldn't round-trip.
+      el.setAttribute('style', (original ? original.replace(/;?\s*$/, ';') : '') + decl.map((d) => d + ' !important').join(';'));
+    }
+    for (const { el } of unfurlScroll) {
+      el.scrollTop = 0;
+      el.scrollLeft = 0;
+    }
+  }
+  const unfurlRestore = () => {
+    for (const { el, style } of unfurlSaved) {
+      if (style === null) el.removeAttribute('style');
+      else el.setAttribute('style', style);
+    }
+    for (const { el, top, left } of unfurlScroll) {
+      el.scrollTop = top;
+      el.scrollLeft = left;
+    }
+  };
+  try {
   const rootRect = rootEl.getBoundingClientRect();
   const W = subtree ? rootRect.width : opts.width;
   const H = subtree
@@ -241,6 +299,12 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
     if (cs.display === 'none') return false;
     // opacity:0 composites to invisible and cannot be overridden by children
     if (num(cs.opacity) === 0) return false;
+    // Ancestors of a picked element only provide context (their own rendering is
+    // skipped), and their boxes say nothing about where the root is: <body> is
+    // routinely 0px tall when the app shell is position:fixed/absolute, and a wrapper
+    // can sit entirely outside the captured region. Culling them by geometry would
+    // drop the whole subtree and export an empty SVG.
+    if (rootAncestors.has(el)) return true;
     const r = el.getBoundingClientRect();
     if (r.width === 0 && r.height === 0) return false;
     if (r.bottom < cullTop || r.right < cullLeft || r.top > cullBottom || r.left > cullRight)
@@ -275,7 +339,12 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
     if (cs.filter && cs.filter !== 'none') return 'filter';
     if ((cs as any).backdropFilter && (cs as any).backdropFilter !== 'none') return 'backdrop-filter';
     if (cs.mixBlendMode && cs.mixBlendMode !== 'normal') return 'blend-mode';
-    if ((cs as any).maskImage && (cs as any).maskImage !== 'none' && (cs as any).maskImage !== undefined)
+    if (
+      (cs as any).maskImage &&
+      (cs as any).maskImage !== 'none' &&
+      (cs as any).maskImage !== undefined &&
+      !parseElementMask(el, cs)
+    )
       return 'mask';
     if (cs.clipPath && cs.clipPath !== 'none') return 'clip-path';
     const tf = cs.transform;
@@ -316,12 +385,245 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
     return null;
   };
 
+  // CSS mask-image: linear-gradient(...) is the ubiquitous "fade out the end of a
+  // truncated label" pattern. Computed values keep px/calc() stop positions, which
+  // parseLinearGradient rejects, so resolve them here against the gradient line
+  // length. Only the alpha channel of a mask matters, so stops become white+alpha
+  // and the emitter renders it as an SVG <mask>. Returns null for anything we can't
+  // reproduce exactly (multiple layers, custom size/position/repeat, url() masks…),
+  // which keeps the old raster fallback.
+  // ---- raster-image layers (mask-image:url(), background-image:url()) ----------
+  // Images are fetched once, normalised to a base64 data URI (raw `data:` URIs
+  // may hold quotes/`<` that would break the SVG attribute) and measured, so the
+  // layer can be placed exactly (size/position) and embedded as an <image>.
+  const imgInfo = new Map<string, { href: string; w: number; h: number } | null>();
+  const normDataUrl = (u: string): string => {
+    const m = u.match(/^data:([^,]*?),([\s\S]*)$/);
+    if (!m || /;base64$/i.test(m[1])) return u;
+    try {
+      const raw = decodeURIComponent(m[2]);
+      const mime = m[1].split(';')[0] || 'text/plain';
+      return `data:${mime};base64,${btoa(unescape(encodeURIComponent(raw)))}`;
+    } catch {
+      return u;
+    }
+  };
+  const loadImgInfo = async (url: string) => {
+    if (imgInfo.has(url)) return;
+    imgInfo.set(url, null);
+    const fetched = await fetchDataURL(url);
+    if (!fetched) return;
+    const href = normDataUrl(fetched);
+    const dim = await new Promise<{ w: number; h: number } | null>((res) => {
+      const im = new Image();
+      im.onload = () => res({ w: im.naturalWidth, h: im.naturalHeight });
+      im.onerror = () => res(null);
+      im.src = href;
+    });
+    if (dim) imgInfo.set(url, { href, w: dim.w, h: dim.h });
+  };
+  // the single url() of a one-layer image property, else null
+  const singleUrl = (value: string | undefined): string | null => {
+    if (!value || value === 'none' || splitTopLevel(value).length !== 1) return null;
+    const m = value.trim().match(/^url\((["']?)([\s\S]*)\1\)$/);
+    return m ? m[2].replace(/\\(["'])/g, '$1') : null;
+  };
+  const prepareImageLayers = async (cs: CSSStyleDeclaration) => {
+    const a = singleUrl(cs.backgroundImage);
+    if (a) await loadImgInfo(a);
+    const b = singleUrl((cs as any).maskImage);
+    if (b) await loadImgInfo(b);
+  };
+  // Resolve CSS size/position/repeat for one image layer inside `area`.
+  // Returns null when we can't reproduce it exactly (tiling etc.).
+  const placeImageLayer = (
+    info: { w: number; h: number },
+    sizeV: string,
+    posV: string,
+    repeatV: string,
+    area: { x: number; y: number; width: number; height: number },
+  ) => {
+    const ratio = info.w > 0 && info.h > 0 ? info.w / info.h : 0;
+    const nat = { w: info.w > 0 ? info.w : area.width, h: info.h > 0 ? info.h : area.height };
+    let w = nat.w;
+    let h = nat.h;
+    const sv = (sizeV || 'auto').trim();
+    if (sv === 'contain' || sv === 'cover') {
+      const r = ratio || area.width / Math.max(1, area.height);
+      const fitW = area.width / Math.max(1e-6, area.height) <= r; // limited by width?
+      const useW = sv === 'contain' ? fitW : !fitW;
+      if (useW) { w = area.width; h = w / r; } else { h = area.height; w = h * r; }
+    } else {
+      const [sw = 'auto', sh = 'auto'] = sv.split(/\s+/);
+      const rs = (t: string, base: number) =>
+        t === 'auto' ? null : /%$/.test(t) ? (parseFloat(t) / 100) * base : /px$/.test(t) ? parseFloat(t) : NaN;
+      const rw = rs(sw, area.width);
+      const rh = rs(sh, area.height);
+      if ((rw !== null && Number.isNaN(rw)) || (rh !== null && Number.isNaN(rh))) return null;
+      if (rw !== null && rh !== null) { w = rw; h = rh; }
+      else if (rw !== null) { w = rw; h = ratio ? rw / ratio : nat.h; }
+      else if (rh !== null) { h = rh; w = ratio ? rh * ratio : nat.w; }
+    }
+    const [px = '0%', py = '0%'] = (posV || '0% 0%').trim().split(/\s+/);
+    const rp = (t: string, free: number) =>
+      /%$/.test(t) ? (parseFloat(t) / 100) * free : /px$/.test(t) ? parseFloat(t) : NaN;
+    const ox = rp(px, area.width - w);
+    const oy = rp(py, area.height - h);
+    if (Number.isNaN(ox) || Number.isNaN(oy)) return null;
+    const rep = (repeatV || 'repeat').trim();
+    const noRepeat = rep === 'no-repeat' || rep === 'no-repeat no-repeat';
+    // a tile at least as large as the area never visibly repeats
+    if (!noRepeat && !(w >= area.width - 0.5 && h >= area.height - 0.5)) return null;
+    return { x: area.x + ox, y: area.y + oy, width: w, height: h };
+  };
+
+  const parseElementMask = (el: Element, cs: CSSStyleDeclaration) => {
+    const value = ((cs as any).maskImage as string) || '';
+    if (!value || value === 'none') return null;
+    const maskUrl = singleUrl(value);
+    if (maskUrl) {
+      const info = imgInfo.get(maskUrl);
+      if (!info) return null;
+      if ((cs as any).maskOrigin && (cs as any).maskOrigin !== 'border-box') return null;
+      if ((cs as any).maskClip && (cs as any).maskClip !== 'border-box') return null;
+      const mode = (cs as any).maskMode;
+      if (mode && mode !== 'match-source' && mode !== 'alpha') return null;
+      const br = el.getBoundingClientRect();
+      if (br.width <= 0 || br.height <= 0) return null;
+      const box = { x: br.left, y: br.top, width: br.width, height: br.height };
+      const placed = placeImageLayer(
+        info,
+        (cs as any).maskSize,
+        (cs as any).maskPosition,
+        (cs as any).maskRepeat,
+        box,
+      );
+      if (!placed) return null;
+      return { rect: box, image: { href: info.href, ...placed } };
+    }
+    if (value.lastIndexOf('linear-gradient(') !== 0 || !/^linear-gradient\(/.test(value)) return null;
+    const size = (cs as any).maskSize as string | undefined;
+    const pos = (cs as any).maskPosition as string | undefined;
+    const rep = (cs as any).maskRepeat as string | undefined;
+    if (size && size !== 'auto' && size !== 'auto auto') return null;
+    if (pos && pos !== '0% 0%' && pos !== '0%') return null;
+    if (rep && rep !== 'repeat' && rep !== 'repeat repeat') return null;
+    const r = el.getBoundingClientRect();
+    if (r.width <= 0 || r.height <= 0) return null;
+    const inner = value.slice(value.indexOf('(') + 1, value.lastIndexOf(')'));
+    const parts = splitTopLevel(inner).map((x) => x.trim());
+    let angle = 180;
+    let i = 0;
+    if (/deg$/.test(parts[0])) {
+      angle = parseFloat(parts[0]);
+      i = 1;
+    } else if (/^to\b/.test(parts[0])) {
+      if (!(parts[0] in sideToAngle)) return null;
+      angle = sideToAngle[parts[0]];
+      i = 1;
+    }
+    const rad = (angle * Math.PI) / 180;
+    const L = Math.abs(r.width * Math.sin(rad)) + Math.abs(r.height * Math.cos(rad));
+    if (L <= 0) return null;
+    const resolvePos = (t: string): number | null => {
+      let m = t.match(/^(-?[\d.]+)%$/);
+      if (m) return parseFloat(m[1]) / 100;
+      m = t.match(/^(-?[\d.]+)px$/);
+      if (m) return parseFloat(m[1]) / L;
+      m = t.match(/^calc\(\s*(-?[\d.]+)%\s*([+-])\s*([\d.]+)px\s*\)$/);
+      if (m) return parseFloat(m[1]) / 100 + (m[2] === '-' ? -1 : 1) * (parseFloat(m[3]) / L);
+      return null;
+    };
+    const tokens = (s: string) => {
+      const out: string[] = [];
+      let depth = 0;
+      let cur = '';
+      for (const ch of s) {
+        if (ch === '(') depth++;
+        else if (ch === ')') depth--;
+        if (/\s/.test(ch) && depth === 0) {
+          if (cur) out.push(cur);
+          cur = '';
+        } else cur += ch;
+      }
+      if (cur) out.push(cur);
+      return out;
+    };
+    const stops: { offset: number | null; alpha: number }[] = [];
+    for (; i < parts.length; i++) {
+      const tk = tokens(parts[i]);
+      if (tk.length === 0) return null;
+      const color = normColor(tk[0]);
+      const am = color.match(/^rgba\([^)]*,\s*([\d.]+)\s*\)$/);
+      const alpha = am ? parseFloat(am[1]) : /^rgb\(/.test(color) ? 1 : NaN;
+      if (Number.isNaN(alpha)) return null;
+      if (tk.length === 1) stops.push({ offset: null, alpha });
+      else
+        for (const t of tk.slice(1)) {
+          const off = resolvePos(t);
+          if (off === null) return null;
+          stops.push({ offset: off, alpha });
+        }
+    }
+    if (stops.length < 2) return null;
+    if (stops[0].offset == null) stops[0].offset = 0;
+    if (stops[stops.length - 1].offset == null) stops[stops.length - 1].offset = 1;
+    let last = 0;
+    for (let k = 1; k < stops.length; k++) {
+      if (stops[k].offset == null) continue;
+      const gap = k - last;
+      for (let j = 1; j < gap; j++)
+        stops[last + j].offset =
+          (stops[last].offset as number) + (((stops[k].offset as number) - (stops[last].offset as number)) * j) / gap;
+      last = k;
+    }
+    let prev = 0;
+    const finalStops = stops.map((st) => {
+      const off = Math.max(prev, Math.max(0, Math.min(1, st.offset as number)));
+      prev = off;
+      return { offset: off, color: `rgba(255, 255, 255, ${st.alpha})` };
+    });
+    return {
+      rect: { x: r.left, y: r.top, width: r.width, height: r.height },
+      gradient: { type: 'linear-gradient' as const, angle, stops: finalStops },
+    };
+  };
+
+  // background-image:url() as an embedded <image>: single layer, positioned and
+  // sized exactly. Anything else (multi-layer, tiling, odd origin/clip) stays raster.
+  const bgImageLayer = (el: Element, cs: CSSStyleDeclaration) => {
+    const url = singleUrl(cs.backgroundImage);
+    const info = url ? imgInfo.get(url) : null;
+    if (!info) return null;
+    const textClipped = cs.backgroundClip === 'text' || cs.backgroundClip === '-webkit-text';
+    if (textClipped) return null;
+    if (cs.backgroundClip !== 'border-box' && cs.backgroundClip !== 'padding-box') return null;
+    if (cs.backgroundOrigin !== 'padding-box' && cs.backgroundOrigin !== 'border-box') return null;
+    if (cs.backgroundAttachment && cs.backgroundAttachment !== 'scroll') return null;
+    const r = el.getBoundingClientRect();
+    const bl = num(cs.borderLeftWidth), bt = num(cs.borderTopWidth);
+    const br = num(cs.borderRightWidth), bb = num(cs.borderBottomWidth);
+    const pad = { x: r.left + bl, y: r.top + bt, width: r.width - bl - br, height: r.height - bt - bb };
+    const border = { x: r.left, y: r.top, width: r.width, height: r.height };
+    const area = cs.backgroundOrigin === 'border-box' ? border : pad;
+    if (area.width <= 0 || area.height <= 0) return null;
+    const placed = placeImageLayer(info, cs.backgroundSize, cs.backgroundPosition, cs.backgroundRepeat, area);
+    if (!placed) return null;
+    const clipBox = cs.backgroundClip === 'padding-box' ? pad : border;
+    return { href: info.href, rect: placed, clipBox, radii: radiiOf(cs) };
+  };
+
   // Box-level effects we can't vectorize. Safe to raster only on a LEAF element
   // (no element children), where rastering the box loses nothing. On containers
   // we skip these (keep descending, vectorize the content) rather than nuke the
   // subtree.
   const needsBoxRaster = (el: Element, cs: CSSStyleDeclaration) => {
-    if (cs.backgroundImage && cs.backgroundImage !== 'none' && !parseFirstLinearGradient(cs.backgroundImage))
+    if (
+      cs.backgroundImage &&
+      cs.backgroundImage !== 'none' &&
+      !parseFirstLinearGradient(cs.backgroundImage) &&
+      !bgImageLayer(el, cs)
+    )
       return 'background-image';
     if (cs.boxShadow && cs.boxShadow.includes('inset')) return 'inset-shadow';
     if (cs.borderTopStyle === 'double' || cs.borderTopStyle === 'groove' || cs.borderTopStyle === 'ridge')
@@ -377,12 +679,14 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
     return width > 0 && height > 0 ? { x, y, width, height } : null;
   };
 
-  const pushRaster = (rect: DOMRect, clip: Clip | null, opacity: number, reason: string) => {
+  const pushRaster = (rect: DOMRect, clip: Clip | null, opacity: number, reason: string, el?: Element) => {
     const r = clampToCapture(rect);
     if (!r) return;
     const id = nid();
     nodes.push({ kind: 'raster', id, rect: r, opacity, clip, reason });
     rasterTargets.push({ id, ...r });
+    // in-page backends can re-render this element themselves when no screenshot is available
+    if (el) opts.rasterElements?.set(id, el);
   };
 
   const parseShadows = (value: string) => {
@@ -691,7 +995,9 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
       outlineW > 0 && outlineStyle !== 'none' && !transparent(cs.outlineColor)
         ? { width: outlineW, color: normColor(cs.outlineColor), style: outlineStyle, offset: num(cs.outlineOffset) }
         : null;
-    if (!fill && !gradient && !border && shadows.length === 0 && !outline) return;
+    const bgImg = textClipped ? null : bgImageLayer(el, cs);
+    if (!fill && !gradient && !border && shadows.length === 0 && !outline && !bgImg) return;
+    if (fill || gradient || border || shadows.length > 0 || outline)
     nodes.push({
       kind: 'box',
       id: nid(),
@@ -705,6 +1011,17 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
       shadows,
       outline,
     });
+    if (bgImg) {
+      nodes.push({
+        kind: 'image',
+        id: nid(),
+        rect: bgImg.rect,
+        opacity,
+        clip: intersect(clip, { ...bgImg.clipBox, radii: bgImg.radii }),
+        href: bgImg.href,
+        preserveAspectRatio: 'none',
+      } as PaintNode);
+    }
   };
 
   // Attempt to vectorize a decorative ::before/::after pseudo-element as a box
@@ -784,6 +1101,51 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
         outline: null,
       } as PaintNode,
     };
+  };
+
+  // Pseudo-elements with text content (icon fonts: `::before{content:"\e900"}`)
+  // have no DOM node to measure. Temporarily replace the pseudo with a real <span>
+  // carrying its exact computed style, capture that as a normal box + text node,
+  // then restore the DOM. Returns the produced nodes, or null if not applicable.
+  const materializePseudo = (
+    el: Element,
+    sel: '::before' | '::after',
+    clip: Clip | null,
+    opacity: number,
+  ): PaintNode[] | null => {
+    const ps = getComputedStyle(el, sel);
+    const m = ps.content.match(/^(["'])([\s\S]*)\1$/);
+    if (!m) return null; // url()/counter()/attr()/quotes: not plain text
+    if ((ps.backgroundImage && ps.backgroundImage !== 'none') || (ps.boxShadow || '').includes('inset')) return null;
+    const text = m[2]
+      .replace(/\\([0-9a-fA-F]{1,6})\s?/g, (_m, h) => String.fromCodePoint(parseInt(h, 16)))
+      .replace(/\\([\s\S])/g, '$1');
+    if (!text) return null;
+    const span = document.createElement('span');
+    for (let i = 0; i < ps.length; i++) span.style.setProperty(ps[i], ps.getPropertyValue(ps[i]));
+    span.style.setProperty('animation', 'none');
+    span.style.setProperty('transition', 'none');
+    span.textContent = text;
+    const host = el as HTMLElement;
+    const attr = 'data-fith-pseudo-host';
+    const style = document.createElement('style');
+    style.textContent = `[${attr}]${sel}{content:none !important}`;
+    document.head.appendChild(style);
+    host.setAttribute(attr, '');
+    if (sel === '::before') host.insertBefore(span, host.firstChild);
+    else host.appendChild(span);
+    const start = nodes.length;
+    try {
+      const scs = getComputedStyle(span);
+      const op = opacity * num(ps.opacity);
+      emitBox(span, scs, clip, op);
+      captureText(span, scs, clip, op);
+    } finally {
+      span.remove();
+      style.remove();
+      host.removeAttribute(attr);
+    }
+    return nodes.splice(start);
   };
 
   // SVG presentation properties to inline onto transplanted inline-svg nodes.
@@ -908,8 +1270,29 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
     );
   };
 
+  // Vector mask-image: walk the element normally, then tag every vector node it
+  // produced with the mask. Raster nodes are skipped — their screenshot already
+  // contains the page's masked rendering, so masking again would fade it twice.
   const walk = async (el: Element, clip: Clip | null, inheritedOpacity: number) => {
+    const wcs = getComputedStyle(el);
+    if ((wcs as any).maskImage && (wcs as any).maskImage !== 'none') await prepareImageLayers(wcs);
+    const mk =
+      wcs.display !== 'none' && wcs.display !== 'contents' && !rootAncestors.has(el)
+        ? parseElementMask(el, wcs)
+        : null;
+    if (!mk) return walkNode(el, clip, inheritedOpacity);
+    const start = nodes.length;
+    await walkNode(el, clip, inheritedOpacity);
+    for (let i = start; i < nodes.length; i++) {
+      const nd = nodes[i];
+      if (nd.kind === 'raster') continue;
+      (nd.masks ||= []).push(mk);
+    }
+  };
+
+  const walkNode = async (el: Element, clip: Clip | null, inheritedOpacity: number) => {
     const cs = getComputedStyle(el);
+    if (cs.backgroundImage && cs.backgroundImage !== 'none') await prepareImageLayers(cs);
 
     // display:contents has no box of its own but its children (and direct text)
     // render normally in the parent's formatting context.
@@ -937,7 +1320,7 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
 
     const subtreeReason = !skipRender && needsSubtreeRaster(el, cs);
     if (subtreeReason) {
-      if (!visHidden) pushRaster(r, clip, opacity, subtreeReason);
+      if (!visHidden) pushRaster(r, clip, opacity, subtreeReason, el);
       return;
     }
 
@@ -961,33 +1344,36 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
     const boxReason = !skipRender && !visHidden && needsBoxRaster(el, cs);
     // ::after is emitted after the element's children (it paints on top of content);
     // hold its node here and push it past the child walk below.
-    let afterPseudoNode: PaintNode | null = null;
+    let afterPseudoNodes: PaintNode[] = [];
     let pseudoVectorized = false;
     if (boxReason === 'pseudo') {
       // Try to vectorize the decorative pseudo(s) rather than raster the whole box.
-      const before = pseudoVisible(el, '::before')
-        ? tryPseudoBox(el, cs, '::before', clip, opacity)
-        : { handled: true as const };
-      const after = pseudoVisible(el, '::after')
-        ? tryPseudoBox(el, cs, '::after', clip, opacity)
-        : { handled: true as const };
+      const pseudoPart = (sel: '::before' | '::after') => {
+        if (!pseudoVisible(el, sel)) return { handled: true as const, nodes: [] as PaintNode[] };
+        const b = tryPseudoBox(el, cs, sel, clip, opacity);
+        if (b.handled) return { handled: true as const, nodes: b.node ? [b.node] : [] };
+        const t = materializePseudo(el, sel, clip, opacity);
+        return t ? { handled: true as const, nodes: t } : { handled: false as const, nodes: [] as PaintNode[] };
+      };
+      const before = pseudoPart('::before');
+      const after = pseudoPart('::after');
       if (before.handled && after.handled) {
         pseudoVectorized = true;
         // Paint order: host box → ::before → host content/children → ::after.
         emitBox(el, cs, clip, opacity);
-        if (before.node) nodes.push(before.node);
+        nodes.push(...before.nodes);
         captureText(el, cs, clip, opacity);
         captureListMarker(el, cs, clip, opacity);
-        afterPseudoNode = after.node ?? null;
+        afterPseudoNodes = after.nodes;
       }
     }
     if (boxReason && !pseudoVectorized) {
       if (el.childElementCount === 0) {
-        pushRaster(r, clip, opacity, boxReason);
+        pushRaster(r, clip, opacity, boxReason, el);
         return;
       }
       if (containerRasterFallback) {
-        pushRaster(r, clip, opacity, boxReason);
+        pushRaster(r, clip, opacity, boxReason, el);
         // skip emitBox/captureText — the raster already captures them including ::marker
       } else {
         emitBox(el, cs, clip, opacity);
@@ -1001,7 +1387,8 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
     }
 
     let childClip = clip;
-    if (clipsContent(cs)) {
+    // an ancestor's overflow clip must not crop the picked element's own content
+    if (clipsContent(cs) && !skipRender) {
       // For scrollable containers (overflow:auto/scroll) in full-content mode,
       // expand the clip to scrollWidth × scrollHeight so items that are outside
       // the container's current visible area are still included in the output.
@@ -1068,7 +1455,7 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
     }
 
     // ::after paints above the host's content (emitted after the child walk).
-    if (afterPseudoNode) nodes.push(afterPseudoNode);
+    nodes.push(...afterPseudoNodes);
   };
 
   const body = document.body;
@@ -1219,5 +1606,8 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
       }
     }
     return out;
+  }
+  } finally {
+    unfurlRestore();
   }
 }

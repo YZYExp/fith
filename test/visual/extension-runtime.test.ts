@@ -89,7 +89,8 @@ describe('built extension content script', () => {
       expect((await capture(page)).ok).toBe(true);
       const result = await page.evaluate(() => ({ svg: (globalThis as any).exports[0], messages: (globalThis as any).messages }));
       expect(result.svg).toContain('Below the fold');
-      expect(result.svg.match(/<image\b/g)).toHaveLength(1);
+      // one viewport crop + the off-screen raster re-rendered in-page (DOM fallback)
+      expect(result.svg.match(/<image\b/g)).toHaveLength(2);
       expect(result.messages.filter((type: string) => type === 'fh:shoot')).toHaveLength(1);
     } finally { await page.close(); }
   });

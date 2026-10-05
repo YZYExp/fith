@@ -59,4 +59,12 @@ describe('extension bundle integrity', () => {
     // It must be a classic IIFE (executeScript can't load ES modules).
     expect(read('content.js')).not.toMatch(/^\s*export\b/m);
   });
+
+  it('ships scripts Chrome accepts as UTF-8 (no Unicode noncharacters)', () => {
+    // chrome.scripting.executeScript rejects a file containing U+FFFE/U+FFFF/U+FDD0–FDEF
+    // with "isn't UTF-8 encoded"; a regex literal of those gets emitted raw by the bundler.
+    for (const f of ['content.js', 'background.js', 'popup.js', 'viewer.js']) {
+      expect(read(f), `${f} contains a Unicode noncharacter`).not.toMatch(/[\uFDD0-\uFDEF\uFFFE\uFFFF]/);
+    }
+  });
 });
