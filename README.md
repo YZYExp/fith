@@ -24,11 +24,6 @@ The repository includes a [sample HTML card](./homepage/public/examples/card.htm
 The name comes from the idea of fitting anything; this project focuses on
 reconstructing the visual appearance of rendered HTML as SVG.
 
-The project display name is **fith**. Repository links and clone instructions
-anticipate the planned rename to [`0x0079/fith`](https://github.com/0x0079/fith).
-The package name and CLI command currently remain `fitting-html`, so imports
-and command examples use those existing identifiers.
-
 ## Highlights
 
 - **Browser layout.** Reuse the browser's layout engine instead of reimplementing HTML and CSS layout.
