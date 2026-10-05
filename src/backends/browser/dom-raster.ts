@@ -301,7 +301,12 @@ export function createDomRasterizer(): DomRasterizer {
     return out.join('\n');
   };
 
-  const stripXmlIllegal = (s: string) => s.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F￾￿]/g, '');
+  // XML 1.0 forbids C0 controls and U+FFFE/U+FFFF. The noncharacters are built at
+  // runtime: as regex literals the bundler would emit them raw, and Chrome refuses
+  // to load an extension script containing them ("isn't UTF-8 encoded").
+  const NONCHARS = new RegExp('[' + String.fromCharCode(0xfffe) + String.fromCharCode(0xffff) + ']', 'g');
+  const stripXmlIllegal = (s: string) =>
+    s.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '').replace(NONCHARS, '');
 
   return async (el, crop, scale) => {
     const bb = el.getBoundingClientRect();
