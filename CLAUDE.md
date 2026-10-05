@@ -74,8 +74,8 @@ test/
     images.test.ts          # image capture: paint order, CORS fallback
     element.test.ts         # subtree (single-element) capture
     inpage.test.ts          # in-page backend
-    source-html.test.ts     # captureSourceHtml: sanitization, element mode, re-render pixel match
     webfont.test.ts         # @font-face embed / outline modes
+    source-html.test.ts     # captureSourceHtml: sanitization, element mode, re-render pixel match
     extension-viewport.test.ts # drives the shared createViewportRasterizer end-to-end
                             #   (single shot, no scroll) with a Playwright pngjs env
     extension-runtime.test.ts # built content/popup/viewer scripts in Chromium with
