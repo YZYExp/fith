@@ -92,6 +92,7 @@ test/
     element.test.ts         # subtree (single-element) capture
     inpage.test.ts          # in-page backend
     raster-fallback.test.ts # in-page DOM (foreignObject) raster fallback, no screenshot backend
+    scroll-element.test.ts  # element export from a scrolling app-shell sidebar (unfurl, zero-height <body>)
     webfont.test.ts         # @font-face embed / outline modes
     extension-viewport.test.ts # drives the shared createViewportRasterizer end-to-end
                             #   (single shot, no scroll) with a Playwright pngjs env
@@ -153,6 +154,14 @@ used by other tests can't load extensions).
   exports `CHROMIUM_PATH`. Never call `sparticuz.executablePath()` per test (parallel workers re-extract
   the binary → `spawn ETXTBSY` on CI). Launch one browser per file (`beforeAll`) and avoid
   `--single-process`, which made `page.screenshot` flaky on loaded runners.
+- **Element (subtree) capture rules** — both caused real "export is empty / truncated" bugs on app shells
+  (claude.ai sidebar): (1) ancestors of the picked element are *context only*: never cull them by their own
+  bounding box (`<body>` is 0px tall when the shell is `position:fixed`) and never let their `overflow` clip the
+  root's content; (2) vertically-scrolling containers inside the root are temporarily "unfurled" to full content
+  height (`unfurlScrollContainers`, default on) so the export holds the whole list, not the visible window. The
+  unfurl writes inline styles through the `style` *attribute* (a CSSOM edit leaves `style=""` behind in Chrome)
+  and restores attribute + scroll positions in a `finally` — keep it that way so a failed capture can't leave the
+  user's page re-laid-out.
 - `captureScene`'s `rasterElements` option is an **in-page-only out-parameter** (Map, not serializable);
   the Playwright backend never passes it.
 - `guaranteeFloor: true` embeds a full-page PNG as a `<image>` base layer (~150–800 KB).

@@ -10,6 +10,64 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
   const dpr = opts.deviceScaleFactor || 1;
   const rootEl = root ?? document.documentElement;
   const subtree = rootEl !== document.documentElement;
+
+  // Element export of scrollable content ("unfurl"): a picked container (or one
+  // nested inside it, e.g. a sidebar's session list) only shows its viewport-sized
+  // window, so the export would silently drop everything scrolled out of view.
+  // Temporarily let every vertically-scrolling container grow to its full content
+  // height — and release the fixed-height / flex-constrained ancestors up to the
+  // root — so the root's own box (and thus the export) covers all of it. Inline
+  // styles and scroll positions are restored in the `finally` below.
+  const unfurlSaved: { el: HTMLElement; style: string | null }[] = [];
+  const unfurlScroll: { el: HTMLElement; top: number; left: number }[] = [];
+  if (subtree && (opts as any).captureScrollableContent && (opts as any).unfurlScrollContainers !== false) {
+    const scrollers: HTMLElement[] = [];
+    for (const el of [rootEl, ...Array.from(rootEl.querySelectorAll('*'))]) {
+      const h = el as HTMLElement;
+      if (!(h instanceof HTMLElement)) continue;
+      const oy = getComputedStyle(h).overflowY;
+      if ((oy === 'auto' || oy === 'scroll') && h.scrollHeight > h.clientHeight + 1) scrollers.push(h);
+    }
+    const touched = new Set<HTMLElement>();
+    for (const sc of scrollers) {
+      unfurlScroll.push({ el: sc, top: sc.scrollTop, left: sc.scrollLeft });
+      for (let a: HTMLElement | null = sc; a; a = a.parentElement) {
+        touched.add(a);
+        if (a === rootEl) break;
+      }
+    }
+    for (const el of touched) {
+      const original = el.getAttribute('style');
+      unfurlSaved.push({ el, style: original });
+      const parentFlex = el.parentElement ? /flex/.test(getComputedStyle(el.parentElement).display) : false;
+      const cs0 = getComputedStyle(el);
+      const decl = ['height:auto', 'max-height:none'];
+      if (parentFlex) decl.push('flex:0 0 auto');
+      // visible+hidden on the two axes would compute back to `auto`; clip the x axis instead
+      if (cs0.overflowY !== 'visible') {
+        decl.push('overflow-y:visible');
+        if (cs0.overflowX !== 'visible') decl.push('overflow-x:clip');
+      }
+      // Written through the attribute, not el.style: a CSSOM edit makes Chrome leave
+      // `style=""` behind even after removeAttribute, so the DOM wouldn't round-trip.
+      el.setAttribute('style', (original ? original.replace(/;?\s*$/, ';') : '') + decl.map((d) => d + ' !important').join(';'));
+    }
+    for (const { el } of unfurlScroll) {
+      el.scrollTop = 0;
+      el.scrollLeft = 0;
+    }
+  }
+  const unfurlRestore = () => {
+    for (const { el, style } of unfurlSaved) {
+      if (style === null) el.removeAttribute('style');
+      else el.setAttribute('style', style);
+    }
+    for (const { el, top, left } of unfurlScroll) {
+      el.scrollTop = top;
+      el.scrollLeft = left;
+    }
+  };
+  try {
   const rootRect = rootEl.getBoundingClientRect();
   const W = subtree ? rootRect.width : opts.width;
   const H = subtree
@@ -241,6 +299,12 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
     if (cs.display === 'none') return false;
     // opacity:0 composites to invisible and cannot be overridden by children
     if (num(cs.opacity) === 0) return false;
+    // Ancestors of a picked element only provide context (their own rendering is
+    // skipped), and their boxes say nothing about where the root is: <body> is
+    // routinely 0px tall when the app shell is position:fixed/absolute, and a wrapper
+    // can sit entirely outside the captured region. Culling them by geometry would
+    // drop the whole subtree and export an empty SVG.
+    if (rootAncestors.has(el)) return true;
     const r = el.getBoundingClientRect();
     if (r.width === 0 && r.height === 0) return false;
     if (r.bottom < cullTop || r.right < cullLeft || r.top > cullBottom || r.left > cullRight)
@@ -1323,7 +1387,8 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
     }
 
     let childClip = clip;
-    if (clipsContent(cs)) {
+    // an ancestor's overflow clip must not crop the picked element's own content
+    if (clipsContent(cs) && !skipRender) {
       // For scrollable containers (overflow:auto/scroll) in full-content mode,
       // expand the clip to scrollWidth × scrollHeight so items that are outside
       // the container's current visible area are still included in the output.
@@ -1541,5 +1606,8 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
       }
     }
     return out;
+  }
+  } finally {
+    unfurlRestore();
   }
 }

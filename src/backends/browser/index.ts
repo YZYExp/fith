@@ -45,6 +45,13 @@ export interface InPageOptions {
    * so un-vectorizable content isn't silently dropped. Default true.
    */
   domRasterFallback?: boolean;
+  /**
+   * Element export only: temporarily expand scrollable containers inside (and
+   * including) the picked element to their full content height, so the SVG holds the
+   * whole list rather than the visible window. Layout is restored afterwards.
+   * Default true; pass false for a "what I see" export.
+   */
+  unfurlScrollContainers?: boolean;
 }
 
 async function run(opts: InPageOptions, root?: Element): Promise<string> {
@@ -79,6 +86,7 @@ async function run(opts: InPageOptions, root?: Element): Promise<string> {
       // Viewport-only skips this so the capture matches what's on screen now.
       captureScrollableContent: !viewportOnly,
       rasterElements,
+      unfurlScrollContainers: opts.unfurlScrollContainers,
     },
     root,
   );

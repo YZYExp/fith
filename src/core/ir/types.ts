@@ -209,4 +209,6 @@ export interface CaptureOptions {
    * screenshots can re-render the element itself.
    */
   rasterElements?: Map<string, Element>;
+  /** Element capture: expand inner scroll containers to full content height (default true). */
+  unfurlScrollContainers?: boolean;
 }
