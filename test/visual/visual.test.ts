@@ -60,6 +60,9 @@ describe('visual regression', () => {
     // masked labels must stay real text, not be flattened into a bitmap
     expect(svg).toContain('Documentation guide by agent scenario');
     expect(svg).toContain('硬件虚拟化与服务模型训练');
+    // icons (pseudo-element glyphs, url() masks/backgrounds) are vector/embedded, never screenshots
+    expect(svg).toContain('\u25A3');
+    expect(svg).not.toContain('data:image/png');
   }, 60_000);
 
   it('respects invisible and partially transparent pseudo-element overlays', async () => {

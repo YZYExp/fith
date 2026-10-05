@@ -67,10 +67,14 @@ export interface Clip {
   radii: CornerRadii;
 }
 
-/** CSS mask-image linear-gradient over `rect`; stops are white with the mask alpha. */
+/**
+ * CSS mask-image over the mask box `rect`: either a linear-gradient (stops are
+ * white with the mask alpha) or a placed raster/SVG image (alpha channel used).
+ */
 export interface MaskGradient {
   rect: Rect;
-  gradient: LinearGradientFill;
+  gradient?: LinearGradientFill;
+  image?: { href: string; x: number; y: number; width: number; height: number };
 }
 
 export interface NodeBase {
