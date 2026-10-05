@@ -74,6 +74,7 @@ test/
     images.test.ts          # image capture: paint order, CORS fallback
     element.test.ts         # subtree (single-element) capture
     inpage.test.ts          # in-page backend
+    source-html.test.ts     # captureSourceHtml: sanitization, element mode, re-render pixel match
     webfont.test.ts         # @font-face embed / outline modes
     extension-viewport.test.ts # drives the shared createViewportRasterizer end-to-end
                             #   (single shot, no scroll) with a Playwright pngjs env
@@ -122,3 +123,24 @@ used by other tests can't load extensions).
 - For CORS images: canvas extraction is tried first (fast, no network), then `fetch`
   with `cache: 'force-cache'`, then in-place raster conversion (Node backend
   screenshots via `page.screenshot`).
+
+## Source-HTML Snapshot (bug-report capture)
+
+`captureSourceHtml()` (`src/core/capture/source-html.ts`) serializes the rendered page — or one
+element plus its ancestor chain — into a standalone `.source.html`, so a bad capture can be
+reproduced offline and promoted to a fixture in `test/fixtures/`.
+
+- Like `captureScene` it runs **in-page and is serialized via `.toString()`** for Playwright:
+  fully self-contained, no imports, every helper inside the function body.
+- It inlines accessible stylesheets (adopted sheets and `@import` included, relative `url()`
+  made absolute), pins `<base href>`, keeps canvas pixels, form state, `<img>` `currentSrc` and
+  open shadow DOM (declarative `<template shadowrootmode>`), and writes a `fith-capture` meta
+  (viewport, dpr, scroll, UA, color scheme) so the page re-renders at the same size.
+- It strips scripts, `on*` handlers, `javascript:` URLs, preload hints and password values.
+  Sanitize **every** clone, including the shallow ancestor shells in element mode (a regression
+  here once left `onload` on `<body>`).
+- **Privacy:** the snapshot contains the page's visible content. Keep it strictly opt-in (CLI
+  `--source-html`, `captureSourceHtml` render option, the extension's unchecked-by-default
+  checkbox) and never commit a user-supplied snapshot as a fixture without scrubbing it.
+- Entry points: `renderDetailed()` / `--source-html` (Node), `captureSourceHtml` from the
+  browser entry, and the extension popup (`fhSource` pref → `<name>.source.html` download).
