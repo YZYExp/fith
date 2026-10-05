@@ -9,12 +9,14 @@ export type FontMode = 'embed' | 'outline' | 'none';
 export type Scope = 'viewport' | 'full';
 
 /** chrome.storage.local keys for the popup preferences. */
-export const PREF_KEYS = ['fhOutput', 'fhFont', 'fhScope'] as const;
+export const PREF_KEYS = ['fhOutput', 'fhFont', 'fhScope', 'fhSource'] as const;
 
 export const DEFAULT_PREFS = {
   fhOutput: 'both' as OutputMode,
   fhFont: 'embed' as FontMode,
   fhScope: 'viewport' as Scope,
+  /** Also save the page's source HTML (opt-in: it contains page content). */
+  fhSource: false,
 };
 
 /**

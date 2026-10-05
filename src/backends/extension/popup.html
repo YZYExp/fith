@@ -14,6 +14,7 @@
       .settings { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 14px; }
       .option-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
       .option-grid .field { min-width: 0; }
+      label.check { display: flex; align-items: center; gap: 8px; font-weight: 600; }
       label { display: block; margin-bottom: 6px; font-size: 12px; font-weight: 650; }
       .help { margin: 6px 0 0; color: var(--muted); font-size: 11px; line-height: 1.5; }
       details { margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--line); }
@@ -66,7 +67,7 @@
         </div>
       </div>
       <details id="advanced">
-        <summary>Text &amp; fonts</summary>
+        <summary>Text, fonts &amp; bug reports</summary>
         <div class="field">
           <label for="font">Font handling</label>
           <select id="font" aria-describedby="font-help">
@@ -75,6 +76,10 @@
             <option value="none">Reference fonts by name</option>
           </select>
           <p id="font-help" class="help">Keep text selectable and include available web fonts.</p>
+        </div>
+        <div class="field">
+          <label class="check"><input type="checkbox" id="source" /> Also save source HTML</label>
+          <p id="source-help" class="help">Saves a <code>.source.html</code> snapshot of the page (DOM + CSS) next to the SVG so the result can be reproduced. It contains the page’s visible content — review it before sharing.</p>
         </div>
       </details>
     </section>

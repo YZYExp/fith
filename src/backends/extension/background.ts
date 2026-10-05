@@ -27,6 +27,7 @@ async function send(tabId: number, type: 'fh:capture' | 'fh:pick') {
       output: prefs.fhOutput ?? DEFAULT_PREFS.fhOutput,
       fontMode: prefs.fhFont ?? DEFAULT_PREFS.fhFont,
       scope: prefs.fhScope ?? DEFAULT_PREFS.fhScope,
+      sourceHtml: prefs.fhSource === true,
     });
   } catch (e) {
     console.error('[fitting-html]', e);

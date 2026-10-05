@@ -5,6 +5,7 @@ import { randomUUID } from 'node:crypto';
 import { pathToFileURL } from 'node:url';
 import { chromium, type Browser, type Page } from 'playwright';
 import { captureScene } from '../../core/capture/capture.js';
+import { captureSourceHtml } from '../../core/capture/source-html.js';
 import { emitSvg, type EmitOptions } from '../../core/emit/svg.js';
 import { createOutliner } from '../../core/emit/outline.js';
 import { systemFontLoader } from './fonts.js';
@@ -41,6 +42,18 @@ export interface RenderOptions {
    * with 'none' if system fonts differ between the two renders. Default false.
    */
   diffPatch?: boolean;
+  /**
+   * When true, also return a standalone HTML snapshot of the rendered page (DOM +
+   * inlined CSS) via `renderDetailed`, for bug reports and fixtures. The snapshot
+   * contains the page's content — only enable it when sharing is acceptable.
+   */
+  captureSourceHtml?: boolean;
+}
+
+export interface RenderResult {
+  svg: string;
+  /** Present when `captureSourceHtml` was requested. */
+  sourceHtml?: string;
 }
 
 export type RenderInput = { html: string } | { url: string } | { page: Page };
@@ -122,7 +135,7 @@ async function applyDiffPatch(
   return patched > 0 ? emitSvg(scene, emitOpts) : svg;
 }
 
-async function captureAndEmit(page: Page, opts: RenderOptions): Promise<string> {
+async function captureAndEmit(page: Page, opts: RenderOptions): Promise<RenderResult> {
   const dsr = opts.deviceScaleFactor || 1;
   await withinViewport(page, opts.width, opts.height);
   if (opts.settleMs) await page.waitForTimeout(opts.settleMs);
@@ -133,6 +146,11 @@ async function captureAndEmit(page: Page, opts: RenderOptions): Promise<string> 
     const g = globalThis as any;
     if (!g.__name) g.__name = (t: any) => t;
   });
+
+  // Snapshot the source first: capture may temporarily touch the DOM.
+  const sourceHtml = opts.captureSourceHtml
+    ? await page.evaluate(captureSourceHtml, undefined)
+    : undefined;
 
   const scene: Scene = await page.evaluate(captureScene, {
     width: opts.width,
@@ -185,10 +203,11 @@ async function captureAndEmit(page: Page, opts: RenderOptions): Promise<string> 
     svg = await applyDiffPatch(page, scene, svg, emitOpts);
   }
 
-  return svg;
+  return { svg, sourceHtml };
 }
 
-export async function renderToSvg(input: RenderInput, opts: RenderOptions): Promise<string> {
+/** Like `renderToSvg`, but also returns the optional source-HTML snapshot. */
+export async function renderDetailed(input: RenderInput, opts: RenderOptions): Promise<RenderResult> {
   if ('page' in input) {
     return captureAndEmit(input.page, opts);
   }
@@ -213,4 +232,8 @@ export async function renderToSvg(input: RenderInput, opts: RenderOptions): Prom
   } finally {
     if (browser) await browser.close();
   }
+}
+
+export async function renderToSvg(input: RenderInput, opts: RenderOptions): Promise<string> {
+  return (await renderDetailed(input, opts)).svg;
 }

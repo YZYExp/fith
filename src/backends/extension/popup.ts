@@ -5,6 +5,7 @@ const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as 
 const scopeSel = $<HTMLSelectElement>('scope');
 const outputSel = $<HTMLSelectElement>('output');
 const fontSel = $<HTMLSelectElement>('font');
+const sourceChk = $<HTMLInputElement>('source');
 const status = $<HTMLDivElement>('status');
 const pageBtn = $<HTMLButtonElement>('page');
 const pickBtn = $<HTMLButtonElement>('pick');
@@ -23,6 +24,7 @@ const showError = (error: unknown) => showStatus(errorText(error), 'error');
 
 function updateControls() {
   for (const select of [scopeSel, outputSel, fontSel]) select.disabled = loading || busy;
+  sourceChk.disabled = loading || busy;
   pageBtn.disabled = pickBtn.disabled = loading || busy || !available;
   pageBtn.setAttribute('aria-busy', String(busy));
   $('page-label').textContent = busy ? 'Working…' : retry ? 'Retry capture'
@@ -66,6 +68,7 @@ async function initialize() {
         ? value : DEFAULT_PREFS[key];
     }
   }
+  if (prefs.status === 'fulfilled') sourceChk.checked = prefs.value.fhSource === true;
   const tab = tabs.status === 'fulfilled' ? tabs.value[0] : undefined;
   available = supportedTab(tab);
   const name = tab?.title || tab?.url || 'Current tab';
@@ -79,8 +82,9 @@ async function initialize() {
 }
 
 const persist = () => chrome.storage.local.set({
-  fhScope: scopeSel.value, fhOutput: outputSel.value, fhFont: fontSel.value,
+  fhScope: scopeSel.value, fhOutput: outputSel.value, fhFont: fontSel.value, fhSource: sourceChk.checked,
 });
+sourceChk.addEventListener('change', () => { persist().catch(() => showError('Could not save preferences. Please retry.')); });
 for (const select of [scopeSel, outputSel, fontSel]) {
   select.addEventListener('change', () => {
     retry = false;
@@ -111,13 +115,13 @@ async function trigger(type: 'fh:capture' | 'fh:pick') {
     await chrome.scripting.executeScript({ target: { tabId: tab.id! }, files: ['content.js'] });
     showStatus(type === 'fh:pick' ? 'Starting element picker…' : 'Converting the page to SVG…', 'busy');
     const resp = await chrome.tabs.sendMessage(tab.id!, {
-      type, output: outputSel.value, fontMode: fontSel.value, scope: scopeSel.value,
+      type, output: outputSel.value, fontMode: fontSel.value, scope: scopeSel.value, sourceHtml: sourceChk.checked,
     });
     if (!resp?.ok) throw new Error(resp?.error ?? 'Capture could not be completed. Please retry.');
     if (type === 'fh:pick') { window.close(); return; }
     const size = resp.bytes ? ` · ${(resp.bytes / 1024).toFixed(1)} KB` : '';
     const result = outputSel.value === 'preview' ? 'Preview opened' : outputSel.value === 'download' ? 'SVG exported' : 'SVG exported & preview opened';
-    showStatus(result + size, 'success');
+    showStatus(result + size + (sourceChk.checked ? ' · source HTML saved' : ''), 'success');
   } catch (e) {
     retry = true;
     showError(e);

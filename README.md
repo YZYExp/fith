@@ -110,6 +110,7 @@ HTML strings and CLI file input are loaded with `page.setContent`, without a fil
 | `executablePath` | Playwright Chromium | Path to a custom Chromium executable. |
 | `launchArgs` | Backend defaults | Override Chromium launch arguments. |
 | `guaranteeFloor` | `false` | Embed a full-page screenshot beneath the vectors; increases file size and can expose overlap artifacts. |
+| `captureSourceHtml` | `false` | With `renderDetailed()`, also return a standalone HTML snapshot (DOM + inlined CSS) as `sourceHtml`, for bug reports. It contains the page's content — share deliberately. |
 | `diffPatch` | `false` | Render the SVG back in Chromium, compare it with the page, and overlay raster patches on divergent regions; adds capture work and raster content. |
 
 `guaranteeFloor` and `diffPatch` are optional fidelity tools, not guarantees of a fully vector or exact result.
@@ -124,7 +125,13 @@ node dist/backends/node/cli.js input.html -o out.svg \
 
 node dist/backends/node/cli.js https://example.com \
   -o example.svg --width 1280 --height 720
+
+# also write a reproducible source snapshot for a bug report
+node dist/backends/node/cli.js https://example.com \
+  -o example.svg --source-html example.source.html
 ```
+
+The Chrome extension offers the same snapshot under *Text, fonts & bug reports → Also save source HTML* (off by default).
 
 The package exposes the same CLI as `fitting-html` when installed or linked. Defaults: width `1280`, scale `1`, font mode `embed`, output `out.svg`. Omit `--height` to use the document height. Set `CHROMIUM_PATH` to select a Chromium executable for the CLI.
 
