@@ -49,6 +49,19 @@ describe('visual regression', () => {
     expect(r.ratio).toBeLessThan(0.001);
   }, 60_000);
 
+  it('keeps mask-image fade labels as vector text with an SVG mask', async () => {
+    const r = await validate(
+      { url: pathToFileURL(resolve(FIXTURES, 'sidebar-rail.html')).href },
+      { width: 260, height: 700, name: 'sidebar-rail', outDir: OUT },
+    );
+    expect(r.ratio).toBeLessThan(0.005);
+    const svg = readFileSync(resolve(OUT, 'sidebar-rail.svg'), 'utf8');
+    expect(svg).toContain('<mask');
+    // masked labels must stay real text, not be flattened into a bitmap
+    expect(svg).toContain('Documentation guide by agent scenario');
+    expect(svg).toContain('硬件虚拟化与服务模型训练');
+  }, 60_000);
+
   it('respects invisible and partially transparent pseudo-element overlays', async () => {
     const r = await validate(
       { url: pathToFileURL(resolve(FIXTURES, 'pseudo-visibility.html')).href },

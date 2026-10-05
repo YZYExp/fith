@@ -275,7 +275,12 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
     if (cs.filter && cs.filter !== 'none') return 'filter';
     if ((cs as any).backdropFilter && (cs as any).backdropFilter !== 'none') return 'backdrop-filter';
     if (cs.mixBlendMode && cs.mixBlendMode !== 'normal') return 'blend-mode';
-    if ((cs as any).maskImage && (cs as any).maskImage !== 'none' && (cs as any).maskImage !== undefined)
+    if (
+      (cs as any).maskImage &&
+      (cs as any).maskImage !== 'none' &&
+      (cs as any).maskImage !== undefined &&
+      !parseElementMask(el, cs)
+    )
       return 'mask';
     if (cs.clipPath && cs.clipPath !== 'none') return 'clip-path';
     const tf = cs.transform;
@@ -314,6 +319,104 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
       if (g) return g;
     }
     return null;
+  };
+
+  // CSS mask-image: linear-gradient(...) is the ubiquitous "fade out the end of a
+  // truncated label" pattern. Computed values keep px/calc() stop positions, which
+  // parseLinearGradient rejects, so resolve them here against the gradient line
+  // length. Only the alpha channel of a mask matters, so stops become white+alpha
+  // and the emitter renders it as an SVG <mask>. Returns null for anything we can't
+  // reproduce exactly (multiple layers, custom size/position/repeat, url() masks…),
+  // which keeps the old raster fallback.
+  const parseElementMask = (el: Element, cs: CSSStyleDeclaration) => {
+    const value = ((cs as any).maskImage as string) || '';
+    if (!value || value === 'none') return null;
+    if (value.lastIndexOf('linear-gradient(') !== 0 || !/^linear-gradient\(/.test(value)) return null;
+    const size = (cs as any).maskSize as string | undefined;
+    const pos = (cs as any).maskPosition as string | undefined;
+    const rep = (cs as any).maskRepeat as string | undefined;
+    if (size && size !== 'auto' && size !== 'auto auto') return null;
+    if (pos && pos !== '0% 0%' && pos !== '0%') return null;
+    if (rep && rep !== 'repeat' && rep !== 'repeat repeat') return null;
+    const r = el.getBoundingClientRect();
+    if (r.width <= 0 || r.height <= 0) return null;
+    const inner = value.slice(value.indexOf('(') + 1, value.lastIndexOf(')'));
+    const parts = splitTopLevel(inner).map((x) => x.trim());
+    let angle = 180;
+    let i = 0;
+    if (/deg$/.test(parts[0])) {
+      angle = parseFloat(parts[0]);
+      i = 1;
+    } else if (/^to\b/.test(parts[0])) {
+      if (!(parts[0] in sideToAngle)) return null;
+      angle = sideToAngle[parts[0]];
+      i = 1;
+    }
+    const rad = (angle * Math.PI) / 180;
+    const L = Math.abs(r.width * Math.sin(rad)) + Math.abs(r.height * Math.cos(rad));
+    if (L <= 0) return null;
+    const resolvePos = (t: string): number | null => {
+      let m = t.match(/^(-?[\d.]+)%$/);
+      if (m) return parseFloat(m[1]) / 100;
+      m = t.match(/^(-?[\d.]+)px$/);
+      if (m) return parseFloat(m[1]) / L;
+      m = t.match(/^calc\(\s*(-?[\d.]+)%\s*([+-])\s*([\d.]+)px\s*\)$/);
+      if (m) return parseFloat(m[1]) / 100 + (m[2] === '-' ? -1 : 1) * (parseFloat(m[3]) / L);
+      return null;
+    };
+    const tokens = (s: string) => {
+      const out: string[] = [];
+      let depth = 0;
+      let cur = '';
+      for (const ch of s) {
+        if (ch === '(') depth++;
+        else if (ch === ')') depth--;
+        if (/\s/.test(ch) && depth === 0) {
+          if (cur) out.push(cur);
+          cur = '';
+        } else cur += ch;
+      }
+      if (cur) out.push(cur);
+      return out;
+    };
+    const stops: { offset: number | null; alpha: number }[] = [];
+    for (; i < parts.length; i++) {
+      const tk = tokens(parts[i]);
+      if (tk.length === 0) return null;
+      const color = normColor(tk[0]);
+      const am = color.match(/^rgba\([^)]*,\s*([\d.]+)\s*\)$/);
+      const alpha = am ? parseFloat(am[1]) : /^rgb\(/.test(color) ? 1 : NaN;
+      if (Number.isNaN(alpha)) return null;
+      if (tk.length === 1) stops.push({ offset: null, alpha });
+      else
+        for (const t of tk.slice(1)) {
+          const off = resolvePos(t);
+          if (off === null) return null;
+          stops.push({ offset: off, alpha });
+        }
+    }
+    if (stops.length < 2) return null;
+    if (stops[0].offset == null) stops[0].offset = 0;
+    if (stops[stops.length - 1].offset == null) stops[stops.length - 1].offset = 1;
+    let last = 0;
+    for (let k = 1; k < stops.length; k++) {
+      if (stops[k].offset == null) continue;
+      const gap = k - last;
+      for (let j = 1; j < gap; j++)
+        stops[last + j].offset =
+          (stops[last].offset as number) + (((stops[k].offset as number) - (stops[last].offset as number)) * j) / gap;
+      last = k;
+    }
+    let prev = 0;
+    const finalStops = stops.map((st) => {
+      const off = Math.max(prev, Math.max(0, Math.min(1, st.offset as number)));
+      prev = off;
+      return { offset: off, color: `rgba(255, 255, 255, ${st.alpha})` };
+    });
+    return {
+      rect: { x: r.left, y: r.top, width: r.width, height: r.height },
+      gradient: { type: 'linear-gradient' as const, angle, stops: finalStops },
+    };
   };
 
   // Box-level effects we can't vectorize. Safe to raster only on a LEAF element
@@ -908,7 +1011,26 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
     );
   };
 
+  // Vector mask-image: walk the element normally, then tag every vector node it
+  // produced with the mask. Raster nodes are skipped — their screenshot already
+  // contains the page's masked rendering, so masking again would fade it twice.
   const walk = async (el: Element, clip: Clip | null, inheritedOpacity: number) => {
+    const wcs = getComputedStyle(el);
+    const mk =
+      wcs.display !== 'none' && wcs.display !== 'contents' && !rootAncestors.has(el)
+        ? parseElementMask(el, wcs)
+        : null;
+    if (!mk) return walkNode(el, clip, inheritedOpacity);
+    const start = nodes.length;
+    await walkNode(el, clip, inheritedOpacity);
+    for (let i = start; i < nodes.length; i++) {
+      const nd = nodes[i];
+      if (nd.kind === 'raster') continue;
+      (nd.masks ||= []).push(mk);
+    }
+  };
+
+  const walkNode = async (el: Element, clip: Clip | null, inheritedOpacity: number) => {
     const cs = getComputedStyle(el);
 
     // display:contents has no box of its own but its children (and direct text)

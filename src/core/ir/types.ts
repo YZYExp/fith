@@ -67,11 +67,19 @@ export interface Clip {
   radii: CornerRadii;
 }
 
+/** CSS mask-image linear-gradient over `rect`; stops are white with the mask alpha. */
+export interface MaskGradient {
+  rect: Rect;
+  gradient: LinearGradientFill;
+}
+
 export interface NodeBase {
   id: string;
   rect: Rect;
   opacity: number;
   clip?: Clip | null;
+  /** Alpha masks (from mask-image on the node or an ancestor) applied multiplicatively. */
+  masks?: MaskGradient[];
 }
 
 export interface GradientStop {

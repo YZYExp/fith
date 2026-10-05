@@ -1,0 +1,58 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><style>
+:root{--rem:1;--row-h:32px;--row-px:8px;--hover:rgba(0,0,0,.05);--sel:rgba(0,0,0,.08)}
+*{box-sizing:border-box}
+body{margin:0;font:14px/1.4 system-ui,sans-serif;background:#faf9f5;color:#222;height:700px}
+aside{position:relative;width:232px;height:700px;display:flex;flex-direction:column;background:#f5f4ee;border-right:1px solid #ddd}
+.titlebar{height:44px;display:flex;align-items:center;padding:0 8px;flex:none}
+.body{display:flex;flex-direction:column;flex:1;min-height:0;padding:12px 8px 6px;overflow:clip;gap:8px}
+.search{height:var(--row-h);display:flex;align-items:center;gap:8px;border:0;border-radius:9999px;background:#ebe9e0;padding:0 var(--row-px);color:#777;width:100%;font:inherit}
+.scroll{flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;scrollbar-gutter:stable}
+.contents{display:contents}
+.hidden{display:none}
+.row{display:flex;align-items:center;gap:8px;height:var(--row-h);padding:0 var(--row-px);border-radius:9999px;color:#555;text-decoration:none;position:relative}
+.row:hover{background:var(--hover)}
+.row.sel{background:var(--sel);color:#000}
+.icon{display:inline-flex;width:20px;height:20px;align-items:center;justify-content:center;font-size:calc(1.25rem*var(--rem));font-weight:433.3}
+.icon::before{content:"\25A3";font-variation-settings:"wght" 433}
+.icon.mask{background:currentColor;-webkit-mask:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'><circle cx='10' cy='10' r='7'/></svg>") center/contain no-repeat;mask:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'><circle cx='10' cy='10' r='7'/></svg>") center/contain no-repeat}
+.dot{width:6px;height:6px;border-radius:50%;border:1px solid currentColor;opacity:.5;display:block}
+.label{display:block;flex:1;min-width:0;white-space:nowrap;overflow:hidden}
+.label[data-overflowing]{mask-image:linear-gradient(to right,black calc(100% - 24px),transparent 100%)}
+.label.always{mask-image:linear-gradient(to right,black calc(100% - 44px),transparent calc(100% - 20px))}
+.label span{display:inline-block;white-space:nowrap}
+.group{padding:12px 4px 4px;font-size:12px;color:#888;display:flex;gap:4px}
+.badge{margin-left:8px;background:#e5e3da;border-radius:9999px;padding:0 6px;font-size:11px}
+kbd{display:inline-flex;align-items:center;justify-content:center;height:calc(1em + 6px);width:calc(1em + 6px);border:1px solid #ccc;border-radius:4px;background:#fff;font:inherit}
+.actions{position:absolute;right:4px;top:50%;transform:translateY(-50%);opacity:0;pointer-events:none}
+.row:hover .actions{opacity:1}
+.status{display:inline-flex;width:14px;height:14px;align-items:center;justify-content:center}
+.status i{width:6px;height:6px;border-radius:50%;background:#d97757;display:block}
+.avatar{width:24px;height:24px;border-radius:50%;background:#e5e3da;display:inline-flex;align-items:center;justify-content:center;font-size:9px}
+.footer{display:flex;align-items:center;justify-content:space-between;flex:none;padding-top:4px}
+.resize{position:absolute;inset-block:0;right:-6px;width:12px;cursor:col-resize}
+.resize div{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:3px;height:48px;border-radius:9999px;background:currentColor;opacity:0}
+</style></head><body>
+<aside>
+ <div class="titlebar"><span class="icon"></span><b style="margin-left:8px;font-weight:500;font-size:15px">Claude Code</b>
+  <span style="margin-left:auto;display:inline-flex;background:#ebe9e0;border-radius:6px;padding:1px"><span class="icon mask" style="color:#888"></span><span class="icon mask" style="background-color:#fff;color:#000;box-shadow:inset 0 0 0 1px #ddd,0 1px 2px rgba(0,0,0,.05);border-radius:5px"></span></span></div>
+ <div class="body">
+  <button class="search"><span class="icon"></span><span style="flex:1;text-align:left">Search</span><span><kbd>⌘</kbd><kbd>K</kbd></span></button>
+  <div class="scroll">
+   <a class="row sel" href="#"><span class="icon mask"></span><span class="label"><span>New</span></span></a>
+   <a class="row" href="#"><span class="icon"></span><span class="label"><span>Projects</span><span class="badge">Beta</span></span></a>
+   <div class="group">Pinned</div>
+   <div class="contents"><div class="contents" style="display:none !important"><a class="row">hidden</a></div></div>
+   <a class="row" href="#"><span class="status"><span class="dot"></span></span><span class="label always"><span>Documentation guide by agent scenario</span></span></a>
+   <a class="row" href="#"><span class="status"><i></i></span><span class="label" data-overflowing><span>拆分 release 和 NPM 流水线 and more words</span></span></a>
+   <div class="group">recents</div>
+   <div class="hidden"><a class="row">collapsed</a></div>
+   <a class="row" href="#"><span class="label"><span>恢复 deprecated NPM 包</span></span></a>
+   <a class="row" href="#"><span class="label always"><span>硬件虚拟化与服务模型训练 long long long</span></span><span class="icon" style="width:16px"></span></a>
+   <a class="row" href="#"><span class="label"><span>Load more sessions</span></span></a>
+  </div>
+  <div class="footer"><span style="display:flex;gap:8px;align-items:center"><span class="avatar">YF</span><span>YZ · Max</span></span><span class="icon"></span></div>
+ </div>
+ <div class="resize"><div></div></div>
+</aside>
+</body></html>

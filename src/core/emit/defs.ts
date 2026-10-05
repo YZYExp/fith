@@ -97,3 +97,16 @@ export function gradientId(
     )}" y2="${n(y2)}">${stops}</linearGradient>`,
   );
 }
+
+/** Alpha mask for CSS mask-image: gradient (white + alpha stops) painted over the mask box. */
+export function maskGradientId(
+  defs: Defs,
+  m: { rect: { x: number; y: number; width: number; height: number }; gradient: LinearGradientFill },
+): string {
+  const gid = gradientId(defs, m.gradient, m.rect);
+  const { x, y, width, height } = m.rect;
+  return defs.add(
+    `<mask id="{ID}" maskUnits="userSpaceOnUse" x="${n(x)}" y="${n(y)}" width="${n(width)}" height="${n(height)}">` +
+      `<rect x="${n(x)}" y="${n(y)}" width="${n(width)}" height="${n(height)}" fill="url(#${gid})"/></mask>`,
+  );
+}
