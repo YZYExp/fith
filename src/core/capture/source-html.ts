@@ -84,9 +84,26 @@ export function captureSourceHtml(root?: Element | null): string {
     for (let a: Element | null = rootEl.parentElement; a; a = a.parentElement) chain.unshift(a);
     htmlClone = chain[0].cloneNode(false) as HTMLElement;
     if (doc.head) htmlClone.appendChild(doc.head.cloneNode(true));
+    // The ancestor shells lose their other children, so anything sized by those
+    // siblings (e.g. `height: auto` around absolutely-positioned content) would
+    // collapse offline. Pin each shell's original border-box size.
+    const pinSize = (orig: Element, clone: Element) => {
+      const cs = getComputedStyle(orig);
+      if (cs.display === 'contents') return;
+      const r = orig.getBoundingClientRect();
+      const prev = clone.getAttribute('style');
+      const decl = ['box-sizing:border-box', `width:${r.width}px`, `height:${r.height}px`, 'flex-shrink:0'];
+      clone.setAttribute(
+        'style',
+        (prev ? prev.replace(/;?\s*$/, ';') : '') + decl.map((d) => d + ' !important').join(';'),
+      );
+      clone.setAttribute('data-fith-pinned', '');
+    };
+    pinSize(chain[0], htmlClone);
     let cur: Element = htmlClone;
     for (const a of chain.slice(1)) {
       const c = a.cloneNode(false) as Element;
+      pinSize(a, c);
       cur.appendChild(c);
       cur = c;
     }

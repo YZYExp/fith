@@ -48,6 +48,17 @@ async function withPage<T>(html: string, fn: (page: import('playwright').Page) =
 }
 
 describe('captureSourceHtml', () => {
+  it('pins ancestor sizes in element mode so sibling-sized layouts survive offline', async () => {
+    const page = `<!doctype html><html><body style="margin:0"><div class="wrap" style="position:relative">
+<div style="height:200px;width:150px">spacer</div><div id="t" style="position:absolute;top:0;bottom:0;left:0;right:0">x</div></div></body></html>`;
+    const html = await withPage(page, (p) =>
+      p.evaluate(`(${captureSourceHtml.toString()})(document.getElementById('t'))`) as Promise<string>,
+    );
+    expect(html).toContain('data-fith-pinned');
+    const h = await withPage(html, (p) => p.evaluate(() => document.getElementById('t')!.getBoundingClientRect().height));
+    expect(h).toBe(200);
+  });
+
   it('produces a sanitized, re-openable snapshot', async () => {
     const html = await withPage(PAGE, (page) => page.evaluate(captureSourceHtml, undefined));
     expect(html).toMatch(/^<!DOCTYPE html>/);
