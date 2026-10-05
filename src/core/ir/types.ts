@@ -203,4 +203,10 @@ export interface CaptureOptions {
    * Scroll positions are restored after capture. Default false.
    */
   captureScrollableContent?: boolean;
+  /**
+   * Out-parameter for in-page callers (not serializable, so unused by the Playwright
+   * backend): receives raster target id → source element, so a backend without
+   * screenshots can re-render the element itself.
+   */
+  rasterElements?: Map<string, Element>;
 }

@@ -74,6 +74,7 @@ test/
     images.test.ts          # image capture: paint order, CORS fallback
     element.test.ts         # subtree (single-element) capture
     inpage.test.ts          # in-page backend
+    raster-fallback.test.ts # in-page DOM (foreignObject) raster fallback, no screenshot backend
     webfont.test.ts         # @font-face embed / outline modes
     extension-viewport.test.ts # drives the shared createViewportRasterizer end-to-end
                             #   (single shot, no scroll) with a Playwright pngjs env
@@ -108,7 +109,8 @@ used by other tests can't load extensions).
     either an exact `chrome.debugger` `Page.captureScreenshot`
     (`captureBeyondViewport`, reaches below the fold in one shot — optional
     `debugger` permission, requested by the popup) or, if not granted, a
-    current-viewport crop (origin = scroll position, off-screen raster omitted).
+    current-viewport crop (origin = scroll position); off-screen raster is then re-rendered
+    in-page by the DOM rasterizer fallback instead of being omitted.
 - `containerRasterFallback` is **always false for the extension**: a screenshot of a
   container includes its children, so rastering it as a base layer then vectoring the
   children on top double-paints → ghosting. Pseudo-elements are vectorized by
@@ -116,6 +118,9 @@ used by other tests can't load extensions).
 - `captureScrollableContent` and `containerRasterFallback` are not passed by the
   Playwright backend (defaults to false). The browser backend passes
   `captureScrollableContent` only in full-page scope (not viewport-only).
+- In-page backends (`src/backends/browser`) re-render regions with no screenshot via `dom-raster.ts`
+  (clone + inlined computed styles → SVG `<foreignObject>` → canvas). Known limits: blend modes need
+  the backdrop, filter overflow outside the element box is clipped, iframes render empty.
 - `guaranteeFloor: true` embeds a full-page PNG as a `<image>` base layer (~150–800 KB).
 - `diffPatch: true` renders the SVG back in Chromium and patches divergent regions
   with raster screenshots; adds one extra page load per render.

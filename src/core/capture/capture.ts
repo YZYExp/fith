@@ -615,12 +615,14 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
     return width > 0 && height > 0 ? { x, y, width, height } : null;
   };
 
-  const pushRaster = (rect: DOMRect, clip: Clip | null, opacity: number, reason: string) => {
+  const pushRaster = (rect: DOMRect, clip: Clip | null, opacity: number, reason: string, el?: Element) => {
     const r = clampToCapture(rect);
     if (!r) return;
     const id = nid();
     nodes.push({ kind: 'raster', id, rect: r, opacity, clip, reason });
     rasterTargets.push({ id, ...r });
+    // in-page backends can re-render this element themselves when no screenshot is available
+    if (el) opts.rasterElements?.set(id, el);
   };
 
   const parseShadows = (value: string) => {
@@ -1254,7 +1256,7 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
 
     const subtreeReason = !skipRender && needsSubtreeRaster(el, cs);
     if (subtreeReason) {
-      if (!visHidden) pushRaster(r, clip, opacity, subtreeReason);
+      if (!visHidden) pushRaster(r, clip, opacity, subtreeReason, el);
       return;
     }
 
@@ -1303,11 +1305,11 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
     }
     if (boxReason && !pseudoVectorized) {
       if (el.childElementCount === 0) {
-        pushRaster(r, clip, opacity, boxReason);
+        pushRaster(r, clip, opacity, boxReason, el);
         return;
       }
       if (containerRasterFallback) {
-        pushRaster(r, clip, opacity, boxReason);
+        pushRaster(r, clip, opacity, boxReason, el);
         // skip emitBox/captureText — the raster already captures them including ::marker
       } else {
         emitBox(el, cs, clip, opacity);
