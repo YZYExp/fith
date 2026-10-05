@@ -4,7 +4,7 @@
  * (so it works on already-open tabs); guarded against double-injection. Output is
  * downloaded and/or opened in a preview tab per the chosen mode.
  */
-import { captureCurrentPage, captureElement } from '../browser/index.js';
+import { captureCurrentPage, captureElement, captureSourceHtml } from '../browser/index.js';
 import { createViewportRasterizer } from '../browser/viewport-raster.js';
 import { MAX_REGION_DEVICE_PX, type OutputMode, type FontMode, type Scope } from './messages.js';
 import type { Rect } from '../../core/ir/types.js';
@@ -154,27 +154,47 @@ function makeFullPageRasterizer() {
   });
 }
 
-function safeName(base: string): string {
-  return (base || 'page').replace(/[^\w.-]+/g, '_').slice(0, 60) + '.svg';
+function baseName(base: string): string {
+  return (base || 'page').replace(/[^\w.-]+/g, '_').slice(0, 60);
+}
+const safeName = (base: string) => baseName(base) + '.svg';
+
+function download(content: string, name: string, type: string) {
+  const blob = new Blob([content], { type });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = name;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+/** Opt-in bug-report snapshot: <name>.source.html (contains the page's content). */
+function saveSource(html: string | null, name: string) {
+  if (html) download(html, baseName(name) + '.source.html', 'text/html');
+}
+
+function snapshotSource(enabled: boolean, root?: Element): string | null {
+  if (!enabled) return null;
+  try {
+    return captureSourceHtml(root);
+  } catch (e) {
+    console.error('[fitting-html] source snapshot failed', e);
+    return null;
+  }
 }
 
 async function output(svg: string, name: string, mode: OutputMode) {
-  if (mode !== 'preview') {
-    const blob = new Blob([svg], { type: 'image/svg+xml' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = name;
-    a.click();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
-  }
+  if (mode !== 'preview') download(svg, name, 'image/svg+xml');
   if (mode !== 'download') {
     const response = await chrome.runtime.sendMessage({ type: 'fh:preview', svg, name });
     if (!response?.ok) throw new Error(response?.error ?? 'Could not open SVG preview.');
   }
 }
 
-async function capturePage(fontMode: FontMode, mode: OutputMode, scope: Scope) {
+async function capturePage(fontMode: FontMode, mode: OutputMode, scope: Scope, withSource: boolean) {
+  // snapshot before the SVG capture touches the DOM
+  const source = snapshotSource(withSource);
   let svg: string;
   if (scope === 'full') {
     svg = await captureCurrentPage({ fontMode, rasterize: makeFullPageRasterizer() });
@@ -182,6 +202,7 @@ async function capturePage(fontMode: FontMode, mode: OutputMode, scope: Scope) {
     svg = await captureCurrentPage({ fontMode, viewportOnly: true, rasterize: makeViewportRasterizer() });
   }
   await output(svg, safeName(document.title), mode);
+  saveSource(source, document.title);
   return new Blob([svg]).size;
 }
 
@@ -190,7 +211,24 @@ async function capturePage(fontMode: FontMode, mode: OutputMode, scope: Scope) {
 let pickerActive = false;
 let captureActive = false;
 
-function startPicker(fontMode: FontMode, mode: OutputMode) {
+/** Brief on-page confirmation (removed automatically; never part of a capture). */
+function toast(text: string) {
+  const t = document.createElement('div');
+  t.setAttribute('data-fh-overlay', '');
+  t.textContent = text;
+  Object.assign(t.style, {
+    position: 'fixed', zIndex: '2147483647', right: '16px', bottom: '16px',
+    font: '13px/1.4 system-ui, sans-serif', color: '#fff', background: 'rgba(22,119,255,0.95)',
+    padding: '8px 12px', borderRadius: '6px', pointerEvents: 'none',
+  } as Partial<CSSStyleDeclaration>);
+  document.documentElement.append(t);
+  setTimeout(() => t.remove(), 3000);
+}
+
+/** `svg`: convert the element; `html`: only save its source-HTML snapshot (for bug reports). */
+type PickKind = 'svg' | 'html';
+
+function startPicker(fontMode: FontMode, mode: OutputMode, withSource: boolean, kind: PickKind = 'svg') {
   if (pickerActive) return;
   pickerActive = true;
 
@@ -264,8 +302,22 @@ function startPicker(fontMode: FontMode, mode: OutputMode) {
     cleanup();
     if (chosen) {
       captureActive = true;
+      const pickName = (chosen as HTMLElement).id || chosen.tagName.toLowerCase();
+      if (kind === 'html') {
+        const html = snapshotSource(true, chosen);
+        if (html) {
+          saveSource(html, pickName);
+          toast(`Saved ${baseName(pickName)}.source.html`);
+        } else toast('Could not export this element’s HTML.');
+        captureActive = false;
+        return;
+      }
+      const source = snapshotSource(withSource, chosen);
       captureElement(chosen, { fontMode, rasterize: makeViewportRasterizer() })
-        .then((svg) => output(svg, safeName((chosen as HTMLElement).id || chosen.tagName.toLowerCase()), mode))
+        .then(async (svg) => {
+          await output(svg, safeName(pickName), mode);
+          saveSource(source, pickName);
+        })
         .catch((err) => console.error('[fitting-html]', err))
         .finally(() => { captureActive = false; });
     }
@@ -290,24 +342,25 @@ if (!(window as any).__fhInstalled) {
     const mode: OutputMode = msg?.output ?? 'both';
     const fontMode: FontMode = msg?.fontMode ?? 'embed';
     const scope: Scope = msg?.scope === 'full' ? 'full' : 'viewport';
+    const withSource = msg?.sourceHtml === true;
     if (msg?.type === 'fh:capture') {
       if (captureActive || pickerActive) {
         sendResponse({ ok: false, error: 'A capture or element selection is already in progress.' });
         return;
       }
       captureActive = true;
-      capturePage(fontMode, mode, scope)
+      capturePage(fontMode, mode, scope, withSource)
         .finally(() => { captureActive = false; })
         .then((bytes) => sendResponse({ ok: true, bytes }))
         .catch((e) => sendResponse({ ok: false, error: String(e) }));
       return true; // async response
     }
-    if (msg?.type === 'fh:pick') {
+    if (msg?.type === 'fh:pick' || msg?.type === 'fh:pickHtml') {
       if (captureActive) {
         sendResponse({ ok: false, error: 'A capture is already in progress.' });
         return;
       }
-      startPicker(fontMode, mode);
+      startPicker(fontMode, mode, withSource, msg.type === 'fh:pickHtml' ? 'html' : 'svg');
       sendResponse({ ok: true });
     }
   });

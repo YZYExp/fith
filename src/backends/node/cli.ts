@@ -1,5 +1,5 @@
 import { readFileSync, writeFileSync } from 'node:fs';
-import { renderToSvg, type RenderInput } from './playwright.js';
+import { renderDetailed, type RenderInput } from './playwright.js';
 
 function parseArgs(argv: string[]) {
   const out: Record<string, string> = {};
@@ -18,22 +18,27 @@ async function main() {
   const src = positional[0];
   if (!src) {
     console.error(
-      'usage: fitting-html <input.html|url> -o out.svg [--width N] [--height N] [--scale N] [--font-mode embed|outline|none]',
+      'usage: fitting-html <input.html|url> -o out.svg [--width N] [--height N] [--scale N] [--font-mode embed|outline|none] [--source-html page.html]',
     );
     process.exit(1);
   }
   const isUrl = /^https?:\/\//.test(src);
   const input: RenderInput = isUrl ? { url: src } : { html: readFileSync(src, 'utf8') };
-  const svg = await renderToSvg(input, {
+  const { svg, sourceHtml } = await renderDetailed(input, {
     width: out.width ? parseInt(out.width, 10) : 1280,
     height: out.height ? parseInt(out.height, 10) : undefined,
     deviceScaleFactor: out.scale ? parseFloat(out.scale) : 1,
     fontMode: (out['font-mode'] as 'embed' | 'outline' | 'none') || 'embed',
     executablePath: process.env.CHROMIUM_PATH || undefined,
+    captureSourceHtml: !!out['source-html'],
   });
   const dest = out.out || 'out.svg';
   writeFileSync(dest, svg);
   console.error(`wrote ${dest} (${svg.length} bytes)`);
+  if (sourceHtml !== undefined) {
+    writeFileSync(out['source-html'], sourceHtml);
+    console.error(`wrote ${out['source-html']} (${sourceHtml.length} bytes, source HTML snapshot — contains page content)`);
+  }
 }
 
 main().catch((e) => {

@@ -4,8 +4,9 @@
 export type * from './core/ir/types.js';
 export { emitSvg } from './core/emit/svg.js';
 export { captureScene } from './core/capture/capture.js';
-export { renderToSvg } from './backends/node/playwright.js';
-export type { RenderInput, RenderOptions } from './backends/node/playwright.js';
+export { captureSourceHtml } from './core/capture/source-html.js';
+export { renderToSvg, renderDetailed } from './backends/node/playwright.js';
+export type { RenderInput, RenderOptions, RenderResult } from './backends/node/playwright.js';
 
 import { renderToSvg, type RenderInput, type RenderOptions } from './backends/node/playwright.js';
 

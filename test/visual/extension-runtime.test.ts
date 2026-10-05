@@ -125,6 +125,32 @@ describe('built extension content script', () => {
   });
 });
 
+describe('built extension HTML pick', () => {
+  it('exports only the picked element as a .source.html download (no SVG, no preview)', async () => {
+    const page = await contentPage();
+    try {
+      const resp = await page.evaluate(() => new Promise((resolve) => {
+        (globalThis as any).captureListener({ type: 'fh:pickHtml' }, {}, resolve);
+      }));
+      expect(resp).toMatchObject({ ok: true });
+      const target = page.locator('h1, p, div').first();
+      const box = (await target.boundingBox())!;
+      await page.mouse.move(box.x + 2, box.y + 2);
+      const downloadPromise = page.waitForEvent('download');
+      await page.mouse.click(box.x + 2, box.y + 2);
+      const download = await downloadPromise;
+      expect(download.suggestedFilename()).toMatch(/\.source\.html$/);
+      const stream = await download.createReadStream();
+      let html = '';
+      for await (const chunk of stream!) html += chunk;
+      expect(html).toContain('name="fith-capture"');
+      expect(html).toContain('&quot;scope&quot;:&quot;element&quot;');
+      expect(await page.evaluate(() => (globalThis as any).exports.length)).toBe(0);
+      expect(await page.locator('[data-fh-overlay]').count()).toBeLessThanOrEqual(1); // only the toast
+    } finally { await page.close(); }
+  });
+});
+
 describe('built extension viewer', () => {
   it('isolates captured markup in an image and downloads the original SVG bytes', async () => {
     const page = await context.newPage();

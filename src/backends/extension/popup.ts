@@ -5,9 +5,11 @@ const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as 
 const scopeSel = $<HTMLSelectElement>('scope');
 const outputSel = $<HTMLSelectElement>('output');
 const fontSel = $<HTMLSelectElement>('font');
+const sourceChk = $<HTMLInputElement>('source');
 const status = $<HTMLDivElement>('status');
 const pageBtn = $<HTMLButtonElement>('page');
 const pickBtn = $<HTMLButtonElement>('pick');
+const pickHtmlBtn = $<HTMLButtonElement>('pick-html');
 let loading = true;
 let busy = false;
 let available = false;
@@ -23,7 +25,8 @@ const showError = (error: unknown) => showStatus(errorText(error), 'error');
 
 function updateControls() {
   for (const select of [scopeSel, outputSel, fontSel]) select.disabled = loading || busy;
-  pageBtn.disabled = pickBtn.disabled = loading || busy || !available;
+  sourceChk.disabled = loading || busy;
+  pageBtn.disabled = pickBtn.disabled = pickHtmlBtn.disabled = loading || busy || !available;
   pageBtn.setAttribute('aria-busy', String(busy));
   $('page-label').textContent = busy ? 'Working…' : retry ? 'Retry capture'
     : scopeSel.value === 'full' ? 'Capture full page' : 'Capture visible area';
@@ -66,6 +69,7 @@ async function initialize() {
         ? value : DEFAULT_PREFS[key];
     }
   }
+  if (prefs.status === 'fulfilled') sourceChk.checked = prefs.value.fhSource === true;
   const tab = tabs.status === 'fulfilled' ? tabs.value[0] : undefined;
   available = supportedTab(tab);
   const name = tab?.title || tab?.url || 'Current tab';
@@ -79,8 +83,9 @@ async function initialize() {
 }
 
 const persist = () => chrome.storage.local.set({
-  fhScope: scopeSel.value, fhOutput: outputSel.value, fhFont: fontSel.value,
+  fhScope: scopeSel.value, fhOutput: outputSel.value, fhFont: fontSel.value, fhSource: sourceChk.checked,
 });
+sourceChk.addEventListener('change', () => { persist().catch(() => showError('Could not save preferences. Please retry.')); });
 for (const select of [scopeSel, outputSel, fontSel]) {
   select.addEventListener('change', () => {
     retry = false;
@@ -90,12 +95,12 @@ for (const select of [scopeSel, outputSel, fontSel]) {
   });
 }
 
-async function trigger(type: 'fh:capture' | 'fh:pick') {
+async function trigger(type: 'fh:capture' | 'fh:pick' | 'fh:pickHtml') {
   if (busy || loading || !available) return;
   busy = true;
   retry = false;
   updateControls();
-  showStatus(type === 'fh:pick' ? 'Preparing element picker…' : 'Preparing capture…', 'busy');
+  showStatus(type !== 'fh:capture' ? 'Preparing element picker…' : 'Preparing capture…', 'busy');
   try {
     // Request on the button gesture, before other async work.
     if (type === 'fh:capture' && scopeSel.value === 'full') {
@@ -109,15 +114,15 @@ async function trigger(type: 'fh:capture' | 'fh:pick') {
     }
     await persist();
     await chrome.scripting.executeScript({ target: { tabId: tab.id! }, files: ['content.js'] });
-    showStatus(type === 'fh:pick' ? 'Starting element picker…' : 'Converting the page to SVG…', 'busy');
+    showStatus(type !== 'fh:capture' ? 'Starting element picker…' : 'Converting the page to SVG…', 'busy');
     const resp = await chrome.tabs.sendMessage(tab.id!, {
-      type, output: outputSel.value, fontMode: fontSel.value, scope: scopeSel.value,
+      type, output: outputSel.value, fontMode: fontSel.value, scope: scopeSel.value, sourceHtml: sourceChk.checked,
     });
     if (!resp?.ok) throw new Error(resp?.error ?? 'Capture could not be completed. Please retry.');
-    if (type === 'fh:pick') { window.close(); return; }
+    if (type !== 'fh:capture') { window.close(); return; }
     const size = resp.bytes ? ` · ${(resp.bytes / 1024).toFixed(1)} KB` : '';
     const result = outputSel.value === 'preview' ? 'Preview opened' : outputSel.value === 'download' ? 'SVG exported' : 'SVG exported & preview opened';
-    showStatus(result + size, 'success');
+    showStatus(result + size + (sourceChk.checked ? ' · source HTML saved' : ''), 'success');
   } catch (e) {
     retry = true;
     showError(e);
@@ -129,4 +134,5 @@ async function trigger(type: 'fh:capture' | 'fh:pick') {
 
 $('page').addEventListener('click', () => { void trigger('fh:capture'); });
 $('pick').addEventListener('click', () => { void trigger('fh:pick'); });
+$('pick-html').addEventListener('click', () => { void trigger('fh:pickHtml'); });
 void initialize();

@@ -5,6 +5,7 @@
  */
 import { captureScene } from '../../core/capture/capture.js';
 import { emitSvg } from '../../core/emit/svg.js';
+import { captureSourceHtml } from '../../core/capture/source-html.js';
 import type { Rect, Scene } from '../../core/ir/types.js';
 import type { Outliner } from '../../core/emit/outline.js';
 import { createDomRasterizer } from './dom-raster.js';
@@ -133,4 +134,4 @@ export function captureElement(el: Element, opts: InPageOptions = {}): Promise<s
   return run(opts, el);
 }
 
-export { captureScene, emitSvg };
+export { captureScene, emitSvg, captureSourceHtml };
