@@ -143,4 +143,5 @@ reproduced offline and promoted to a fixture in `test/fixtures/`.
   `--source-html`, `captureSourceHtml` render option, the extension's unchecked-by-default
   checkbox) and never commit a user-supplied snapshot as a fixture without scrubbing it.
 - Entry points: `renderDetailed()` / `--source-html` (Node), `captureSourceHtml` from the
-  browser entry, and the extension popup (`fhSource` pref → `<name>.source.html` download).
+  browser entry, and the extension popup (`fhSource` pref → `<name>.source.html` download). The extension's **Export element HTML**
+  (`fh:pickHtml` message, popup button, context menu) reuses the picker and downloads only the element's snapshot — no SVG.

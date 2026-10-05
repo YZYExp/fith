@@ -211,7 +211,24 @@ async function capturePage(fontMode: FontMode, mode: OutputMode, scope: Scope, w
 let pickerActive = false;
 let captureActive = false;
 
-function startPicker(fontMode: FontMode, mode: OutputMode, withSource: boolean) {
+/** Brief on-page confirmation (removed automatically; never part of a capture). */
+function toast(text: string) {
+  const t = document.createElement('div');
+  t.setAttribute('data-fh-overlay', '');
+  t.textContent = text;
+  Object.assign(t.style, {
+    position: 'fixed', zIndex: '2147483647', right: '16px', bottom: '16px',
+    font: '13px/1.4 system-ui, sans-serif', color: '#fff', background: 'rgba(22,119,255,0.95)',
+    padding: '8px 12px', borderRadius: '6px', pointerEvents: 'none',
+  } as Partial<CSSStyleDeclaration>);
+  document.documentElement.append(t);
+  setTimeout(() => t.remove(), 3000);
+}
+
+/** `svg`: convert the element; `html`: only save its source-HTML snapshot (for bug reports). */
+type PickKind = 'svg' | 'html';
+
+function startPicker(fontMode: FontMode, mode: OutputMode, withSource: boolean, kind: PickKind = 'svg') {
   if (pickerActive) return;
   pickerActive = true;
 
@@ -286,6 +303,15 @@ function startPicker(fontMode: FontMode, mode: OutputMode, withSource: boolean) 
     if (chosen) {
       captureActive = true;
       const pickName = (chosen as HTMLElement).id || chosen.tagName.toLowerCase();
+      if (kind === 'html') {
+        const html = snapshotSource(true, chosen);
+        if (html) {
+          saveSource(html, pickName);
+          toast(`Saved ${baseName(pickName)}.source.html`);
+        } else toast('Could not export this element’s HTML.');
+        captureActive = false;
+        return;
+      }
       const source = snapshotSource(withSource, chosen);
       captureElement(chosen, { fontMode, rasterize: makeViewportRasterizer() })
         .then(async (svg) => {
@@ -329,12 +355,12 @@ if (!(window as any).__fhInstalled) {
         .catch((e) => sendResponse({ ok: false, error: String(e) }));
       return true; // async response
     }
-    if (msg?.type === 'fh:pick') {
+    if (msg?.type === 'fh:pick' || msg?.type === 'fh:pickHtml') {
       if (captureActive) {
         sendResponse({ ok: false, error: 'A capture is already in progress.' });
         return;
       }
-      startPicker(fontMode, mode, withSource);
+      startPicker(fontMode, mode, withSource, msg.type === 'fh:pickHtml' ? 'html' : 'svg');
       sendResponse({ ok: true });
     }
   });

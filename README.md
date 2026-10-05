@@ -132,6 +132,7 @@ node dist/backends/node/cli.js https://example.com \
 ```
 
 The Chrome extension offers the same snapshot under *Text, fonts & bug reports → Also save source HTML* (off by default).
+For feedback on a single element, use **Export element HTML** in the popup (or the context menu entry): pick an element and only its `.source.html` snapshot is downloaded.
 
 The package exposes the same CLI as `fitting-html` when installed or linked. Defaults: width `1280`, scale `1`, font mode `embed`, output `out.svg`. Omit `--height` to use the document height. Set `CHROMIUM_PATH` to select a Chromium executable for the CLI.
 

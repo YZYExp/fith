@@ -16,9 +16,10 @@ import { MAX_REGION_DEVICE_PX, DEFAULT_PREFS, PREF_KEYS } from './messages.js';
 chrome.runtime.onInstalled.addListener(() => {
   chrome.contextMenus.create({ id: 'fh-page', title: 'Convert page to SVG', contexts: ['page'] });
   chrome.contextMenus.create({ id: 'fh-pick', title: 'Convert element to SVG…', contexts: ['all'] });
+  chrome.contextMenus.create({ id: 'fh-pick-html', title: 'Export element HTML (for feedback)…', contexts: ['all'] });
 });
 
-async function send(tabId: number, type: 'fh:capture' | 'fh:pick') {
+async function send(tabId: number, type: 'fh:capture' | 'fh:pick' | 'fh:pickHtml') {
   try {
     await chrome.scripting.executeScript({ target: { tabId }, files: ['content.js'] });
     const prefs = await chrome.storage.local.get([...PREF_KEYS]);
@@ -37,6 +38,7 @@ async function send(tabId: number, type: 'fh:capture' | 'fh:pick') {
 chrome.contextMenus.onClicked.addListener((info, tab) => {
   if (tab?.id == null) return;
   if (info.menuItemId === 'fh-pick') send(tab.id, 'fh:pick');
+  else if (info.menuItemId === 'fh-pick-html') send(tab.id, 'fh:pickHtml');
   else if (info.menuItemId === 'fh-page') send(tab.id, 'fh:capture');
 });
 
