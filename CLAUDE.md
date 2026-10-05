@@ -58,6 +58,23 @@ every push/PR; the gated extension E2E job runs on pushes only.
 These are hard gates. Do not merge or push to `main` if either fails.
 Fix the root cause — never skip hooks or suppress errors.
 
+### Before opening or updating a PR
+
+`pnpm test` alone is not a sufficient gate. CI's **pull_request** run skips the gated suites, but the
+**push** run also executes `extension-e2e`, so a branch can look green on the PR and still go red. Verify
+locally, in this order, and only then push or open a PR (never open one on unverified work):
+
+```bash
+pnpm build && pnpm build:extension && pnpm test
+# gated extension E2E: needs a *full* Chromium (not the headless shell) and a display
+EXTENSION_E2E=1 E2E_CHROME_PATH=/path/to/chrome \
+  xvfb-run -a pnpm exec vitest run test/visual/extension-e2e.test.ts
+```
+
+Re-run all of it after every rebase or merge from `main`. Every new capture behaviour needs a fixture in
+`test/fixtures/` plus a test in `test/visual/` (pixel diff **and** a structural assertion such as "this text
+is still vector" / "no `data:image/png`"), so a silent fall-back to raster fails the build.
+
 ## Test Layout
 
 ```
@@ -121,6 +138,23 @@ used by other tests can't load extensions).
 - In-page backends (`src/backends/browser`) re-render regions with no screenshot via `dom-raster.ts`
   (clone + inlined computed styles → SVG `<foreignObject>` → canvas). Known limits: blend modes need
   the backdrop, filter overflow outside the element box is clipped, iframes render empty.
+- **Prefer vectorizing over rastering — raster is the last resort** (it is lost wherever no screenshot
+  exists, and is not selectable/scalable). Current vector paths: `mask-image` linear-gradient (px/`calc()`
+  stops resolved against the gradient line) → `NodeBase.masks` → SVG `<mask>`; `mask-image:url()` →
+  alpha `<mask>` over an embedded base64 image; single-layer `background-image:url()` → placed `<image>`;
+  `::before`/`::after` with text content (icon fonts) → `materializePseudo` (temporary real `<span>`
+  carrying the pseudo's computed style, captured as box+text, then removed). Anything these can't
+  reproduce exactly (multi-layer, tiling, custom origin/clip) deliberately falls back to raster.
+- **Bundled extension scripts must not contain Unicode noncharacters** (U+FFFE, U+FFFF, U+FDD0–FDEF).
+  A regex literal like `/[\uFFFE\uFFFF]/` is emitted raw by esbuild and Chrome then refuses to inject the
+  script ("isn't UTF-8 encoded"), silently breaking the extension. Build such characters at runtime with
+  `String.fromCharCode`; `test/extension-bundle.test.ts` enforces this.
+- **Tests share one Chromium path**: `test/global-setup.ts` resolves `@sparticuz/chromium` once and
+  exports `CHROMIUM_PATH`. Never call `sparticuz.executablePath()` per test (parallel workers re-extract
+  the binary → `spawn ETXTBSY` on CI). Launch one browser per file (`beforeAll`) and avoid
+  `--single-process`, which made `page.screenshot` flaky on loaded runners.
+- `captureScene`'s `rasterElements` option is an **in-page-only out-parameter** (Map, not serializable);
+  the Playwright backend never passes it.
 - `guaranteeFloor: true` embeds a full-page PNG as a `<image>` base layer (~150–800 KB).
 - `diffPatch: true` renders the SVG back in Chromium and patches divergent regions
   with raster screenshots; adds one extra page load per render.
