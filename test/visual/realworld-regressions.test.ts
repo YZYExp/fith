@@ -50,6 +50,19 @@ describe('real-world regressions', () => {
     expect(r.ratio).toBeLessThan(0.005);
   }, 60_000);
 
+  it('vectorizes styled text <input> (value, placeholder, password, alignment) instead of rastering', async () => {
+    const r = await validate(
+      { url: pathToFileURL(resolve(FIXTURES, 'form-inputs.html')).href },
+      { width: 340, height: 260, name: 'form-inputs', outDir: OUT, fontMode: 'none' },
+    );
+    const svg = readFileSync(resolve(OUT, 'form-inputs.svg'), 'utf8');
+    expect(svg).not.toContain('data:image/png');
+    for (const t of ['you@example.com', 'Search…', 'centered', 'right aligned']) expect(svg).toContain(t);
+    expect(svg).not.toContain('hunter2'); // password stays masked
+    expect(svg).toContain('\u2022\u2022\u2022\u2022\u2022\u2022\u2022');
+    expect(r.ratio).toBeLessThan(0.01);
+  }, 60_000);
+
   describe('webfont in an external stylesheet', () => {
     let base: { url: string; close: () => Promise<void> } | null = null;
     afterAll(async () => base?.close());

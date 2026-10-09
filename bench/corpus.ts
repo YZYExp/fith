@@ -22,9 +22,10 @@ export interface Target {
   notes?: string;
 }
 
+// Live sites are only usable when every asset host is reachable: www.anthropic.com is excluded
+// because its stylesheet CDN is blocked in the sandbox (renders unstyled, nothing to compare).
 export const CORPUS: Target[] = [
   { id: 'live-nodejs', kind: 'live', src: 'https://nodejs.org/en', width: 1280, height: 1600, settleMs: 1500, maxRatio: 0.15 },
-  { id: 'live-anthropic', kind: 'live', src: 'https://www.anthropic.com', width: 1280, height: 1600, settleMs: 2000, maxRatio: 0.2 },
   { id: 'live-pypi', kind: 'live', src: 'https://pypi.org', width: 1280, height: 1400, settleMs: 1000, maxRatio: 0.15 },
   { id: 'lib-bootstrap-dashboard', kind: 'local', src: 'bootstrap-dashboard.html', width: 1280, height: 1000, settleMs: 1500, maxRatio: 0.02 },
   { id: 'lib-tailwind-landing', kind: 'local', src: 'tailwind-landing.html', width: 1280, height: 1100, settleMs: 1500, maxRatio: 0.03 },

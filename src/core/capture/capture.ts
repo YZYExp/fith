@@ -338,6 +338,19 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
   // for genuinely subtree-wide effects, never for box-level ones, otherwise a
   // <body>/wrapper carrying the property would collapse the entire page to a
   // single raster (and a blank SVG if that raster can't be produced).
+  // Single-line text inputs with author-styled chrome (appearance:none, or a solid border) are
+  // just a box + one line of text, so they vectorize. Native-looking ones (inset border) stay raster.
+  const TEXT_INPUT = /^(text|email|password|search|url|tel|number|)$/;
+  const vectorTextInput = (el: Element, cs: CSSStyleDeclaration): boolean => {
+    if (el.tagName !== 'INPUT') return false;
+    const inp = el as HTMLInputElement;
+    if (!TEXT_INPUT.test(inp.getAttribute('type') || '') && !TEXT_INPUT.test(inp.type)) return false;
+    if (inp.list || inp.type === 'number') return false; // datalist arrow / spin buttons
+    if (['inset', 'outset', 'groove', 'ridge'].includes(cs.borderTopStyle)) return false;
+    if (cs.textOverflow === 'ellipsis' || cs.direction === 'rtl') return false;
+    return true;
+  };
+
   // `filter: blur(Npx)` alone (the "glow" decoration pattern) maps 1:1 to feGaussianBlur.
   const pureBlur = (filter: string | undefined): number | null => {
     const m = (filter || '').trim().match(/^blur\(\s*([\d.]+)px\s*\)$/);
@@ -347,7 +360,7 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
   const needsSubtreeRaster = (el: Element, cs: CSSStyleDeclaration) => {
     const tag = el.tagName.toUpperCase();
     if (['CANVAS', 'VIDEO', 'IFRAME', 'OBJECT', 'EMBED'].includes(tag)) return 'media:' + tag;
-    if (['INPUT', 'SELECT', 'TEXTAREA', 'PROGRESS', 'METER'].includes(tag)) return 'form-control';
+    if (['INPUT', 'SELECT', 'TEXTAREA', 'PROGRESS', 'METER'].includes(tag) && !vectorTextInput(el, cs)) return 'form-control';
     if (cs.filter && cs.filter !== 'none' && !(pureBlur(cs.filter) !== null && el.childNodes.length === 0))
       return 'filter';
     if ((cs as any).backdropFilter && (cs as any).backdropFilter !== 'none') return 'backdrop-filter';
@@ -854,7 +867,55 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
     return sx;
   };
 
+  // value / placeholder of a vectorizable <input>: no text node exists, so synthesize one line
+  const captureInputText = (el: HTMLInputElement, cs: CSSStyleDeclaration, clip: Clip | null, opacity: number) => {
+    const sc = elScale(el);
+    const isPh = !el.value;
+    const raw = isPh ? el.placeholder || '' : el.type === 'password' ? '\u2022'.repeat(el.value.length) : el.value;
+    if (!raw) return;
+    const ps = isPh ? getComputedStyle(el, '::placeholder') : cs;
+    const fontSize = num(cs.fontSize) * sc;
+    if (fontSize <= 0) return;
+    const r = el.getBoundingClientRect();
+    const bl = num(cs.borderLeftWidth) * sc, br = num(cs.borderRightWidth) * sc, bt = num(cs.borderTopWidth) * sc, bb = num(cs.borderBottomWidth) * sc;
+    const cx = r.left + bl + num(cs.paddingLeft) * sc, cy0 = r.top + bt + num(cs.paddingTop) * sc;
+    const cw = r.width - bl - br - (num(cs.paddingLeft) + num(cs.paddingRight)) * sc;
+    const ch = r.height - bt - bb - (num(cs.paddingTop) + num(cs.paddingBottom)) * sc;
+    if (cw <= 0 || ch <= 0) return;
+    mctx.font = `${cs.fontStyle} ${cs.fontWeight} ${fontSize}px ${cs.fontFamily}`;
+    const fm = mctx.measureText('Mg');
+    const ascent = (fm as any).fontBoundingBoxAscent || fontSize * 0.8;
+    const descent = (fm as any).fontBoundingBoxDescent || fontSize * 0.2;
+    const ls = cs.letterSpacing === 'normal' ? 0 : num(cs.letterSpacing) * sc;
+    const textW = mctx.measureText(raw).width + ls * raw.length;
+    const align = cs.textAlign;
+    const x = align === 'center' ? cx + (cw - textW) / 2 : align === 'right' || align === 'end' ? cx + cw - textW : cx;
+    const baseline = cy0 + (ch - (ascent + descent)) / 2 + ascent;
+    const color = normColor(isPh ? ps.color : cs.color);
+    if (transparent(color)) return;
+    nodes.push({
+      kind: 'text',
+      id: nid(),
+      rect: { x, y: baseline - ascent, width: textW, height: ascent + descent },
+      opacity: opacity * (isPh ? num(ps.opacity || '1') : 1),
+      clip: intersect(clip, { x: cx, y: cy0, width: cw, height: ch, radii: [0, 0, 0, 0] }),
+      lines: [{ text: raw, x, baseline }],
+      fontFamily: cs.fontFamily,
+      fontSize,
+      fontWeight: cs.fontWeight,
+      fontStyle: cs.fontStyle,
+      color,
+      letterSpacing: ls,
+      wordSpacing: 0,
+      preserveSpace: true,
+    } as PaintNode);
+  };
+
   const captureText = (el: Element, cs: CSSStyleDeclaration, clip: Clip | null, opacity: number) => {
+    if (el.tagName === 'INPUT' && vectorTextInput(el, cs)) {
+      captureInputText(el as HTMLInputElement, cs, clip, opacity);
+      return;
+    }
     const sc = elScale(el);
     const fontSize = num(cs.fontSize) * sc;
     if (fontSize <= 0) return;

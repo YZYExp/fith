@@ -53,7 +53,7 @@ async function main() {
   for (const t of targets) {
     const row = await runOne(t, server.url);
     const b = base[t.id];
-    if (b?.ratio !== undefined && row.ratio !== undefined && row.ratio > b.ratio + 0.01 && row.status === 'ok') { row.status = 'regress'; row.note = `vs baseline ${(b.ratio * 100).toFixed(2)}%`; }
+    if (b?.ratio !== undefined && row.ratio !== undefined && row.ratio > Math.max(b.ratio * 1.5, b.ratio + 0.002) && row.status === 'ok') { row.status = 'regress'; row.note = `vs baseline ${(b.ratio * 100).toFixed(2)}%`; }
     rows.push(row);
     console.error(`${row.status.padEnd(7)} ${t.id.padEnd(22)} ${row.ratio !== undefined ? (row.ratio * 100).toFixed(2) + '%' : '-'}  ${row.note ?? ''}`);
   }
