@@ -11,7 +11,7 @@ import type {
 } from '../ir/types.js';
 import type { Outliner } from './outline.js';
 import { n, esc, uniformRadii, noRadii, roundedRectPath } from './primitives.js';
-import { Defs, clipId, shadowFilterId, shadowMaskId, gradientId, maskGradientId } from './defs.js';
+import { Defs, clipId, blurFilterId, shadowFilterId, shadowMaskId, gradientId, maskGradientId } from './defs.js';
 
 function emitBox(node: BoxNode, defs: Defs): string {
   const { rect, radii } = node;
@@ -165,6 +165,7 @@ function emitText(node: TextNode, defs: Defs, outline?: Outliner): string {
     (node.letterSpacing ? ` letter-spacing="${n(node.letterSpacing)}"` : '') +
     (node.wordSpacing ? ` word-spacing="${n(node.wordSpacing)}"` : '') +
     (decoVal ? ` text-decoration="${decoVal}"` : '') +
+    (node.preserveSpace ? ' xml:space="preserve"' : '') +
     (node.textAnchor && node.textAnchor !== 'start' ? ` text-anchor="${node.textAnchor}"` : '');
   return node.lines
     .map((l) => `<text x="${n(l.x)}" y="${n(l.baseline)}" ${attrs}>${esc(l.text)}</text>`)
@@ -207,6 +208,8 @@ function emitInlineSvg(node: InlineSvgNode, defs: Defs, dedupe: boolean): string
 
 function wrap(node: PaintNode, inner: string, defs: Defs): string {
   if (!inner) return '';
+  // CSS applies filter before clip/opacity, so blur wraps the content innermost
+  if (node.blur && node.blur > 0) inner = `<g filter="url(#${blurFilterId(defs, node.blur, node.rect)})">${inner}</g>`;
   const parts: string[] = [];
   if (node.opacity < 0.999) parts.push(`opacity="${n(node.opacity)}"`);
   if (node.clip && node.clip.width > 0 && node.clip.height > 0)
@@ -302,6 +305,7 @@ function emitFonts(fonts: Scene['fonts']): string {
       (f) =>
         `@font-face{font-family:'${f.family.replace(/'/g, '')}';` +
         `font-weight:${f.weight};font-style:${f.style};` +
+        (f.unicodeRange ? `unicode-range:${f.unicodeRange};` : '') +
         `src:url(${f.src}) format('${f.format}');}`,
     )
     .join('');

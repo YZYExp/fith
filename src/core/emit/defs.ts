@@ -33,6 +33,16 @@ export function clipId(defs: Defs, clip: Clip): string {
   return defs.add(`<clipPath id="{ID}">${inner}</clipPath>`);
 }
 
+/** CSS filter: blur(r) — the filter region covers the box plus the 3σ blur spread. */
+export function blurFilterId(defs: Defs, blur: number, rect: { x: number; y: number; width: number; height: number }): string {
+  const pad = blur * 3;
+  return defs.add(
+    `<filter id="{ID}" filterUnits="userSpaceOnUse" x="${n(rect.x - pad)}" y="${n(rect.y - pad)}" ` +
+      `width="${n(rect.width + pad * 2)}" height="${n(rect.height + pad * 2)}" color-interpolation-filters="sRGB">` +
+      `<feGaussianBlur stdDeviation="${n(blur)}"/></filter>`,
+  );
+}
+
 export function shadowFilterId(defs: Defs, blur: number): string {
   const std = n(blur / 2);
   return defs.add(

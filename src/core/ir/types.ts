@@ -37,6 +37,8 @@ export interface FontFace {
   /** base64 data URI of the font file. */
   src: string;
   format: string;
+  /** CSS unicode-range of this face (subsetted webfonts such as Google Fonts). */
+  unicodeRange?: string;
 }
 
 export interface RasterTarget {
@@ -84,6 +86,8 @@ export interface NodeBase {
   clip?: Clip | null;
   /** Alpha masks (from mask-image on the node or an ancestor) applied multiplicatively. */
   masks?: MaskGradient[];
+  /** CSS filter: blur(Npx) on a childless box (glows/scrims) → SVG feGaussianBlur, stdDeviation in px. */
+  blur?: number;
 }
 
 export interface GradientStop {
@@ -152,6 +156,8 @@ export interface TextNode extends NodeBase {
   letterSpacing: number;
   wordSpacing: number;
   decoration?: string | null;
+  /** white-space: pre* — keep runs of spaces (emitted with xml:space=preserve). */
+  preserveSpace?: boolean;
   decorationColor?: string;
   textAnchor?: 'start' | 'middle' | 'end';
   /** Gradient fill from background-clip:text pattern; overrides color when set. */

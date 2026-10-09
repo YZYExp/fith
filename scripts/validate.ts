@@ -64,6 +64,37 @@ export interface ValidateResult {
   totalPixels: number;
   ratio: number;
   outDir: string;
+  /** Scene statistics for the bench harness. */
+  stats: SceneStats;
+  svgBytes: number;
+  captureMs: number;
+}
+
+export interface SceneStats {
+  nodes: number;
+  box: number;
+  text: number;
+  image: number;
+  inlineSvg: number;
+  raster: number;
+  rasterArea: number;
+  /** Characters in vector <text> nodes. */
+  textChars: number;
+  /** Visible characters of DOM text nodes (rendered), for coverage checks. */
+  domTextChars: number;
+  rasterReasons: Record<string, number>;
+}
+
+export function sceneStats(scene: Scene, domTextChars: number): SceneStats {
+  const st: SceneStats = { nodes: scene.nodes.length, box: 0, text: 0, image: 0, inlineSvg: 0, raster: 0, rasterArea: 0, textChars: 0, domTextChars, rasterReasons: {} };
+  for (const n of scene.nodes) {
+    if (n.kind === 'box') st.box++;
+    else if (n.kind === 'text') { st.text++; for (const l of n.lines) st.textChars += l.text.replace(/\s/g, '').length; }
+    else if (n.kind === 'image') st.image++;
+    else if (n.kind === 'inline-svg') st.inlineSvg++;
+    else if (n.kind === 'raster') { st.raster++; st.rasterArea += n.rect.width * n.rect.height; st.rasterReasons[n.reason] = (st.rasterReasons[n.reason] || 0) + 1; }
+  }
+  return st;
 }
 
 export async function validate(
@@ -78,14 +109,23 @@ export async function validate(
     initScript?: string;
     /** Extra settle time (ms) after networkidle before capturing. */
     settleMs?: number;
+    /** HTTP(S) proxy for live-site runs (defaults to $HTTPS_PROXY when target is a remote URL). */
+    proxy?: string;
+    /** Capture only the viewport (no full-page height). */
+    viewportOnly?: boolean;
   },
 ): Promise<ValidateResult> {
   const execPath = process.env.CHROMIUM_PATH || (await sparticuz.executablePath());
-  const browser: Browser = await chromium.launch({ executablePath: execPath, args: ARGS });
+  const browser: Browser = await chromium.launch({
+    executablePath: execPath,
+    args: ARGS,
+    proxy: 'url' in target && /^https?:\/\/(?!(localhost|127\.|\[::1\]))/.test(target.url) && (opts.proxy || process.env.HTTPS_PROXY) ? { server: (opts.proxy || process.env.HTTPS_PROXY)! } : undefined,
+  });
   try {
     const context = await browser.newContext({
       viewport: { width: opts.width, height: opts.height || 800 },
       deviceScaleFactor: 1,
+      ignoreHTTPSErrors: true,
     });
     if (opts.initScript) await context.addInitScript(opts.initScript);
     const page = await context.newPage();
@@ -98,6 +138,7 @@ export async function validate(
     });
     const height =
       opts.height ||
+      (opts.viewportOnly ? 800 : 0) ||
       (await page.evaluate(() =>
         Math.max(document.documentElement.scrollHeight, document.body.scrollHeight),
       ));
@@ -115,6 +156,21 @@ export async function validate(
     await page.evaluate(() => {
       const g = globalThis as any;
       if (!g.__name) g.__name = (t: any) => t;
+    });
+    const t0 = Date.now();
+    const domTextChars = await page.evaluate(() => {
+      let n = 0;
+      const w = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+      for (let t = w.nextNode() as Text | null; t; t = w.nextNode() as Text | null) {
+        const el = t.parentElement;
+        if (!el || /^(SCRIPT|STYLE|NOSCRIPT|TEMPLATE)$/.test(el.tagName)) continue;
+        const cs = getComputedStyle(el);
+        if (cs.display === 'none' || cs.visibility === 'hidden') continue;
+        const r = el.getBoundingClientRect();
+        if (r.width <= 0 || r.height <= 0) continue;
+        n += (t.data || '').replace(/\s/g, '').length;
+      }
+      return n;
     });
     const scene: Scene = await page.evaluate(captureScene, {
       width: opts.width,
@@ -149,6 +205,7 @@ export async function validate(
       svg = emitSvg(scene);
     }
 
+    const captureMs = Date.now() - t0;
     mkdirSync(opts.outDir, { recursive: true });
     const svgPath = resolve(opts.outDir, `${opts.name}.svg`);
     writeFileSync(svgPath, svg);
@@ -181,7 +238,7 @@ export async function validate(
     writeFileSync(resolve(opts.outDir, `${opts.name}.diff.png`), PNG.sync.write(diff));
 
     const total = w * h;
-    return { width: w, height: h, diffPixels, totalPixels: total, ratio: diffPixels / total, outDir: opts.outDir };
+    return { width: w, height: h, diffPixels, totalPixels: total, ratio: diffPixels / total, outDir: opts.outDir, stats: sceneStats(scene, domTextChars), svgBytes: Buffer.byteLength(svg), captureMs };
   } finally {
     await browser.close();
   }

@@ -332,11 +332,18 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
   // for genuinely subtree-wide effects, never for box-level ones, otherwise a
   // <body>/wrapper carrying the property would collapse the entire page to a
   // single raster (and a blank SVG if that raster can't be produced).
+  // `filter: blur(Npx)` alone (the "glow" decoration pattern) maps 1:1 to feGaussianBlur.
+  const pureBlur = (filter: string | undefined): number | null => {
+    const m = (filter || '').trim().match(/^blur\(\s*([\d.]+)px\s*\)$/);
+    return m ? parseFloat(m[1]) : null;
+  };
+
   const needsSubtreeRaster = (el: Element, cs: CSSStyleDeclaration) => {
     const tag = el.tagName.toUpperCase();
     if (['CANVAS', 'VIDEO', 'IFRAME', 'OBJECT', 'EMBED'].includes(tag)) return 'media:' + tag;
     if (['INPUT', 'SELECT', 'TEXTAREA', 'PROGRESS', 'METER'].includes(tag)) return 'form-control';
-    if (cs.filter && cs.filter !== 'none') return 'filter';
+    if (cs.filter && cs.filter !== 'none' && !(pureBlur(cs.filter) !== null && el.childNodes.length === 0))
+      return 'filter';
     if ((cs as any).backdropFilter && (cs as any).backdropFilter !== 'none') return 'backdrop-filter';
     if (cs.mixBlendMode && cs.mixBlendMode !== 'normal') return 'blend-mode';
     if (
@@ -833,6 +840,8 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
             ? s.replace(/(^|\s)(\S)/g, (_m, p, c) => p + c.toUpperCase())
             : s;
 
+    // white-space: pre / pre-wrap / break-spaces keep runs of spaces (code blocks, <pre>)
+    const preserveSpace = /^(pre|pre-wrap|break-spaces)$/.test(cs.whiteSpace);
     for (const child of Array.from(el.childNodes)) {
       if (child.nodeType !== Node.TEXT_NODE) continue;
       const raw = child.textContent || '';
@@ -852,7 +861,20 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
         }
       } else if (rects.length === 1) {
         const r = rects[0];
-        let text = xform(raw.replace(/\s+/g, ' ').trim());
+        let text = xform(preserveSpace ? raw.replace(/[\r\n]+$/, '') : raw.replace(/\s+/g, ' ').trim());
+        // The rect starts at the collapsed leading space (e.g. " {" after an inline
+        // sibling); the trimmed text must start where its first glyph is drawn.
+        let left = r.left;
+        if (!preserveSpace) {
+          const lead = raw.search(/\S/);
+          if (lead > 0) {
+            const cr = document.createRange();
+            cr.setStart(child, lead);
+            cr.setEnd(child, lead + 1);
+            const rb = cr.getBoundingClientRect();
+            if (rb.width > 0) left = rb.left;
+          }
+        }
         // Reproduce CSS text-overflow:ellipsis — the DOM always contains the full text
         // but the browser visually truncates it with "..." when overflow is hidden.
         if (
@@ -875,13 +897,18 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
           text = text.slice(0, lo) + ellipsis;
         }
         const baseline = r.top + (r.height - (ascent + descent)) / 2 + ascent;
-        lines.push({ text, x: r.left, baseline });
+        lines.push({ text, x: left, baseline });
       } else {
         // multi-line: bucket characters to lines via per-char ranges
         for (const b of bucketCharsByLine(child, raw)) {
-          const text = xform(b.chars.join('').replace(/\s+/g, ' ').trim());
-          if (!text) continue;
-          const left = b.xs.reduce((m, v) => Math.min(m, v), Infinity);
+          const joined = b.chars.join('');
+          const text = xform(preserveSpace ? joined.replace(/[\r\n]+$/, '') : joined.replace(/\s+/g, ' ').trim());
+          if (!text.trim()) continue;
+          // leftmost x of the first kept glyph (skips collapsed leading whitespace)
+          const first = preserveSpace ? 0 : joined.search(/\S/);
+          const left = preserveSpace
+            ? b.xs.reduce((m, v) => Math.min(m, v), Infinity)
+            : b.xs[Math.max(0, first)];
           const baseline = b.top + (b.height - (ascent + descent)) / 2 + ascent;
           lines.push({ text, x: left, baseline });
         }
@@ -953,6 +980,7 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
         letterSpacing: ls,
         wordSpacing: ws,
         decoration,
+        preserveSpace: preserveSpace || undefined,
         decorationColor: normColor(cs.textDecorationColor || cs.color),
         gradientFill,
         gradientRect,
@@ -997,6 +1025,7 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
         : null;
     const bgImg = textClipped ? null : bgImageLayer(el, cs);
     if (!fill && !gradient && !border && shadows.length === 0 && !outline && !bgImg) return;
+    const blur = el.childNodes.length === 0 ? pureBlur(cs.filter) : null;
     if (fill || gradient || border || shadows.length > 0 || outline)
     nodes.push({
       kind: 'box',
@@ -1004,6 +1033,7 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
       rect: { x: r.left, y: r.top, width: r.width, height: r.height },
       opacity,
       clip,
+      blur: blur || undefined,
       fill,
       gradient,
       radii: radiiOf(cs),
@@ -1070,6 +1100,8 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
       ps.backgroundImage && ps.backgroundImage !== 'none' ? parseFirstLinearGradient(ps.backgroundImage) : null;
     if (ps.backgroundImage && ps.backgroundImage !== 'none' && !gradient) return { handled: false }; // url()/radial/conic
     if (ps.boxShadow && ps.boxShadow.includes('inset')) return { handled: false };
+    const blur = ps.filter && ps.filter !== 'none' ? pureBlur(ps.filter) : 0;
+    if (blur === null) return { handled: false }; // other filter functions
     const { hasBorder, border } = buildBorder(ps);
     if (hasBorder) {
       for (const st of [ps.borderTopStyle, ps.borderRightStyle, ps.borderBottomStyle, ps.borderLeftStyle])
@@ -1093,6 +1125,7 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
         rect: { x, y, width, height },
         opacity: opacity * num(ps.opacity),
         clip: pseudoClip,
+        blur: blur || undefined,
         fill,
         gradient,
         radii: radiiOf(ps),
@@ -1569,41 +1602,62 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
       return 'truetype';
     };
 
-    const out: { family: string; weight: string; style: string; src: string; format: string }[] = [];
+    const out: { family: string; weight: string; style: string; src: string; format: string; unicodeRange?: string }[] = [];
     const seen = new Set<string>();
+    const urlCache = new Map<string, string | null>();
 
-    for (const sheet of Array.from(document.styleSheets)) {
+    // Collect @font-face rules, descending into @media/@supports/@layer groups, with the
+    // URL base of the owning stylesheet (url() in a sheet resolve against the sheet, not the page).
+    const faces: { rule: CSSFontFaceRule; base: string }[] = [];
+    const walk = (rules: CSSRuleList, base: string, depth: number) => {
+      for (const rule of Array.from(rules)) {
+        if (rule.constructor.name === 'CSSFontFaceRule' || (rule as any).type === 5) {
+          faces.push({ rule: rule as CSSFontFaceRule, base });
+        } else if (depth < 6 && (rule as any).cssRules) {
+          try { walk((rule as any).cssRules as CSSRuleList, base, depth + 1); } catch { /* ignore */ }
+        }
+      }
+    };
+    const sheets: CSSStyleSheet[] = Array.from(document.styleSheets) as CSSStyleSheet[];
+    try { for (const s of (document as any).adoptedStyleSheets || []) sheets.push(s); } catch { /* ignore */ }
+    for (const sheet of sheets) {
       let rules: CSSRuleList;
       try {
-        rules = (sheet as CSSStyleSheet).cssRules;
+        rules = sheet.cssRules;
         if (!rules) continue;
       } catch {
         continue; // cross-origin sheet
       }
-      for (const rule of Array.from(rules)) {
-        if (rule.constructor.name !== 'CSSFontFaceRule' && (rule as any).type !== 5) continue;
-        const style = (rule as CSSFontFaceRule).style;
-        const family = style.getPropertyValue('font-family').trim().replace(/^["']|["']$/g, '');
-        if (!family || !used.has(family.toLowerCase())) continue;
-        const weight = style.getPropertyValue('font-weight') || '400';
-        const fstyle = style.getPropertyValue('font-style') || 'normal';
-        const src = style.getPropertyValue('src');
-        if (!src) continue;
-        const key = family + '|' + weight + '|' + fstyle;
-        if (seen.has(key)) continue;
+      walk(rules, sheet.href || document.baseURI, 0);
+    }
 
-        // pick first url() src (prefer woff2)
-        const entries = Array.from(src.matchAll(/url\(([^)]+)\)(?:\s*format\(([^)]+)\))?/g)).map((m) => ({
-          url: m[1].trim().replace(/^["']|["']$/g, ''),
-          hint: (m[2] || '').replace(/["']/g, ''),
-        }));
-        if (entries.length === 0) continue;
-        const pick = entries.find((e) => /woff2/i.test(e.hint) || /\.woff2/i.test(e.url)) || entries[0];
-        const dataUrl = await fetchDataURL(new URL(pick.url, document.baseURI).href);
-        if (!dataUrl) continue;
-        seen.add(key);
-        out.push({ family, weight, style: fstyle, src: dataUrl, format: fmtFromUrl(pick.url, pick.hint) });
-      }
+    for (const { rule, base } of faces) {
+      const style = rule.style;
+      const family = style.getPropertyValue('font-family').trim().replace(/^["']|["']$/g, '');
+      if (!family || !used.has(family.toLowerCase())) continue;
+      const weight = style.getPropertyValue('font-weight') || '400';
+      const fstyle = style.getPropertyValue('font-style') || 'normal';
+      const src = style.getPropertyValue('src');
+      if (!src) continue;
+      const unicodeRange = style.getPropertyValue('unicode-range').trim() || undefined;
+
+      // pick first url() src (prefer woff2)
+      const entries = Array.from(src.matchAll(/url\(([^)]+)\)(?:\s*format\(([^)]+)\))?/g)).map((m) => ({
+        url: m[1].trim().replace(/^["']|["']$/g, ''),
+        hint: (m[2] || '').replace(/["']/g, ''),
+      }));
+      if (entries.length === 0) continue;
+      const pick = entries.find((e) => /woff2/i.test(e.hint) || /\.woff2/i.test(e.url)) || entries[0];
+      let abs: string;
+      try { abs = new URL(pick.url, base).href; } catch { continue; }
+      const key = family + '|' + weight + '|' + fstyle + '|' + (unicodeRange || '') + '|' + abs;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      let dataUrl: string | null;
+      if (urlCache.has(abs)) dataUrl = urlCache.get(abs)!;
+      else { dataUrl = await fetchDataURL(abs); urlCache.set(abs, dataUrl); }
+      if (!dataUrl) continue;
+      out.push({ family, weight, style: fstyle, src: dataUrl, format: fmtFromUrl(pick.url, pick.hint), unicodeRange });
     }
     return out;
   }
