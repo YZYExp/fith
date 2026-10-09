@@ -112,6 +112,8 @@ export interface BoxNode extends NodeBase {
   radii: CornerRadii;
   border?: BorderEdges | null;
   shadows?: BoxShadow[];
+  /** Sharp (blur 0) `inset` box-shadow layers — painted inside the padding box above the background. */
+  insetShadows?: { offsetX: number; offsetY: number; spread: number; color: string }[];
   /** CSS outline rendered outside the border box. */
   outline?: { width: number; color: string; style: string; offset: number } | null;
 }

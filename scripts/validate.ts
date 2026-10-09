@@ -27,6 +27,12 @@ const MIME: Record<string, string> = {
   '.otf': 'font/otf',
   '.woff': 'font/woff',
   '.woff2': 'font/woff2',
+  '.json': 'application/json',
+  '.mjs': 'text/javascript',
+  '.map': 'application/json',
+  '.jpg': 'image/jpeg',
+  '.gif': 'image/gif',
+  '.eot': 'application/vnd.ms-fontobject',
   '.png': 'image/png',
   '.svg': 'image/svg+xml',
 };
@@ -91,7 +97,11 @@ export function sceneStats(scene: Scene, domTextChars: number): SceneStats {
     if (n.kind === 'box') st.box++;
     else if (n.kind === 'text') { st.text++; for (const l of n.lines) st.textChars += l.text.replace(/\s/g, '').length; }
     else if (n.kind === 'image') st.image++;
-    else if (n.kind === 'inline-svg') st.inlineSvg++;
+    else if (n.kind === 'inline-svg') {
+      st.inlineSvg++;
+      // text inside transplanted <svg> (charts, diagrams) is still vector text
+      for (const m of n.markup.matchAll(/<text\b[^>]*>([\s\S]*?)<\/text>/g)) st.textChars += m[1].replace(/<[^>]*>/g, '').replace(/&[a-z#0-9]+;/g, 'x').replace(/\s/g, '').length;
+    }
     else if (n.kind === 'raster') { st.raster++; st.rasterArea += n.rect.width * n.rect.height; st.rasterReasons[n.reason] = (st.rasterReasons[n.reason] || 0) + 1; }
   }
   return st;
@@ -166,6 +176,17 @@ export async function validate(
         if (!el || /^(SCRIPT|STYLE|NOSCRIPT|TEMPLATE)$/.test(el.tagName)) continue;
         const cs = getComputedStyle(el);
         if (cs.display === 'none' || cs.visibility === 'hidden') continue;
+        // skip visually-hidden (sr-only, clip:rect) text
+        let hidden = false;
+        for (let a: Element | null = el; a && !hidden; a = a.parentElement) {
+          const c = getComputedStyle(a);
+          const m = c.clip.match(/rect\(([^)]*)\)/);
+          if (m && c.position === 'absolute') {
+            const v = m[1].split(/[ ,]+/).map(parseFloat);
+            if (v[1] - v[3] <= 0 || v[2] - v[0] <= 0) hidden = true;
+          }
+        }
+        if (hidden) continue;
         const r = el.getBoundingClientRect();
         if (r.width <= 0 || r.height <= 0) continue;
         n += (t.data || '').replace(/\s/g, '').length;

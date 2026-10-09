@@ -1,0 +1,11 @@
+<!doctype html><html><head><meta charset="utf-8"><title>ECharts</title><script src="../.cache/node_modules/echarts/dist/echarts.min.js"></script>
+<style>body{margin:0;background:#f4f6fa;font-family:sans-serif}.g{display:grid;grid-template-columns:1fr 1fr;gap:16px;padding:16px}.c{background:#fff;border-radius:8px;box-shadow:0 1px 3px rgba(0,0,0,.12);padding:8px}.c h3{margin:8px 12px;font-size:15px}.ch{height:300px}</style></head><body>
+<div class="g"><div class="c"><h3>Canvas: sales</h3><div class="ch" id="a"></div></div><div class="c"><h3>SVG renderer: traffic</h3><div class="ch" id="b"></div></div>
+<div class="c"><h3>SVG: share</h3><div class="ch" id="c"></div></div><div class="c"><h3>Canvas: gauge</h3><div class="ch" id="d"></div></div></div>
+<script>
+const x=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+echarts.init(a,null,{renderer:'canvas'}).setOption({animation:false,tooltip:{},legend:{},xAxis:{type:'category',data:x},yAxis:{},series:[{name:'A',type:'bar',data:[5,20,36,10,10,20,30]},{name:'B',type:'line',smooth:true,data:[8,12,30,18,22,25,28]}]});
+echarts.init(b,null,{renderer:'svg'}).setOption({animation:false,xAxis:{type:'category',data:x},yAxis:{},series:[{type:'line',areaStyle:{},data:[820,932,901,934,1290,1330,1320]}]});
+echarts.init(c,null,{renderer:'svg'}).setOption({animation:false,legend:{bottom:0},series:[{type:'pie',radius:['40%','70%'],data:[{value:1048,name:'Search'},{value:735,name:'Direct'},{value:580,name:'Email'},{value:484,name:'Union'}]}]});
+echarts.init(d,null,{renderer:'canvas'}).setOption({animation:false,series:[{type:'gauge',progress:{show:true},detail:{valueAnimation:false,formatter:'{value}%'},data:[{value:70}]}]});
+</script></body></html>

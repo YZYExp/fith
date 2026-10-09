@@ -5,8 +5,7 @@
  */
 import { mkdirSync, writeFileSync, existsSync, readFileSync } from 'node:fs';
 import { resolve, join } from 'node:path';
-import { pathToFileURL } from 'node:url';
-import { validate } from '../scripts/validate.js';
+import { validate, serveDir } from '../scripts/validate.js';
 import { CORPUS, type Target } from './corpus.js';
 
 const argv = process.argv.slice(2);
@@ -22,12 +21,12 @@ interface Row {
   rasterAreaFrac?: number; raster?: number; nodes?: number; svgKB?: number; ms?: number; note?: string;
 }
 
-async function runOne(t: Target): Promise<Row> {
+async function runOne(t: Target, base: string): Promise<Row> {
   const local = t.kind === 'local';
   const file = resolve('bench/pages', t.src);
   if (local && !existsSync(file)) return { id: t.id, status: 'skip', note: 'page missing (run pnpm bench:fetch)' };
   try {
-    const r = await validate({ url: local ? pathToFileURL(file).href : t.src }, {
+    const r = await validate({ url: local ? base + 'pages/' + t.src : t.src }, {
       width: t.width, height: t.height, name: t.id, outDir: OUT, settleMs: t.settleMs, fontMode: 'embed',
     });
     const cov = r.stats.domTextChars ? r.stats.textChars / r.stats.domTextChars : 1;
@@ -49,13 +48,16 @@ async function main() {
   const targets = CORPUS.filter((t) => (only ? only.includes(t.id) : t.kind === 'live' ? wantLive : wantLocal));
   const base: Record<string, Row> = existsSync(BASELINE) ? JSON.parse(readFileSync(BASELINE, 'utf8')) : {};
   const rows: Row[] = [];
+  // local pages are served over http: fetch() of fonts/images from file:// is blocked by Chromium
+  const server = await serveDir(resolve('bench'));
   for (const t of targets) {
-    const row = await runOne(t);
+    const row = await runOne(t, server.url);
     const b = base[t.id];
     if (b?.ratio !== undefined && row.ratio !== undefined && row.ratio > b.ratio + 0.01 && row.status === 'ok') { row.status = 'regress'; row.note = `vs baseline ${(b.ratio * 100).toFixed(2)}%`; }
     rows.push(row);
     console.error(`${row.status.padEnd(7)} ${t.id.padEnd(22)} ${row.ratio !== undefined ? (row.ratio * 100).toFixed(2) + '%' : '-'}  ${row.note ?? ''}`);
   }
+  await server.close();
   const md = ['| target | status | diff | text cov | raster area | raster# | nodes | svg KB | ms |', '|---|---|---|---|---|---|---|---|---|',
     ...rows.map((r) => `| ${r.id} | ${r.status} | ${r.ratio !== undefined ? (r.ratio * 100).toFixed(2) + '%' : '-'} | ${r.textCoverage !== undefined ? (r.textCoverage * 100).toFixed(0) + '%' : '-'} | ${r.rasterAreaFrac !== undefined ? (r.rasterAreaFrac * 100).toFixed(0) + '%' : '-'} | ${r.raster ?? '-'} | ${r.nodes ?? '-'} | ${r.svgKB ?? '-'} | ${r.ms ?? '-'} |`)].join('\n');
   writeFileSync(join(OUT, 'report.md'), md + '\n');

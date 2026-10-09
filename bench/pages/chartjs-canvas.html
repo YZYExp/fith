@@ -1,0 +1,7 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Chart.js</title><script src="../.cache/node_modules/chart.js/dist/chart.umd.js"></script><style>body{font-family:sans-serif;margin:20px}.w{width:560px;display:inline-block;margin:10px}</style></head><body>
+<div class="w"><canvas id="a"></canvas></div><div class="w"><canvas id="b"></canvas></div><div class="w"><canvas id="c"></canvas></div>
+<script>Chart.defaults.animation=false;
+new Chart(a,{type:'bar',data:{labels:['Red','Blue','Yellow','Green','Purple'],datasets:[{label:'# of Votes',data:[12,19,3,5,2],backgroundColor:['#f77','#79f','#fd5','#6c9','#a7f']}]}});
+new Chart(b,{type:'doughnut',data:{labels:['A','B','C'],datasets:[{data:[300,50,100],backgroundColor:['#36a2eb','#ff6384','#ffcd56']}]}});
+new Chart(c,{type:'radar',data:{labels:['Eating','Drinking','Sleeping','Coding','Cycling'],datasets:[{label:'Me',data:[65,59,90,81,56],fill:true}]}});
+</script></body></html>

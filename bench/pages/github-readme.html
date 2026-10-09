@@ -1,0 +1,58 @@
+<!doctype html><html><head><meta charset="utf-8"><title>README</title>
+<link rel="stylesheet" href="../.cache/node_modules/github-markdown-css/github-markdown.css"><link rel="stylesheet" href="../.cache/node_modules/highlight.js/styles/github.min.css">
+<style>body{margin:0;background:#fff}.markdown-body{box-sizing:border-box;max-width:880px;margin:0 auto;padding:45px;border:1px solid #d0d7de;border-radius:6px}</style>
+<script src="../.cache/node_modules/marked/marked.min.js"></script><script src="../.cache/node_modules/@highlightjs/cdn-assets/highlight.min.js" onerror=""></script></head><body><article class="markdown-body" id="c"></article>
+<script>
+const md = `# fith
+[![build](https://img.shields.io/badge/build-passing-green)](#) 
+
+> Convert **rendered HTML** into *self-contained*, vector-first SVG — \`text stays text\`.
+
+## Table of contents
+- [Install](#install)
+- [Usage](#usage)
+  - [CLI](#cli)
+  - [API](#api)
+- [Options](#options)
+
+## Install
+\`\`\`bash
+pnpm add fitting-html
+npx playwright install chromium
+\`\`\`
+
+## Usage
+### CLI
+\`\`\`ts
+import { render } from 'fitting-html';
+
+const svg = await render('https://example.com', { width: 1280, fontMode: 'embed' });
+console.log(svg.length); // → bytes
+\`\`\`
+
+### API
+| Option | Type | Default | Description |
+|---|---|---|---|
+| \`width\` | \`number\` | \`1280\` | Viewport width in CSS px |
+| \`fontMode\` | \`'embed' \\| 'outline' \\| 'none'\` | \`'embed'\` | How webfonts are carried |
+| \`guaranteeFloor\` | \`boolean\` | \`false\` | Embed a raster base layer |
+
+1. First ordered item
+2. Second ordered item
+   - nested bullet
+   - another **bold** one
+3. Third with a [link](https://example.com)
+
+- [x] done task
+- [ ] open task
+
+---
+
+### Footnotes & HTML
+<details><summary>Click to expand</summary>Hidden *details* body.</details>
+
+Inline math-ish text H<sub>2</sub>O and x<sup>2</sup>, plus ~~strikethrough~~ and <kbd>Ctrl</kbd>+<kbd>C</kbd>.
+`;
+document.getElementById('c').innerHTML = marked.parse(md);
+document.querySelectorAll('pre code').forEach(b=>{ if(window.hljs) hljs.highlightElement(b); });
+</script></body></html>

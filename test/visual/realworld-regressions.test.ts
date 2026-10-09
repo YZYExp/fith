@@ -37,6 +37,19 @@ describe('real-world regressions', () => {
     expect(r.ratio).toBeLessThan(0.01);
   }, 60_000);
 
+  it('vectorizes sharp inset shadows, rounds <img>, hides sr-only text, descends into 0x0 panes', async () => {
+    const r = await validate(
+      { url: pathToFileURL(resolve(FIXTURES, 'layout-quirks.html')).href },
+      { width: 640, height: 300, name: 'layout-quirks', outDir: OUT, fontMode: 'none' },
+    );
+    const svg = readFileSync(resolve(OUT, 'layout-quirks.svg'), 'utf8');
+    expect(svg.match(/data:image\/png/g)?.length).toBe(1); // only the <img>; inset shadows are not rastered
+    expect(svg).toContain('fill-rule="evenodd"'); // inset shadow drawn as a vector ring
+    expect(svg).not.toContain('screen-reader only'); // visually-hidden text is not painted
+    expect(svg).toContain('r="25"'); // svg inside a 0x0 pane is captured
+    expect(r.ratio).toBeLessThan(0.005);
+  }, 60_000);
+
   describe('webfont in an external stylesheet', () => {
     let base: { url: string; close: () => Promise<void> } | null = null;
     afterAll(async () => base?.close());

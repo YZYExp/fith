@@ -13,6 +13,29 @@ import type { Outliner } from './outline.js';
 import { n, esc, uniformRadii, noRadii, roundedRectPath } from './primitives.js';
 import { Defs, clipId, blurFilterId, shadowFilterId, shadowMaskId, gradientId, maskGradientId } from './defs.js';
 
+/** Sharp inset shadows: padding box minus the (offset, spread-shrunk) hole, clipped to the padding box. */
+function emitInsetShadows(node: BoxNode, defs: Defs): string {
+  const { rect, radii, border } = node;
+  const bt = border?.top.width ?? 0, br = border?.right.width ?? 0, bb = border?.bottom.width ?? 0, bl = border?.left.width ?? 0;
+  const px = rect.x + bl, py = rect.y + bt, pw = rect.width - bl - br, ph = rect.height - bt - bb;
+  if (pw <= 0 || ph <= 0) return '';
+  const pr = [Math.max(0, radii[0] - Math.max(bl, bt)), Math.max(0, radii[1] - Math.max(br, bt)), Math.max(0, radii[2] - Math.max(br, bb)), Math.max(0, radii[3] - Math.max(bl, bb))] as CornerRadii;
+  const clip = defs.add(`<clipPath id="{ID}"><path d="${roundedRectPath(px, py, pw, ph, pr)}"/></clipPath>`);
+  let out = '';
+  for (const sh of node.insetShadows!) {
+    const hx = px + sh.offsetX + sh.spread, hy = py + sh.offsetY + sh.spread;
+    const hw = pw - sh.spread * 2, hh = ph - sh.spread * 2;
+    const outer = roundedRectPath(px, py, pw, ph, pr);
+    let d = outer;
+    if (hw > 0 && hh > 0) {
+      const hr = pr.map((v) => Math.max(0, v - sh.spread)) as CornerRadii;
+      d += ' ' + roundedRectPath(hx, hy, hw, hh, hr);
+    }
+    out += `<g clip-path="url(#${clip})"><path fill-rule="evenodd" d="${d}" fill="${esc(sh.color)}"/></g>`;
+  }
+  return out;
+}
+
 function emitBox(node: BoxNode, defs: Defs): string {
   const { rect, radii } = node;
   let out = '';
@@ -42,6 +65,8 @@ function emitBox(node: BoxNode, defs: Defs): string {
 
   if (node.fill) out += fillShape(rect, radii, esc(node.fill));
   if (node.gradient) out += fillShape(rect, radii, `url(#${gradientId(defs, node.gradient, rect)})`);
+
+  if (node.insetShadows && node.insetShadows.length > 0) out += emitInsetShadows(node, defs);
 
   if (node.border) out += emitBorder(node.border, rect, radii);
 

@@ -305,8 +305,14 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
     // can sit entirely outside the captured region. Culling them by geometry would
     // drop the whole subtree and export an empty SVG.
     if (rootAncestors.has(el)) return true;
+    // visually-hidden pattern: `clip: rect(...)` with no visible area (sr-only / aria-live regions)
+    const clipRect = cs.getPropertyValue('clip').match(/^rect\(\s*(-?[\d.]+)(?:px)?[,\s]+(-?[\d.]+)(?:px)?[,\s]+(-?[\d.]+)(?:px)?[,\s]+(-?[\d.]+)(?:px)?\s*\)$/);
+    if (clipRect && (cs.position === 'absolute' || cs.position === 'fixed') &&
+        (parseFloat(clipRect[2]) - parseFloat(clipRect[4]) <= 0 || parseFloat(clipRect[3]) - parseFloat(clipRect[1]) <= 0)) return false;
     const r = el.getBoundingClientRect();
-    if (r.width === 0 && r.height === 0) return false;
+    // A 0×0 box with visible overflow can still hold painted descendants (Leaflet panes,
+    // absolutely-positioned overlay roots), so only cull it when it has nothing to descend into.
+    if (r.width === 0 && r.height === 0) return el.childElementCount > 0 && !clipsContent(cs);
     if (r.bottom < cullTop || r.right < cullLeft || r.top > cullBottom || r.left > cullRight)
       return false;
     return true;
@@ -632,7 +638,8 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
       !bgImageLayer(el, cs)
     )
       return 'background-image';
-    if (cs.boxShadow && cs.boxShadow.includes('inset')) return 'inset-shadow';
+    // blur-free inset layers (table-row tints `inset 0 0 0 9999px`, rings) are vector; blurred ones raster
+    if (cs.boxShadow && cs.boxShadow.includes('inset') && !parseInsetShadows(cs.boxShadow)) return 'inset-shadow';
     if (cs.borderTopStyle === 'double' || cs.borderTopStyle === 'groove' || cs.borderTopStyle === 'ridge')
       return 'border-style';
     if (pseudoVisible(el, '::before') || pseudoVisible(el, '::after')) return 'pseudo';
@@ -694,6 +701,23 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
     rasterTargets.push({ id, ...r });
     // in-page backends can re-render this element themselves when no screenshot is available
     if (el) opts.rasterElements?.set(id, el);
+  };
+
+  // Sharp `inset` layers only; null when any inset layer has blur (needs raster).
+  const parseInsetShadows = (value: string) => {
+    if (!value || value === 'none') return [];
+    const out: { offsetX: number; offsetY: number; spread: number; color: string }[] = [];
+    const COLOR_FN = /((?:rgba?|hsla?|oklch|oklab|lab|lch|hwb|color)\([^)]+\)|#[0-9a-fA-F]+|[a-z]+)/;
+    for (const part of splitTopLevel(value)) {
+      if (!part.includes('inset')) continue;
+      const body = part.replace(/\binset\b/, '');
+      const colorMatch = body.match(COLOR_FN);
+      const color = normColor(colorMatch ? colorMatch[0] : 'rgba(0,0,0,0.2)');
+      const v = (body.replace(COLOR_FN, '').match(/-?\d*\.?\d+px/g) || []).map((x) => parseFloat(x));
+      if ((v[2] || 0) > 0) return null;
+      if (!transparent(color)) out.push({ offsetX: v[0] || 0, offsetY: v[1] || 0, spread: v[3] || 0, color });
+    }
+    return out;
   };
 
   const parseShadows = (value: string) => {
@@ -1024,9 +1048,10 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
         ? { width: outlineW, color: normColor(cs.outlineColor), style: outlineStyle, offset: num(cs.outlineOffset) }
         : null;
     const bgImg = textClipped ? null : bgImageLayer(el, cs);
-    if (!fill && !gradient && !border && shadows.length === 0 && !outline && !bgImg) return;
+    if (!fill && !gradient && !border && shadows.length === 0 && !outline && !bgImg && !(cs.boxShadow || '').includes('inset')) return;
     const blur = el.childNodes.length === 0 ? pureBlur(cs.filter) : null;
-    if (fill || gradient || border || shadows.length > 0 || outline)
+    const insetShadows = parseInsetShadows(cs.boxShadow) || [];
+    if (fill || gradient || border || shadows.length > 0 || outline || insetShadows.length > 0)
     nodes.push({
       kind: 'box',
       id: nid(),
@@ -1039,6 +1064,7 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
       radii: radiiOf(cs),
       border,
       shadows,
+      insetShadows: insetShadows.length ? insetShadows : undefined,
       outline,
     });
     if (bgImg) {
@@ -1247,6 +1273,12 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
     // walk() already includes the SVG root's opacity in the Scene wrapper.
     // Keep descendant opacity, but avoid applying the root opacity twice.
     clone.style.opacity = '1';
+    // r (getBoundingClientRect) already includes the element's own CSS transform; keeping
+    // it on the clone would apply it twice (Leaflet overlay panes, translate3d-positioned icons).
+    clone.style.transform = 'none';
+    clone.style.translate = 'none';
+    clone.style.scale = 'none';
+    clone.style.rotate = 'none';
     nodes.push({
       kind: 'inline-svg',
       id: nid(),
@@ -1269,12 +1301,25 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
           ? 'xMidYMid slice'
           : 'none';
     const id = nid();
+    // The bitmap paints in the content box (inside border + padding) and is rounded by
+    // border-radius (avatars: .rounded-circle, thumbnails) — shrink radii by the border.
+    const bl = num(cs.borderLeftWidth), br = num(cs.borderRightWidth), bt = num(cs.borderTopWidth), bb = num(cs.borderBottomWidth);
+    const cl = bl + num(cs.paddingLeft), cr = br + num(cs.paddingRight), ct = bt + num(cs.paddingTop), cb = bb + num(cs.paddingBottom);
+    const rad = radiiOf(cs);
+    let imgClip = clip;
+    if (rad.some((v) => v > 0)) {
+      const px = r.left + bl, py = r.top + bt, pw = r.width - bl - br, ph = r.height - bt - bb;
+      // CSS scales radii down when they exceed half the box (a 50%/9999px circle)
+      const f = Math.min(1, pw / Math.max(1e-6, Math.max(rad[0] + rad[1], rad[3] + rad[2])), ph / Math.max(1e-6, Math.max(rad[0] + rad[3], rad[1] + rad[2])));
+      const rr = rad.map((v) => Math.max(0, v * f - Math.max(bl, br, bt, bb))) as CornerRadii;
+      imgClip = intersect(clip, { x: px, y: py, width: pw, height: ph, radii: rr });
+    }
     const node: any = {
       kind: 'image',
       id,
-      rect: { x: r.left, y: r.top, width: r.width, height: r.height },
+      rect: { x: r.left + cl, y: r.top + ct, width: Math.max(0, r.width - cl - cr), height: Math.max(0, r.height - ct - cb) },
       opacity,
-      clip,
+      clip: imgClip,
       href: null,
       preserveAspectRatio,
     };
@@ -1377,48 +1422,6 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
     const boxReason = !skipRender && !visHidden && needsBoxRaster(el, cs);
     // ::after is emitted after the element's children (it paints on top of content);
     // hold its node here and push it past the child walk below.
-    let afterPseudoNodes: PaintNode[] = [];
-    let pseudoVectorized = false;
-    if (boxReason === 'pseudo') {
-      // Try to vectorize the decorative pseudo(s) rather than raster the whole box.
-      const pseudoPart = (sel: '::before' | '::after') => {
-        if (!pseudoVisible(el, sel)) return { handled: true as const, nodes: [] as PaintNode[] };
-        const b = tryPseudoBox(el, cs, sel, clip, opacity);
-        if (b.handled) return { handled: true as const, nodes: b.node ? [b.node] : [] };
-        const t = materializePseudo(el, sel, clip, opacity);
-        return t ? { handled: true as const, nodes: t } : { handled: false as const, nodes: [] as PaintNode[] };
-      };
-      const before = pseudoPart('::before');
-      const after = pseudoPart('::after');
-      if (before.handled && after.handled) {
-        pseudoVectorized = true;
-        // Paint order: host box → ::before → host content/children → ::after.
-        emitBox(el, cs, clip, opacity);
-        nodes.push(...before.nodes);
-        captureText(el, cs, clip, opacity);
-        captureListMarker(el, cs, clip, opacity);
-        afterPseudoNodes = after.nodes;
-      }
-    }
-    if (boxReason && !pseudoVectorized) {
-      if (el.childElementCount === 0) {
-        pushRaster(r, clip, opacity, boxReason, el);
-        return;
-      }
-      if (containerRasterFallback) {
-        pushRaster(r, clip, opacity, boxReason, el);
-        // skip emitBox/captureText — the raster already captures them including ::marker
-      } else {
-        emitBox(el, cs, clip, opacity);
-        captureText(el, cs, clip, opacity);
-        captureListMarker(el, cs, clip, opacity);
-      }
-    } else if (!boxReason && !skipRender && !visHidden) {
-      emitBox(el, cs, clip, opacity);
-      captureText(el, cs, clip, opacity);
-      captureListMarker(el, cs, clip, opacity);
-    }
-
     let childClip = clip;
     // an ancestor's overflow clip must not crop the picked element's own content
     if (clipsContent(cs) && !skipRender) {
@@ -1441,7 +1444,8 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
         ((htmlEl.scrollHeight || 0) - htmlEl.clientHeight > 1 ||
           (htmlEl.scrollWidth || 0) - htmlEl.clientWidth > 1);
       const captureScrollable = !!(opts as any).captureScrollableContent;
-      const shouldExpand = captureScrollable && (isScrollContainer || isHiddenWithOverflow);
+      // a ≤1px box is the sr-only pattern: its overflowing text must stay clipped
+      const shouldExpand = captureScrollable && (isScrollContainer || isHiddenWithOverflow) && r.width > 1 && r.height > 1;
       const clipW = shouldExpand ? Math.max(r.width, htmlEl.scrollWidth || 0) : r.width;
       const clipH = shouldExpand ? Math.max(r.height, htmlEl.scrollHeight || 0) : r.height;
       childClip = intersect(clip, {
@@ -1451,6 +1455,48 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
         height: clipH,
         radii: radiiOf(cs),
       });
+    }
+
+    let afterPseudoNodes: PaintNode[] = [];
+    let pseudoVectorized = false;
+    if (boxReason === 'pseudo') {
+      // Try to vectorize the decorative pseudo(s) rather than raster the whole box.
+      const pseudoPart = (sel: '::before' | '::after') => {
+        if (!pseudoVisible(el, sel)) return { handled: true as const, nodes: [] as PaintNode[] };
+        const b = tryPseudoBox(el, cs, sel, clip, opacity);
+        if (b.handled) return { handled: true as const, nodes: b.node ? [b.node] : [] };
+        const t = materializePseudo(el, sel, clip, opacity);
+        return t ? { handled: true as const, nodes: t } : { handled: false as const, nodes: [] as PaintNode[] };
+      };
+      const before = pseudoPart('::before');
+      const after = pseudoPart('::after');
+      if (before.handled && after.handled) {
+        pseudoVectorized = true;
+        // Paint order: host box → ::before → host content/children → ::after.
+        emitBox(el, cs, clip, opacity);
+        nodes.push(...before.nodes);
+        captureText(el, cs, childClip, opacity);
+        captureListMarker(el, cs, childClip, opacity);
+        afterPseudoNodes = after.nodes;
+      }
+    }
+    if (boxReason && !pseudoVectorized) {
+      if (el.childElementCount === 0) {
+        pushRaster(r, clip, opacity, boxReason, el);
+        return;
+      }
+      if (containerRasterFallback) {
+        pushRaster(r, clip, opacity, boxReason, el);
+        // skip emitBox/captureText — the raster already captures them including ::marker
+      } else {
+        emitBox(el, cs, clip, opacity);
+        captureText(el, cs, childClip, opacity);
+        captureListMarker(el, cs, childClip, opacity);
+      }
+    } else if (!boxReason && !skipRender && !visHidden) {
+      emitBox(el, cs, clip, opacity);
+      captureText(el, cs, childClip, opacity);
+      captureListMarker(el, cs, childClip, opacity);
     }
 
     const kids = Array.from(el.children);
@@ -1613,6 +1659,10 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
       for (const rule of Array.from(rules)) {
         if (rule.constructor.name === 'CSSFontFaceRule' || (rule as any).type === 5) {
           faces.push({ rule: rule as CSSFontFaceRule, base });
+        } else if ((rule as any).type === 3 && (rule as any).styleSheet && depth < 6) {
+          // @import: the imported sheet's url()s resolve against its own href
+          const sub = (rule as any).styleSheet as CSSStyleSheet;
+          try { walk(sub.cssRules, sub.href || base, depth + 1); } catch { /* cross-origin */ }
         } else if (depth < 6 && (rule as any).cssRules) {
           try { walk((rule as any).cssRules as CSSRuleList, base, depth + 1); } catch { /* ignore */ }
         }
