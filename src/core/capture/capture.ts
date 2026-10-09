@@ -841,15 +841,29 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
     return Array.from(buckets.values()).sort((a, c) => a.top - c.top);
   };
 
+  // Effective uniform scale from ancestor CSS transforms (slide decks, zoomed previews):
+  // rects are post-transform but computed lengths (font-size, spacing) are not.
+  const elScale = (el: Element): number => {
+    const h = el as HTMLElement;
+    const ow = h.offsetWidth, oh = h.offsetHeight;
+    if (!ow || !oh || !(el instanceof HTMLElement)) return 1;
+    const r = el.getBoundingClientRect();
+    const sx = r.width / ow, sy = r.height / oh;
+    // only trust a uniform, non-degenerate scale (rotations/skews are rastered elsewhere)
+    if (Math.abs(sx - sy) > 0.01 || Math.abs(sx - 1) < 0.002 || sx <= 0.05 || sx > 20) return 1;
+    return sx;
+  };
+
   const captureText = (el: Element, cs: CSSStyleDeclaration, clip: Clip | null, opacity: number) => {
-    const fontSize = num(cs.fontSize);
+    const sc = elScale(el);
+    const fontSize = num(cs.fontSize) * sc;
     if (fontSize <= 0) return;
     mctx.font = `${cs.fontStyle} ${cs.fontWeight} ${fontSize}px ${cs.fontFamily}`;
     const fm = mctx.measureText('Mg');
     const ascent = (fm as any).fontBoundingBoxAscent || fontSize * 0.8;
     const descent = (fm as any).fontBoundingBoxDescent || fontSize * 0.2;
-    const ls = cs.letterSpacing === 'normal' ? 0 : num(cs.letterSpacing);
-    const ws = cs.wordSpacing === 'normal' ? 0 : num(cs.wordSpacing);
+    const ls = cs.letterSpacing === 'normal' ? 0 : num(cs.letterSpacing) * sc;
+    const ws = cs.wordSpacing === 'normal' ? 0 : num(cs.wordSpacing) * sc;
     const decoration =
       cs.textDecorationLine && cs.textDecorationLine !== 'none' ? cs.textDecorationLine : null;
     // glyphs are measured from the rendered (transformed) text, so the stored
@@ -1655,6 +1669,9 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
     // Collect @font-face rules, descending into @media/@supports/@layer groups, with the
     // URL base of the owning stylesheet (url() in a sheet resolve against the sheet, not the page).
     const faces: { rule: CSSFontFaceRule; base: string }[] = [];
+    // Cross-origin sheets (Google Fonts via <link>/@import without crossorigin) throw on
+    // .cssRules; their text is still fetchable when the host sends CORS headers.
+    const opaque: string[] = [];
     const walk = (rules: CSSRuleList, base: string, depth: number) => {
       for (const rule of Array.from(rules)) {
         if (rule.constructor.name === 'CSSFontFaceRule' || (rule as any).type === 5) {
@@ -1662,7 +1679,7 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
         } else if ((rule as any).type === 3 && (rule as any).styleSheet && depth < 6) {
           // @import: the imported sheet's url()s resolve against its own href
           const sub = (rule as any).styleSheet as CSSStyleSheet;
-          try { walk(sub.cssRules, sub.href || base, depth + 1); } catch { /* cross-origin */ }
+          try { walk(sub.cssRules, sub.href || base, depth + 1); } catch { if (sub.href) opaque.push(sub.href); }
         } else if (depth < 6 && (rule as any).cssRules) {
           try { walk((rule as any).cssRules as CSSRuleList, base, depth + 1); } catch { /* ignore */ }
         }
@@ -1676,9 +1693,19 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
         rules = sheet.cssRules;
         if (!rules) continue;
       } catch {
+        if (sheet.href) opaque.push(sheet.href);
         continue; // cross-origin sheet
       }
       walk(rules, sheet.href || document.baseURI, 0);
+    }
+    for (const href of Array.from(new Set(opaque)).slice(0, 12)) {
+      try {
+        const res = await fetch(href, { cache: 'force-cache' });
+        if (!res.ok) continue;
+        const parsed = new CSSStyleSheet();
+        parsed.replaceSync((await res.text()).replace(/@import[^;]*;/g, ''));
+        walk(parsed.cssRules, href, 0);
+      } catch { /* CORS-blocked or unparsable: fonts stay referenced by name */ }
     }
 
     for (const { rule, base } of faces) {

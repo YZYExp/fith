@@ -74,6 +74,10 @@ export interface ValidateResult {
   stats: SceneStats;
   svgBytes: number;
   captureMs: number;
+  /** diff pixels / pixels that differ from the page background in either image (undiluted by whitespace). */
+  contentRatio: number;
+  /** worst 64px tile: differing fraction (localizes a failure the global ratio hides). */
+  worstTile: number;
 }
 
 export interface SceneStats {
@@ -258,8 +262,21 @@ export async function validate(
     writeFileSync(resolve(opts.outDir, `${opts.name}.actual.png`), PNG.sync.write(actual));
     writeFileSync(resolve(opts.outDir, `${opts.name}.diff.png`), PNG.sync.write(diff));
 
+    const e = cropTo(expected, w, h), a2 = cropTo(actual, w, h);
+    const bgR = e[0], bgG = e[1], bgB = e[2];
+    let content = 0;
+    const T = 64, tilesX = Math.ceil(w / T), tileDiff = new Array(tilesX * Math.ceil(h / T)).fill(0), tileTot = new Array(tileDiff.length).fill(0);
+    for (let i = 0, px = 0; i < e.length; i += 4, px++) {
+      const x = px % w, y = (px / w) | 0, t = ((y / T) | 0) * tilesX + ((x / T) | 0);
+      tileTot[t]++;
+      const eb = e[i] !== bgR || e[i + 1] !== bgG || e[i + 2] !== bgB;
+      const ab = a2[i] !== bgR || a2[i + 1] !== bgG || a2[i + 2] !== bgB;
+      if (eb || ab) content++;
+      if (diff.data[i] === 255 && diff.data[i + 1] === 0 && diff.data[i + 2] === 0) tileDiff[t]++;
+    }
+    const worstTile = tileDiff.reduce((m, d, k) => Math.max(m, d / tileTot[k]), 0);
     const total = w * h;
-    return { width: w, height: h, diffPixels, totalPixels: total, ratio: diffPixels / total, outDir: opts.outDir, stats: sceneStats(scene, domTextChars), svgBytes: Buffer.byteLength(svg), captureMs };
+    return { width: w, height: h, diffPixels, totalPixels: total, ratio: diffPixels / total, outDir: opts.outDir, stats: sceneStats(scene, domTextChars), svgBytes: Buffer.byteLength(svg), captureMs, contentRatio: diffPixels / Math.max(1, content), worstTile };
   } finally {
     await browser.close();
   }
