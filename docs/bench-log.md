@@ -30,6 +30,30 @@ Lessons about the metrics themselves (each cost a wrong conclusion once):
   median; compare live numbers only against a median baseline.
 - `file://` pages cannot `fetch()` fonts/images → local pages are served over http by the runner.
 
+## Scoreboard: session start → now
+
+Whole-page diff / raster area (viewport share). "start" = first measurement in this log; "now" = baseline `groups-fonts`.
+Raster area is the vector-first score; diffs of pages that were mostly screenshots *rose* slightly as real vector
+rendering replaced them (see the Stripe note under Negative results).
+
+| target | start diff | now diff | start raster | now raster |
+|---|---|---|---|---|
+| nodejs.org | 2.94 % | 0.38 % | 10 % | 7 % |
+| pypi.org | 2.67 % | 0.17 % | 3 % | 0 % |
+| react.dev | – | 0.78 % | 67 % | 0 % |
+| apple.com | 1.21 % (text missing) | 0.10 % | 103 % | 0 % |
+| bootstrap (getbootstrap.com) | – | 0.13 % | 97 % | 0–3 % |
+| Linear | – | 0.40 % | 137 % | 0 % |
+| Stripe | – | 0.56 % | 56 % | 0 % |
+| Hacker News | 1.69 % | 0.00 % | 0 % | 0 % |
+| Leaflet (lib) | 3.47 % | 0.01 % | 0 % | 0 % |
+| Reveal.js (lib) | 3.2 % | 0.13 % | 0 % | 0 % |
+| Bootstrap dashboard (lib) | 0.40 % | 0.45 % | 23 % | 9 % |
+| mean over 67 targets | – | – | ~14 % (E19) | **8.5 %** |
+
+Remaining raster, by area over the corpus: `<video>` 4.4 MP, cross-origin `<iframe>` 3.9 MP, 3D transforms 0.8 MP,
+`mask-composite: exclude` 0.8 MP, residual pseudo 0.56 MP, form controls 0.12 MP. `<video>`/iframes are inherently pixels.
+
 ## Experiments
 
 Numbers are `diff` (whole page) unless stated. "→" = before → after.
