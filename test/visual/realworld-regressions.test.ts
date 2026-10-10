@@ -7,6 +7,7 @@ import { describe, it, expect, afterAll } from 'vitest';
 import { resolve, join } from 'node:path';
 import { readFileSync, mkdtempSync, mkdirSync, copyFileSync, writeFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
+import { createServer } from 'node:http';
 import { pathToFileURL } from 'node:url';
 import { validate, serveDir } from '../../scripts/validate.js';
 
@@ -86,6 +87,58 @@ describe('real-world regressions', () => {
     expect(svg.match(/<radialGradient/g)?.length).toBeGreaterThanOrEqual(4);
     expect(svg.match(/<linearGradient/g)?.length).toBeGreaterThanOrEqual(4);
     expect(r.ratio).toBeLessThan(0.02);
+  }, 60_000);
+
+  it('vectorizes conic / repeating gradients and clip-path basic shapes (no raster)', async () => {
+    const r = await validate(
+      { url: pathToFileURL(resolve(FIXTURES, 'clip-conic-repeat.html')).href },
+      { width: 840, height: 290, name: 'clip-conic-repeat', outDir: OUT, fontMode: 'none' },
+    );
+    const svg = readFileSync(resolve(OUT, 'clip-conic-repeat.svg'), 'utf8');
+    expect(svg).not.toContain('data:image/png');
+    expect(svg).toContain('spreadMethod="repeat"');
+    expect(svg.match(/<clipPath/g)?.length).toBeGreaterThanOrEqual(4); // polygon, circle, inset, ellipse
+    expect(svg.match(/<path d="M[\d.]+,[\d.]+L/g)?.length).toBeGreaterThan(150); // conic slice fans
+    expect(r.ratio).toBeLessThan(0.03);
+  }, 60_000);
+
+  it('embeds @font-face from a cross-origin stylesheet the page cannot read (CDN without CORS on the CSS)', async () => {
+    const font = [
+      '/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf',
+      '/usr/share/fonts/truetype/liberation/LiberationMono-Regular.ttf',
+      '/usr/share/fonts/truetype/freefont/FreeMono.ttf',
+    ].find((p) => existsSync(p));
+    if (!font) return;
+    const fontBytes = readFileSync(font);
+    // "CDN": serves the stylesheet WITHOUT CORS headers, the font WITH them (as real font CDNs must)
+    const cdn = createServer((req, res) => {
+      if (req.url!.endsWith('.css')) {
+        res.setHeader('Content-Type', 'text/css');
+        res.end(`@font-face{font-family:'CdnMono';src:url('/mono.ttf') format('truetype')}`);
+      } else {
+        res.setHeader('Content-Type', 'font/ttf');
+        res.setHeader('Access-Control-Allow-Origin', '*');
+        res.end(fontBytes);
+      }
+    });
+    await new Promise<void>((r) => cdn.listen(0, '127.0.0.1', () => r()));
+    const cdnPort = (cdn.address() as any).port;
+    const dir = mkdtempSync(join(tmpdir(), 'fh-cdn-'));
+    writeFileSync(
+      join(dir, 'index.html'),
+      `<!doctype html><link rel="stylesheet" href="http://127.0.0.1:${cdnPort}/site.css"><style>body{margin:0;font:28px/1.5 'CdnMono',sans-serif;padding:24px;font-feature-settings:"liga" 0}</style><body>Embedded WWW iiii 12345</body>`,
+    );
+    const app = await serveDir(dir);
+    try {
+      const r = await validate({ url: app.url }, { width: 600, height: 100, name: 'cdn-font', outDir: OUT, fontMode: 'embed' });
+      const svg = readFileSync(resolve(OUT, 'cdn-font.svg'), 'utf8');
+      expect(svg).toContain("font-family:'CdnMono'");
+      expect(svg).toContain('font-feature-settings:'); // glyph-selection CSS travels with the text
+      expect(r.ratio).toBeLessThan(0.02);
+    } finally {
+      await app.close();
+      await new Promise<void>((r) => cdn.close(() => r()));
+    }
   }, 60_000);
 
   describe('webfont in an external stylesheet', () => {

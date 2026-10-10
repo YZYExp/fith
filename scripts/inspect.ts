@@ -33,7 +33,7 @@ async function main() {
       if (px < r.left || px > r.right || py < r.top || py > r.bottom) continue;
       const cs = getComputedStyle(el);
       const interesting: Record<string, string> = {};
-      for (const k of ['backgroundColor', 'backgroundImage', 'backgroundSize', 'backgroundClip', 'filter', 'mixBlendMode', 'maskImage', 'clipPath', 'transform', 'opacity', 'position', 'overflow', 'borderRadius', 'boxShadow', 'fontFamily', 'whiteSpace'] as const) {
+      for (const k of ['backgroundColor', 'backgroundImage', 'backgroundSize', 'backgroundClip', 'filter', 'mixBlendMode', 'maskImage', 'clipPath', 'transform', 'opacity', 'position', 'overflow', 'borderRadius', 'boxShadow', 'fontFamily', 'whiteSpace', 'fontVariationSettings', 'fontFeatureSettings', 'fontStretch', 'fontWeight', 'fontOpticalSizing', 'textRendering', 'fontKerning'] as const) {
         const v = (cs as any)[k];
         if (v && v !== 'none' && v !== 'normal' && v !== 'rgba(0, 0, 0, 0)' && v !== 'auto' && v !== '0px' && v !== 'visible' && v !== '1' && v !== 'static') interesting[k] = String(v).slice(0, 160);
       }

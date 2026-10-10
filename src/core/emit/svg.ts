@@ -11,7 +11,7 @@ import type {
 } from '../ir/types.js';
 import type { Outliner } from './outline.js';
 import { n, esc, uniformRadii, noRadii, roundedRectPath } from './primitives.js';
-import { Defs, clipId, blurFilterId, shadowFilterId, shadowMaskId, gradientId, maskGradientId } from './defs.js';
+import { Defs, clipId, shapeClipId, conicWedges, blurFilterId, shadowFilterId, shadowMaskId, gradientId, maskGradientId } from './defs.js';
 
 /** Sharp inset shadows: padding box minus the (offset, spread-shrunk) hole, clipped to the padding box. */
 function emitInsetShadows(node: BoxNode, defs: Defs): string {
@@ -64,8 +64,14 @@ function emitBox(node: BoxNode, defs: Defs): string {
   }
 
   if (node.fill) out += fillShape(rect, radii, esc(node.fill));
-  if (node.gradient) out += fillShape(rect, radii, `url(#${gradientId(defs, node.gradient, rect)})`);
-  for (const g of node.gradients ?? []) out += fillShape(rect, radii, `url(#${gradientId(defs, g, rect)})`);
+  const paintGradient = (g: NonNullable<BoxNode['gradient']>) => {
+    if (g.type !== 'conic-gradient') return fillShape(rect, radii, `url(#${gradientId(defs, g, rect)})`);
+    // wedge fan clipped to the (rounded) box
+    const cid = clipId(defs, { ...rect, radii });
+    return `<g clip-path="url(#${cid})">${conicWedges(g, rect)}</g>`;
+  };
+  if (node.gradient) out += paintGradient(node.gradient);
+  for (const g of node.gradients ?? []) out += paintGradient(g);
 
   if (node.insetShadows && node.insetShadows.length > 0) out += emitInsetShadows(node, defs);
 
@@ -192,6 +198,7 @@ function emitText(node: TextNode, defs: Defs, outline?: Outliner): string {
     (node.wordSpacing ? ` word-spacing="${n(node.wordSpacing)}"` : '') +
     (decoVal ? ` text-decoration="${decoVal}"` : '') +
     (node.preserveSpace ? ' xml:space="preserve"' : '') +
+    (node.fontExtra ? ` style="${esc(node.fontExtra)}"` : '') +
     (node.textAnchor && node.textAnchor !== 'start' ? ` text-anchor="${node.textAnchor}"` : '');
   return node.lines
     .map((l) => `<text x="${n(l.x)}" y="${n(l.baseline)}" ${attrs}>${esc(l.text)}</text>`)
@@ -243,6 +250,7 @@ function wrap(node: PaintNode, inner: string, defs: Defs): string {
   let out = parts.length === 0 ? inner : `<g ${parts.join(' ')}>${inner}</g>`;
   // one nested <g> per mask: SVG allows a single mask per element
   for (const m of node.masks ?? []) out = `<g mask="url(#${maskGradientId(defs, m)})">${out}</g>`;
+  for (const sh of node.clipShapes ?? []) out = `<g clip-path="url(#${shapeClipId(defs, sh)})">${out}</g>`;
   return out;
 }
 

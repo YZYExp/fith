@@ -55,19 +55,24 @@ Numbers are `diff` (whole page) unless stated. "→" = before → after.
 | E17 | fixtures, Bootstrap | `border-radius:50%` on a 160 px box drawn as 50 px-radius square | resolve % radii against the box | pass | ✅ |
 | E18 | Apple, nodejs | `body::before{position:fixed}` scrim rastered the whole `<body>` (2 MP); body bg painted above negative-z layers | `tryPseudoBox` supports `position:fixed`; `<body>` bg propagates to the canvas when `<html>` has none | apple raster 100→0 % | ✅ |
 | E19 | MUI, Bootstrap, react.dev, Stripe | top raster source = `background-image` (alpha scrims, radial, `to bottom right`, px stops, 2-layer) | shared stop parser: premultiplied-alpha resampling, px stops; corner keywords; `radial-gradient` (circle/ellipse, size keywords, `at`); multi-layer; `image, color` shorthand | bootstrap.com raster 97→1 %, MUI 31→2 % | ✅ |
+| E20 | react.dev, Tailwind, Vercel | `conic-gradient` / `repeating-linear-gradient` raster (1.27 MP on react.dev) | repeating → `spreadMethod="repeat"` over one period; conic → 180 painter's-algorithm slices (each slice covers the rest of the turn, so every boundary is anti-aliased once; the first try with adjacent wedges produced moiré, the second with a wrong end angle painted one colour) | react.dev raster 63→**0 %** | ✅ |
+| E21 | Stripe cards | `clip-path` rastered whole cards | `inset()/circle()/ellipse()/polygon()` → absolute-px `<clipPath>`; applied to every vector node the element produced (like `mask`) | stripe raster 56→32 %, text cov 35→84 % | ✅ |
+| E22 | pypi, Stripe, Bootstrap | cross-origin `<img>` (no CORS) = screenshot placeholder | Node backend downloads `src` via the context request API and emits a real `<image>` (full res, object-fit kept) | pypi raster 2→0 % (SVG 0.9→2 MB: real image bytes); stripe 32→12 % | ✅ |
+| E23 | Stripe | all body text in a fallback font — **zero** `@font-face` embedded | stylesheets on a CDN are opaque to `cssRules` and CORS-blocked for in-page `fetch`; Node backend fetches their text (request API) and passes it as `externalCss`; also carries `font-feature-settings`, `font-variation-settings`, `font-stretch`, `text-rendering` on the `<text>` | stripe 1.66→**0.72 %** | ✅ (regression test uses a CDN fixture with no CORS on CSS) |
 
 ### Negative / neutral results (kept so they are not retried blindly)
 - **E14 (backdrop-filter vectorize)** barely moved raster area: the large rasters were `background-image` and
   `pseudo` on *ancestors*; backdrop-filter was only the first thing the triage printed.
 - **BBC 4.8 % / 23.7 % spikes** were page drift, not regressions — fixed by `--repeat` + median, not by code.
+- **Stripe diff went 0.34→1.23→0.72 % while quality *improved*:** the 0.34 % baseline was a screenshot of the card; vector text/images have
+  anti-aliasing differences and the page has a live counter ("Global GDP …"). Compare *raster area* and text cov first.
 - **Gradient vectorization changed an existing test** (`extension-viewport` used a radial gradient as its "must
   raster" example); switched it to `conic-gradient`, which is still raster — an intended improvement, not a regression.
 
 ## Open problems (ranked by raster area / impact on the corpus)
 | problem | seen on | notes |
 |---|---|---|
-| `conic-gradient`, `repeating-*-gradient` | react.dev (1.27 MP), tailwindcss.com, Vercel | conic → wedge paths; repeating → `spreadMethod="repeat"` for linear |
-| `clip-path` (inset/polygon/circle) | Stripe cards (0.3 MP ×2) | map to SVG `<clipPath>` on the node group |
+| tiled gradient layers (`background-size` ≠ auto) | tailwindcss.com hatch pattern | needs `<pattern>` |
 | `mix-blend-mode` | Stripe hero title | needs backdrop; keep raster unless text over solid bg |
 | `mask` via `mask-image` on containers | antd.design border beam (0.8 MP) | existing linear-mask path only |
 | `transform-3d` | antd.design | flatten when perspective is trivial |

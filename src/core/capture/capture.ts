@@ -364,6 +364,93 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
     return m ? parseFloat(m[1]) : null;
   };
 
+  // clip-path basic shapes → absolute-px SVG path data (reference box = border box). null when
+  // unsupported (url(), path(), geometry boxes other than border-box…): stays a subtree raster.
+  const rrPath = (x: number, y: number, w: number, h: number, rad: number[]): string => {
+    const m = Math.min(w, h) / 2;
+    const [tl, tr, br, bl] = rad.map((v) => Math.max(0, Math.min(v, m)));
+    const f = (v: number) => String(Math.round(v * 100) / 100);
+    return `M${f(x + tl)},${f(y)}H${f(x + w - tr)}${tr ? `A${f(tr)},${f(tr)} 0 0 1 ${f(x + w)},${f(y + tr)}` : ''}V${f(y + h - br)}${br ? `A${f(br)},${f(br)} 0 0 1 ${f(x + w - br)},${f(y + h)}` : ''}H${f(x + bl)}${bl ? `A${f(bl)},${f(bl)} 0 0 1 ${f(x)},${f(y + h - bl)}` : ''}V${f(y + tl)}${tl ? `A${f(tl)},${f(tl)} 0 0 1 ${f(x + tl)},${f(y)}` : ''}Z`;
+  };
+  const parseClipShape = (el: Element, cs: CSSStyleDeclaration): { d: string; evenodd?: boolean } | null => {
+    const v = (cs.clipPath || '').trim();
+    const m = v.match(/^(inset|circle|ellipse|polygon)\((.*)\)\s*(border-box)?$/);
+    if (!m) return null;
+    const r = el.getBoundingClientRect();
+    const w = r.width, h = r.height;
+    if (w <= 0 || h <= 0) return null;
+    const f = (n2: number) => String(Math.round(n2 * 100) / 100);
+    const len = (t: string, ref: number) => (/%$/.test(t) ? (parseFloat(t) / 100) * ref : /px$/.test(t) ? parseFloat(t) : t === '0' ? 0 : NaN);
+    const pos = (t: string[] | undefined, dw: number, dh: number): [number, number] | null => {
+      if (!t || t.length === 0) return [r.left + dw / 2, r.top + dh / 2];
+      const kx = (a: string) => (a === 'center' ? dw / 2 : a === 'left' ? 0 : a === 'right' ? dw : len(a, dw));
+      const ky = (a: string) => (a === 'center' ? dh / 2 : a === 'top' ? 0 : a === 'bottom' ? dh : len(a, dh));
+      let tx = t[0], ty = t[1] ?? 'center';
+      if (t.length === 1 && (t[0] === 'top' || t[0] === 'bottom')) { ty = t[0]; tx = 'center'; }
+      else if (/^(top|bottom)$/.test(t[0]) && t[1]) { tx = t[1]; ty = t[0]; }
+      const px = kx(tx), py = ky(ty);
+      return isFinite(px) && isFinite(py) ? [r.left + px, r.top + py] : null;
+    };
+    const body = m[2].trim();
+    if (m[1] === 'inset') {
+      const [offs, rnd] = body.split(/\bround\b/);
+      const o = offs.trim().split(/\s+/).map((t, i, a) => len(t, (i % 2 === 0 ? (a.length === 1 ? 0 : h) : w)));
+      const raw = offs.trim().split(/\s+/);
+      const T = raw[0], R = raw[1] ?? raw[0], B = raw[2] ?? raw[0], L = raw[3] ?? raw[1] ?? raw[0];
+      const top = len(T, h), right = len(R, w), bottom = len(B, h), left = len(L, w);
+      if ([top, right, bottom, left].some((x) => !isFinite(x)) || o.length === 0) return null;
+      const x = r.left + left, y = r.top + top, ww = w - left - right, hh = h - top - bottom;
+      if (ww <= 0 || hh <= 0) return { d: 'M0,0Z' };
+      let rad = [0, 0, 0, 0];
+      if (rnd && rnd.trim()) {
+        const rt = rnd.trim().split('/')[0].trim().split(/\s+/);
+        const rv = rt.map((t) => len(t, Math.min(w, h)));
+        if (rv.some((q) => !isFinite(q))) return null;
+        rad = [rv[0], rv[1] ?? rv[0], rv[2] ?? rv[0], rv[3] ?? rv[1] ?? rv[0]];
+      }
+      return { d: rrPath(x, y, ww, hh, rad) };
+    }
+    if (m[1] === 'polygon') {
+      let evenodd = false;
+      let pts = body;
+      const fr = pts.match(/^(nonzero|evenodd)\s*,\s*/);
+      if (fr) { evenodd = fr[1] === 'evenodd'; pts = pts.slice(fr[0].length); }
+      const out: string[] = [];
+      for (const pr of splitTopLevel(pts)) {
+        const [a, b] = pr.trim().split(/\s+/);
+        const x = len(a, w), y = len(b, h);
+        if (!isFinite(x) || !isFinite(y)) return null;
+        out.push(`${out.length ? 'L' : 'M'}${f(r.left + x)},${f(r.top + y)}`);
+      }
+      return out.length >= 3 ? { d: out.join('') + 'Z', evenodd } : null;
+    }
+    // circle(r at x y) / ellipse(rx ry at x y)
+    const [shp, at] = body.split(/\bat\b/);
+    const c = pos(at ? at.trim().split(/\s+/) : undefined, w, h);
+    if (!c) return null;
+    const toks = shp.trim().split(/\s+/).filter(Boolean);
+    const cxl = c[0] - r.left, cyl = c[1] - r.top;
+    const near = (a: number, b: number) => Math.min(a, b), far = (a: number, b: number) => Math.max(a, b);
+    const side = (kw: string, horiz: boolean) => {
+      const a = horiz ? cxl : cyl, b = (horiz ? w : h) - a;
+      return kw === 'closest-side' ? near(a, b) : far(a, b);
+    };
+    let rx: number, ry: number;
+    if (m[1] === 'circle') {
+      const t = toks[0];
+      if (!t || t === 'farthest-side') rx = ry = far(far(cxl, w - cxl), far(cyl, h - cyl)); // default is closest-side per spec
+      else if (t === 'closest-side') rx = ry = near(near(cxl, w - cxl), near(cyl, h - cyl));
+      else rx = ry = len(t, Math.sqrt((w * w + h * h) / 2));
+      if (!t) rx = ry = near(near(cxl, w - cxl), near(cyl, h - cyl));
+    } else {
+      const kx = toks[0], ky = toks[1];
+      rx = !kx || /side$/.test(kx) ? side(kx || 'closest-side', true) : len(kx, w);
+      ry = !ky || /side$/.test(ky) ? side(ky || 'closest-side', false) : len(ky, h);
+    }
+    if (!(rx > 0) || !(ry > 0) || !isFinite(rx) || !isFinite(ry)) return null;
+    return { d: `M${f(c[0] - rx)},${f(c[1])}A${f(rx)},${f(ry)} 0 1 0 ${f(c[0] + rx)},${f(c[1])}A${f(rx)},${f(ry)} 0 1 0 ${f(c[0] - rx)},${f(c[1])}Z` };
+  };
+
   const needsSubtreeRaster = (el: Element, cs: CSSStyleDeclaration) => {
     const tag = el.tagName.toUpperCase();
     if (['CANVAS', 'VIDEO', 'IFRAME', 'OBJECT', 'EMBED'].includes(tag)) return 'media:' + tag;
@@ -380,7 +467,7 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
       !parseElementMask(el, cs)
     )
       return 'mask';
-    if (cs.clipPath && cs.clipPath !== 'none') return 'clip-path';
+    if (cs.clipPath && cs.clipPath !== 'none' && !parseClipShape(el, cs)) return 'clip-path';
     const tf = cs.transform;
     if (tf && tf !== 'none') {
       // Detect 3D transforms (rotateX/Y, perspective…) via the matrix3d coefficients that
@@ -432,7 +519,7 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
   };
   const STOP_COLOR = /^((?:rgba?|hsla?|oklch|oklab|lab|lch|hwb|color)\([^)]+\)|#[0-9a-fA-F]+|[a-zA-Z]+)/;
   // parts = comma-split stop list; lineLen = px length that 100% maps to
-  const parseGradientStops = (parts: string[], lineLen: number) => {
+  const parseGradientStops = (parts: string[], lineLen: number, repeating = false) => {
     const raw: { offset: number | null; color: string }[] = [];
     for (const seg of parts) {
       const cm = seg.trim().match(STOP_COLOR);
@@ -445,6 +532,8 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
         for (const pos of positions) {
           if (/%$/.test(pos)) raw.push({ offset: parseFloat(pos) / 100, color });
           else if (/px$/.test(pos) && lineLen > 0) raw.push({ offset: parseFloat(pos) / lineLen, color });
+          else if (/deg$/.test(pos)) raw.push({ offset: parseFloat(pos) / 360, color });
+          else if (/turn$/.test(pos)) raw.push({ offset: parseFloat(pos), color });
           else if (pos === '0') raw.push({ offset: 0, color });
           else return null;
         }
@@ -488,7 +577,8 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
         out.push({ offset: stops[k].offset + span * t, color: `rgba(${col[0]}, ${col[1]}, ${col[2]}, ${Math.round(a * 1000) / 1000})` });
       }
     }
-    // SVG stop offsets live in [0,1]
+    // SVG stop offsets live in [0,1] (a repeating gradient is normalised by the caller)
+    if (repeating) return out;
     return out.map((st) => ({ offset: Math.min(1, Math.max(0, st.offset)), color: st.color }));
   };
 
@@ -501,8 +591,9 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
 
   const parseGradientLayer = (layer: string, box: GBox) => {
     const v = layer.trim();
-    const isLinear = /^linear-gradient\(/.test(v), isRadial = /^radial-gradient\(/.test(v);
-    if (!isLinear && !isRadial) return null;
+    const repeating = /^repeating-linear-gradient\(/.test(v);
+    const isLinear = /^(?:repeating-)?linear-gradient\(/.test(v), isRadial = /^radial-gradient\(/.test(v), isConic = /^conic-gradient\(/.test(v);
+    if (!isLinear && !isRadial && !isConic) return null;
     if (v.lastIndexOf('gradient(') !== v.indexOf('gradient(')) return null;
     const inner = v.slice(v.indexOf('(') + 1, v.lastIndexOf(')'));
     const parts = splitTopLevel(inner).map((q) => q.trim());
@@ -526,8 +617,40 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
       }
       const rad = (angle * Math.PI) / 180;
       const lineLen = Math.abs(w * Math.sin(rad)) + Math.abs(h * Math.cos(rad));
-      const stops = parseGradientStops(parts.slice(i), lineLen);
-      return stops ? { type: 'linear-gradient' as const, angle, stops, box } : null;
+      const stops = parseGradientStops(parts.slice(i), lineLen, repeating);
+      if (!stops) return null;
+      if (!repeating) return { type: 'linear-gradient' as const, angle, stops, box };
+      const f0 = stops[0].offset, f1 = stops[stops.length - 1].offset;
+      if (f1 - f0 < 1e-4) return null;
+      return {
+        type: 'linear-gradient' as const, angle, box,
+        repeat: { from: f0, to: f1 },
+        stops: stops.map((st) => ({ offset: (st.offset - f0) / (f1 - f0), color: st.color })),
+      };
+    }
+    if (isConic) {
+      let from = 0, atX = w / 2, atY = h / 2, ci = 0;
+      const head = /^(from|at)\b/.test(parts[0]) ? parts[0] : '';
+      if (head) {
+        ci = 1;
+        const fm = head.match(/from\s+(-?[\d.]+)(deg|turn|rad)/);
+        if (fm) from = fm[2] === 'turn' ? parseFloat(fm[1]) * 360 : fm[2] === 'rad' ? (parseFloat(fm[1]) * 180) / Math.PI : parseFloat(fm[1]);
+        else if (/^from\b/.test(head)) return null;
+        const am = head.match(/\bat\s+(.+)$/);
+        if (am) {
+          const toks = am[1].trim().split(/\s+/);
+          const pt = (t: string, ref: number, horiz: boolean): number | null =>
+            t === 'center' ? ref / 2 : t === (horiz ? 'left' : 'top') ? 0 : t === (horiz ? 'right' : 'bottom') ? ref : lenToPx(t, ref);
+          let tx = toks[0], ty = toks[1] ?? 'center';
+          if (toks.length === 1 && (toks[0] === 'top' || toks[0] === 'bottom')) { ty = toks[0]; tx = 'center'; }
+          else if (/^(top|bottom)$/.test(toks[0]) && toks[1]) { tx = toks[1]; ty = toks[0]; }
+          const px = pt(tx, w, true), py = pt(ty, h, false);
+          if (px === null || py === null || toks.length > 2) return null;
+          atX = px; atY = py;
+        }
+      }
+      const cstops = parseGradientStops(parts.slice(ci), 0);
+      return cstops ? { type: 'conic-gradient' as const, cx: box.x + atX, cy: box.y + atY, from, stops: cstops, box } : null;
     }
     // radial-gradient([circle|ellipse] [size] [at pos], stops…)
     let i = 0;
@@ -1124,6 +1247,21 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
     } as PaintNode);
   };
 
+  // font properties that alter glyph choice/metrics but aren't part of the SVG presentation attrs
+  const fontExtraOf = (cs: CSSStyleDeclaration): string => {
+    const d: string[] = [];
+    const add = (prop: string, v: string | undefined, dflt: string) => { if (v && v !== dflt) d.push(`${prop}:${v}`); };
+    add('font-feature-settings', cs.fontFeatureSettings, 'normal');
+    add('font-variation-settings', cs.fontVariationSettings, 'normal');
+    add('font-stretch', cs.fontStretch, '100%');
+    add('font-kerning', cs.fontKerning, 'auto');
+    add('font-optical-sizing', (cs as any).fontOpticalSizing, 'auto');
+    add('font-variant-ligatures', cs.fontVariantLigatures, 'normal');
+    add('font-variant-numeric', cs.fontVariantNumeric, 'normal');
+    add('text-rendering', cs.textRendering, 'auto');
+    return d.join(';');
+  };
+
   const captureText = (el: Element, cs: CSSStyleDeclaration, clip: Clip | null, opacity: number) => {
     if (el.tagName === 'INPUT' && vectorTextInput(el, cs)) {
       captureInputText(el as HTMLInputElement, cs, clip, opacity);
@@ -1293,6 +1431,7 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
         wordSpacing: ws,
         decoration,
         preserveSpace: preserveSpace || undefined,
+        fontExtra: fontExtraOf(cs) || undefined,
         decorationColor: normColor(cs.textDecorationColor || cs.color),
         gradientFill,
         gradientRect,
@@ -1637,7 +1776,8 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
         //    so it keeps its paint-order position rather than appending at the end.
         const clamped = clampToCapture(r);
         if (clamped) {
-          Object.assign(node, { kind: 'raster', rect: clamped, reason: 'img-cors' });
+          const imgFallback = { src, rect: { ...node.rect }, preserveAspectRatio };
+          Object.assign(node, { kind: 'raster', rect: clamped, reason: 'img-cors', imgFallback });
           rasterTargets.push({ id, ...clamped });
         } else {
           // image is entirely outside the capture bounds — remove the placeholder
@@ -1654,17 +1794,17 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
   const walk = async (el: Element, clip: Clip | null, inheritedOpacity: number) => {
     const wcs = getComputedStyle(el);
     if ((wcs as any).maskImage && (wcs as any).maskImage !== 'none') await prepareImageLayers(wcs);
-    const mk =
-      wcs.display !== 'none' && wcs.display !== 'contents' && !rootAncestors.has(el)
-        ? parseElementMask(el, wcs)
-        : null;
-    if (!mk) return walkNode(el, clip, inheritedOpacity);
+    const live = wcs.display !== 'none' && wcs.display !== 'contents' && !rootAncestors.has(el);
+    const mk = live ? parseElementMask(el, wcs) : null;
+    const cp = live && wcs.clipPath && wcs.clipPath !== 'none' ? parseClipShape(el, wcs) : null;
+    if (!mk && !cp) return walkNode(el, clip, inheritedOpacity);
     const start = nodes.length;
     await walkNode(el, clip, inheritedOpacity);
     for (let i = start; i < nodes.length; i++) {
       const nd = nodes[i];
       if (nd.kind === 'raster') continue;
-      (nd.masks ||= []).push(mk);
+      if (mk) (nd.masks ||= []).push(mk);
+      if (cp) (nd.clipShapes ||= []).push(cp);
     }
   };
 
@@ -2037,10 +2177,14 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
     }
     for (const href of Array.from(new Set(opaque)).slice(0, 12)) {
       try {
-        const res = await fetch(href, { cache: 'force-cache' });
-        if (!res.ok) continue;
+        let text = (opts as any).externalCss?.[href] as string | undefined;
+        if (text === undefined) {
+          const res = await fetch(href, { cache: 'force-cache' });
+          if (!res.ok) continue;
+          text = await res.text();
+        }
         const parsed = new CSSStyleSheet();
-        parsed.replaceSync((await res.text()).replace(/@import[^;]*;/g, ''));
+        parsed.replaceSync(text.replace(/@import[^;]*;/g, ''));
         walk(parsed.cssRules, href, 0);
       } catch { /* CORS-blocked or unparsable: fonts stay referenced by name */ }
     }

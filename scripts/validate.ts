@@ -13,6 +13,8 @@ import pixelmatch from 'pixelmatch';
 import sparticuz from '@sparticuz/chromium';
 import { captureScene } from '../src/core/capture/capture.js';
 import { emitSvg } from '../src/core/emit/svg.js';
+import { collectExternalCss } from '../src/backends/node/external-css.js';
+import { resolveCorsImages } from '../src/backends/node/cors-images.js';
 import { createOutliner } from '../src/core/emit/outline.js';
 import { systemFontLoader } from '../src/backends/node/fonts.js';
 import type { Scene } from '../src/core/ir/types.js';
@@ -212,9 +214,11 @@ export async function validate(
       deviceScaleFactor: 2,
       fontMode: opts.fontMode === 'none' ? 'none' : 'embed',
       collectGlyphX: opts.fontMode === 'outline',
+      externalCss: opts.fontMode === 'none' ? undefined : await collectExternalCss(page),
       captureScrollableContent: true,
       containerRasterFallback: true,
     } as any);
+    await resolveCorsImages(page, scene);
     const byId = new Map(scene.rasterTargets.map((t) => [t.id, t]));
     for (const node of scene.nodes) {
       if (node.kind !== 'raster') continue;

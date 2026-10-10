@@ -88,6 +88,8 @@ export interface NodeBase {
   masks?: MaskGradient[];
   /** CSS filter: blur(Npx) on a childless box (glows/scrims) → SVG feGaussianBlur, stdDeviation in px. */
   blur?: number;
+  /** CSS clip-path basic shapes (inset/circle/ellipse/polygon) as absolute-px SVG path data; all apply. */
+  clipShapes?: { d: string; evenodd?: boolean }[];
 }
 
 export interface GradientStop {
@@ -115,9 +117,22 @@ export interface RadialGradientFill {
   box?: GradientBox;
 }
 
+export interface ConicGradientFill {
+  type: 'conic-gradient';
+  /** Centre in absolute px; `from` is the start angle in degrees (CSS: 0 = up, clockwise). */
+  cx: number;
+  cy: number;
+  from: number;
+  /** Offsets are fractions of a full turn. */
+  stops: GradientStop[];
+  box?: GradientBox;
+}
+
 export interface LinearGradientFill {
   type: 'linear-gradient';
   box?: GradientBox;
+  /** repeating-linear-gradient: the [from,to] span (fractions of the gradient line) of one period. */
+  repeat?: { from: number; to: number };
   /** CSS angle in degrees (0 = to top, 90 = to right). */
   angle: number;
   stops: GradientStop[];
@@ -128,9 +143,9 @@ export interface BoxNode extends NodeBase {
   /** Solid background color, or null/absent for none. */
   fill?: string | null;
   /** Background gradient painted over `fill`. */
-  gradient?: LinearGradientFill | RadialGradientFill | null;
+  gradient?: LinearGradientFill | RadialGradientFill | ConicGradientFill | null;
   /** Extra background layers (multi-layer `background-image`), painted bottom → top above `gradient`. */
-  gradients?: (LinearGradientFill | RadialGradientFill)[];
+  gradients?: (LinearGradientFill | RadialGradientFill | ConicGradientFill)[];
   radii: CornerRadii;
   border?: BorderEdges | null;
   shadows?: BoxShadow[];
@@ -182,6 +197,8 @@ export interface TextNode extends NodeBase {
   decoration?: string | null;
   /** white-space: pre* — keep runs of spaces (emitted with xml:space=preserve). */
   preserveSpace?: boolean;
+  /** Extra CSS font declarations that change glyph selection/shape (font-feature-settings, font-variation-settings, …). */
+  fontExtra?: string;
   decorationColor?: string;
   textAnchor?: 'start' | 'middle' | 'end';
   /** Gradient fill from background-clip:text pattern; overrides color when set. */
@@ -210,9 +227,15 @@ export interface RasterNode extends NodeBase {
   reason: string;
   /** Source element (tag.class) for diagnostics. */
   desc?: string;
+  /** Set when an <img> could not be read in-page (CORS): the Node backend may fetch `src` itself and
+   *  turn this node back into an ImageNode (vector-first) instead of screenshotting it. */
+  imgFallback?: { src: string; rect: Rect; preserveAspectRatio?: string };
 }
 
 export interface CaptureOptions {
+  /** CSS text of cross-origin stylesheets the page cannot read (href → text), supplied by a backend that can
+   *  bypass CORS; lets @font-face rules in them be embedded. */
+  externalCss?: Record<string, string>;
   width: number;
   height?: number;
   deviceScaleFactor?: number;
