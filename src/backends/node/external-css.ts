@@ -8,7 +8,8 @@ import type { Page } from 'playwright';
 export async function collectExternalCss(page: Page): Promise<Record<string, string>> {
   const hrefs: string[] = await page.evaluate(() => {
     const out = new Set<string>();
-    const visit = (sheet: CSSStyleSheet, depth: number) => {
+    // function declaration (not a const arrow): immune to pages that define a global __name helper
+    function visit(sheet: CSSStyleSheet, depth: number): void {
       let rules: CSSRuleList;
       try {
         rules = sheet.cssRules;
@@ -21,7 +22,7 @@ export async function collectExternalCss(page: Page): Promise<Record<string, str
         const sub = (r as CSSImportRule).styleSheet;
         if (sub) visit(sub, depth + 1);
       }
-    };
+    }
     for (const s of Array.from(document.styleSheets)) visit(s as CSSStyleSheet, 0);
     return Array.from(out);
   });

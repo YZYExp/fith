@@ -153,6 +153,16 @@ export async function validate(
       // real sites with analytics/ads rarely reach networkidle: settle on 'load' + a bounded idle wait
       await page.goto(target.url, { waitUntil: 'load', timeout: 45_000 });
       await page.waitForLoadState('networkidle', { timeout: 12_000 }).catch(() => {});
+      // Stabilise the moving target so reference screenshot and capture see the same page: freeze CSS
+      // animations/transitions, scroll through once to trigger lazy loading, wait for images to decode.
+      await page.addStyleTag({ content: '*,*::before,*::after{animation-duration:0s!important;animation-delay:0s!important;animation-iteration-count:1!important;transition-duration:0s!important;transition-delay:0s!important;scroll-behavior:auto!important;caret-color:transparent!important}' }).catch(() => {});
+      await page.evaluate(async () => {
+        const h = Math.min(document.documentElement.scrollHeight, 6000);
+        for (let y = 0; y < h; y += Math.max(300, innerHeight * 0.8)) { scrollTo(0, y); await new Promise((r) => setTimeout(r, 120)); }
+        scrollTo(0, 0);
+        await Promise.all(Array.from(document.images).map((i) => (i.complete ? Promise.resolve() : i.decode().catch(() => {}))));
+      }).catch(() => {});
+      await page.waitForTimeout(600);
     }
     else await page.setContent(target.html, { waitUntil: 'networkidle' });
     if (opts.settleMs) await page.waitForTimeout(opts.settleMs);
@@ -178,8 +188,8 @@ export async function validate(
 
     // generate SVG
     await page.evaluate(() => {
-      const g = globalThis as any;
-      if (!g.__name) g.__name = (t: any) => t;
+      // unconditional: some pages define their own __name with different semantics (returns undefined)
+      (globalThis as any).__name = (t: any) => t;
     });
     const t0 = Date.now();
     const domTextChars = await page.evaluate(([capW, capH]) => {
