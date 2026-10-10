@@ -1076,6 +1076,27 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
 
   // Try to extract image pixels via canvas (works for decoded same-origin images
   // and CORS-enabled cross-origin images without a network round-trip).
+  // Data URL of a canvas bitmap, or null when it cannot be read (tainted) or looks blank — a WebGL canvas
+  // without preserveDrawingBuffer reads back transparent, which must NOT replace the real pixels.
+  const canvasDataUrl = (cv: HTMLCanvasElement): string | null => {
+    if (cv.width === 0 || cv.height === 0) return null;
+    try {
+      const probe = document.createElement('canvas');
+      const pw = Math.min(64, cv.width), ph = Math.min(64, cv.height);
+      probe.width = pw; probe.height = ph;
+      const pc = probe.getContext('2d');
+      if (!pc) return null;
+      pc.drawImage(cv, 0, 0, pw, ph);
+      const d = pc.getImageData(0, 0, pw, ph).data;
+      let any = false;
+      for (let i = 3; i < d.length; i += 4) if (d[i] !== 0) { any = true; break; }
+      if (!any) return null;
+      return cv.toDataURL('image/png');
+    } catch {
+      return null;
+    }
+  };
+
   const canvasExtractDataURL = (img: HTMLImageElement): string | null => {
     if (!img.complete || img.naturalWidth === 0 || img.naturalHeight === 0) return null;
     try {
@@ -1992,6 +2013,22 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
 
     const subtreeReason = !skipRender && needsSubtreeRaster(el, cs);
     if (subtreeReason) {
+      // 2D <canvas> (charts, QR codes): the bitmap is readable → real <image>; WebGL/tainted/blank → raster
+      if (el.tagName === 'CANVAS' && el.childElementCount === 0 && !visHidden && subtreeReason === 'media:CANVAS') {
+        const url = canvasDataUrl(el as HTMLCanvasElement);
+        if (url) {
+          emitBox(el, cs, clip, opacity);
+          const bl = num(cs.borderLeftWidth), bt = num(cs.borderTopWidth);
+          const cl = bl + num(cs.paddingLeft), ct = bt + num(cs.paddingTop);
+          const cr = num(cs.borderRightWidth) + num(cs.paddingRight), cb = num(cs.borderBottomWidth) + num(cs.paddingBottom);
+          nodes.push({
+            kind: 'image', id: nid(),
+            rect: { x: r.left + cl, y: r.top + ct, width: Math.max(0, r.width - cl - cr), height: Math.max(0, r.height - ct - cb) },
+            opacity, clip, href: url, preserveAspectRatio: cs.objectFit === 'contain' ? 'xMidYMid meet' : cs.objectFit === 'cover' ? 'xMidYMid slice' : 'none',
+          } as PaintNode);
+          return;
+        }
+      }
       if (!visHidden) pushRaster(r, clip, opacity, subtreeReason, el);
       return;
     }

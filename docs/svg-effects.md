@@ -24,8 +24,9 @@ Status legend: ✅ shipped · 🔧 technique proven in the lab, not wired into c
 | tiled / sized layers (`background-size: 20px`) | `<pattern>` | – | 🧭 (tailwindcss.com hatch, many sites) |
 | `box-shadow` (outer, blur, spread) | blurred shape under an inverse mask | – | ✅ |
 | `box-shadow: inset` sharp | evenodd ring clipped to the padding box | 0.00 % (`inset-blur-shadow`) | ✅ |
-| `box-shadow: inset` with blur | same ring + `feGaussianBlur`, clipped to the padding box | **0.00 %** | 🔧 (currently raster) |
+| `box-shadow: inset` with blur | same ring + `feGaussianBlur`, clipped to the padding box | **0.00 %** | ✅ |
 | `border-radius` incl. `%` | rounded-rect path; `%` resolved against the box | – | ✅ |
+| mixed-width / mixed-colour borders, CSS triangles | mitered per-edge trapezoids (+ rounded ring clip) | – (fixture `pseudo-flow`) | ✅ |
 | `border-style: double/groove/ridge` | two strokes / light+dark strokes | – | 🧭 (raster today) |
 | `border-image` | 9-slice with clipped `<image>` copies | – | 🧭 |
 | `outline` | stroke outside the border box | – | ✅ |
@@ -46,7 +47,8 @@ Status legend: ✅ shipped · 🔧 technique proven in the lab, not wired into c
 | `backdrop-filter: blur()` | re-emit everything painted *below* inside `<g clip-path=box><g filter=blur>…</g></g>` (`BackgroundImage` is unsupported in browsers); can reference one shared `<g id>` via `<use>` | **0.21 %** | 🔧 — today the blur is dropped (box stays vector) |
 | `opacity`, `isolation` | group `opacity`; `isolation:isolate` | – | ✅ / 🧭 |
 | `mask-image` linear / `url()` | `<mask>` alpha | – | ✅ |
-| `mask-image` radial/conic, `mask-composite`, `mask-size` | radial `<mask>`; multiple masks | – | 🧭 |
+| `mask-image` radial / multi-layer, `mask-composite: add/intersect` | radial `<mask>`; union in one mask, intersect as nested masks | – (fixture `mask-layers`) | ✅ |
+| `mask-composite: exclude/subtract`, `mask-size`/`mask-clip` layers (gradient-border trick) | luminance trick / per-layer clip | – | 🧭 |
 | `clip-path: inset/circle/ellipse/polygon` | `<clipPath><path>` on the group | – | ✅ |
 | `clip-path: path()` / `url(#svgClip)` | embed path / copy `<clipPath>` | – | 🧭 |
 
@@ -75,7 +77,7 @@ Status legend: ✅ shipped · 🔧 technique proven in the lab, not wired into c
 | CSS | SVG technique | lab diff | status |
 |---|---|---|---|
 | uniform `scale()` | scale text/spacing by the measured ratio | – | ✅ |
-| `rotate()/skew()/matrix()` (2D) | `<g transform>` about the transform-origin | rotate 0.77 %, skew **0.00 %** | 🔧 — **top candidate**: today `transform-rotate` rasters the subtree. Plan: temporarily clear the element's transform, measure the untransformed subtree, emit nodes in a `<g transform=matrix(…)>` (same restore-in-`finally` discipline as `unfurl`) |
+| `rotate()/skew()/matrix()` (2D) | `<g transform>` about the transform-origin; measured with the transform temporarily cleared; matrix keeps 6 decimals | rotate 0.77 %, skew **0.00 %** | ✅ (bails to raster when a screenshot is needed inside, or the element animates) |
 | `perspective` / `rotateX/Y` / `matrix3d` | SVG has only affine transforms | – | ⛔ true perspective cannot be expressed; trivial-perspective cases can be flattened, the rest stay raster |
 | `position: sticky/fixed` | static snapshot at scroll 0 | – | ✅ |
 | `object-fit/position`, `border-radius` on `<img>` | `preserveAspectRatio` + clip | – | ✅ |
@@ -87,7 +89,7 @@ Status legend: ✅ shipped · 🔧 technique proven in the lab, not wired into c
 |---|---|---|
 | text `<input>` | rect + `<text>` | ✅ |
 | `checkbox/radio/range/progress/meter/select` | drawn primitives matching Chrome's native look (themeable by `accent-color`) | 🧭 (raster today) |
-| `<canvas>` (2D) | `toDataURL` → `<image>` | 🧭 (tainted/WebGL ⇒ raster) |
+| `<canvas>` (2D) | `toDataURL` → `<image>` | ✅ (tainted / blank WebGL ⇒ raster) |
 | `<video>` / `<iframe>` | current frame / recursive capture (same-origin iframes) | ⛔ / 🧭 |
 | inline `<svg>`, `<img src=svg>` | transplanted markup with inlined styles | ✅ |
 

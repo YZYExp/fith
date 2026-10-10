@@ -195,6 +195,16 @@ describe('real-world regressions', () => {
     expect(r.ratio).toBeLessThan(0.02);
   }, 60_000);
 
+  it('embeds readable 2D <canvas> bitmaps as <image> (content box, borders stay vector)', async () => {
+    const r = await validate(
+      { url: pathToFileURL(resolve(FIXTURES, 'canvas-2d.html')).href },
+      { width: 440, height: 200, name: 'canvas-2d', outDir: OUT, fontMode: 'none' },
+    );
+    const svg = readFileSync(resolve(OUT, 'canvas-2d.svg'), 'utf8');
+    expect(svg.match(/<image /g)?.length).toBe(2);
+    expect(r.ratio).toBeLessThan(0.01);
+  }, 60_000);
+
   describe('webfont in an external stylesheet', () => {
     let base: { url: string; close: () => Promise<void> } | null = null;
     afterAll(async () => base?.close());
