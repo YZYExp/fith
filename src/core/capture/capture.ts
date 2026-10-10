@@ -320,7 +320,8 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
     // A 0×0 box with visible overflow can still hold painted descendants (Leaflet panes,
     // absolutely-positioned overlay roots), so only cull it when it has nothing to descend into.
     if (r.width === 0 && r.height === 0) return el.childElementCount > 0 && !clipsContent(cs);
-    if (r.bottom < cullTop || r.right < cullLeft || r.top > cullBottom || r.left > cullRight)
+    // inside a transform-cleared subtree rects are in local (untransformed) space, not page space
+    if (transformDepth === 0 && (r.bottom < cullTop || r.right < cullLeft || r.top > cullBottom || r.left > cullRight))
       return false;
     return true;
     // NOTE: visibility:hidden is intentionally NOT checked here. Children can
@@ -1041,6 +1042,7 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
   };
 
   const pushRaster = (rect: DOMRect, clip: Clip | null, opacity: number, reason: string, el?: Element) => {
+    if (transformDepth > 0) throw new TransformBail();
     const r = clampToCapture(rect);
     if (!r) return;
     const id = nid();
@@ -1052,10 +1054,10 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
     if (el) opts.rasterElements?.set(id, el);
   };
 
-  // Sharp `inset` layers only; null when any inset layer has blur (needs raster).
+  // `inset` layers (sharp or blurred); null never — kept nullable for callers.
   const parseInsetShadows = (value: string) => {
     if (!value || value === 'none') return [];
-    const out: { offsetX: number; offsetY: number; spread: number; color: string }[] = [];
+    const out: { offsetX: number; offsetY: number; spread: number; color: string; blur?: number }[] = [];
     const COLOR_FN = /((?:rgba?|hsla?|oklch|oklab|lab|lch|hwb|color)\([^)]+\)|#[0-9a-fA-F]+|[a-z]+)/;
     for (const part of splitTopLevel(value)) {
       if (!part.includes('inset')) continue;
@@ -1063,8 +1065,7 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
       const colorMatch = body.match(COLOR_FN);
       const color = normColor(colorMatch ? colorMatch[0] : 'rgba(0,0,0,0.2)');
       const v = (body.replace(COLOR_FN, '').match(/-?\d*\.?\d+px/g) || []).map((x) => parseFloat(x));
-      if ((v[2] || 0) > 0) return null;
-      if (!transparent(color)) out.push({ offsetX: v[0] || 0, offsetY: v[1] || 0, spread: v[3] || 0, color });
+      if (!transparent(color)) out.push({ offsetX: v[0] || 0, offsetY: v[1] || 0, spread: v[3] || 0, color, blur: v[2] || undefined });
     }
     return out;
   };
@@ -1791,7 +1792,7 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
   // Vector mask-image: walk the element normally, then tag every vector node it
   // produced with the mask. Raster nodes are skipped — their screenshot already
   // contains the page's masked rendering, so masking again would fade it twice.
-  const walk = async (el: Element, clip: Clip | null, inheritedOpacity: number) => {
+  const walkInner = async (el: Element, clip: Clip | null, inheritedOpacity: number) => {
     const wcs = getComputedStyle(el);
     if ((wcs as any).maskImage && (wcs as any).maskImage !== 'none') await prepareImageLayers(wcs);
     const live = wcs.display !== 'none' && wcs.display !== 'contents' && !rootAncestors.has(el);
@@ -1805,6 +1806,72 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
       if (nd.kind === 'raster') continue;
       if (mk) (nd.masks ||= []).push(mk);
       if (cp) (nd.clipShapes ||= []).push(cp);
+    }
+  };
+
+  // 2D rotate/skew transforms are emitted as <g transform>: while an element's subtree is measured its
+  // transform is cleared (so every rect is in untransformed space). Anything that needs a screenshot
+  // inside it (raster targets use page coordinates) aborts via TransformBail → whole element rastered.
+  class TransformBail extends Error {}
+  let transformDepth = 0;
+  const noVectorTransform = new WeakSet<Element>();
+
+  const walk = async (el: Element, clip: Clip | null, inheritedOpacity: number): Promise<void> => {
+    const cs0 = getComputedStyle(el);
+    const tf = cs0.transform;
+    if (!tf || tf === 'none' || noVectorTransform.has(el) || cs0.display === 'none' || cs0.display === 'contents' || rootAncestors.has(el))
+      return walkInner(el, clip, inheritedOpacity);
+    const m = parseMatrix(tf);
+    const rotated = !!m && !/matrix3d/.test(tf) && (Math.abs(m.b) > 1e-3 || Math.abs(m.c) > 1e-3);
+    const has3D = /matrix3d/.test(tf) && (() => {
+      const p = tf.match(/matrix3d\(([^)]+)\)/)![1].split(',').map((x) => parseFloat(x));
+      return Math.abs(p[2]) > 1e-3 || Math.abs(p[6]) > 1e-3 || Math.abs(p[8]) > 1e-3 || Math.abs(p[9]) > 1e-3 || Math.abs(p[14]) > 1e-3;
+    })();
+    const hasRotateProps = [cs0.getPropertyValue('rotate'), cs0.getPropertyValue('scale'), cs0.getPropertyValue('translate')].some((v) => v && v !== 'none');
+    const m3 = /matrix3d/.test(tf) ? parseMatrix(tf) : null;
+    const mm = m3 && !has3D ? m3 : m;
+    const rot = !!mm && !has3D && (Math.abs(mm.b) > 1e-3 || Math.abs(mm.c) > 1e-3);
+    if (!rot || has3D || hasRotateProps || !(el instanceof HTMLElement || el instanceof SVGElement)) return walkInner(el, clip, inheritedOpacity);
+    // a running CSS animation/transition would re-interpolate the cleared transform: keep raster
+    try { if ((el as any).getAnimations && (el as any).getAnimations().length) return walkInner(el, clip, inheritedOpacity); } catch { /* ignore */ }
+    void rotated;
+
+    const he = el as HTMLElement;
+    const originalStyle = he.getAttribute('style');
+    const start = nodes.length, rStart = rasterTargets.length;
+    const matrix = mm!;
+    const originCss = cs0.transformOrigin; // px, relative to the border box
+    he.setAttribute('style', (originalStyle ? originalStyle.replace(/;?\s*$/, ';') : '') + 'transform:none !important;transition:none !important');
+    transformDepth++;
+    let failed = false;
+    try {
+      const r0 = el.getBoundingClientRect(); // untransformed
+      const [oxs, oys] = originCss.split(/\s+/);
+      const ox = r0.left + (parseFloat(oxs) || 0), oy = r0.top + (parseFloat(oys) || 0);
+      // T(o) · M · T(-o)
+      const layer = {
+        matrix: [
+          matrix.a, matrix.b, matrix.c, matrix.d,
+          ox - matrix.a * ox - matrix.c * oy + matrix.e,
+          oy - matrix.b * ox - matrix.d * oy + matrix.f,
+        ] as [number, number, number, number, number, number],
+        outerClip: clip,
+      };
+      await walkInner(el, null, inheritedOpacity);
+      for (let i = start; i < nodes.length; i++) (nodes[i].layers ||= []).push(layer);
+    } catch (e) {
+      if (!(e instanceof TransformBail)) throw e;
+      failed = true;
+    } finally {
+      transformDepth--;
+      if (originalStyle === null) he.removeAttribute('style');
+      else he.setAttribute('style', originalStyle);
+    }
+    if (failed) {
+      nodes.splice(start);
+      rasterTargets.length = rStart;
+      noVectorTransform.add(el); // re-walk with the old behaviour: raster the transformed element
+      return walkInner(el, clip, inheritedOpacity);
     }
   };
 

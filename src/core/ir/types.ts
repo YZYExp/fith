@@ -90,6 +90,12 @@ export interface NodeBase {
   blur?: number;
   /** CSS clip-path basic shapes (inset/circle/ellipse/polygon) as absolute-px SVG path data; all apply. */
   clipShapes?: { d: string; evenodd?: boolean }[];
+  /**
+   * 2D CSS transforms (rotate/skew) on ancestors, innermost first. The node's own geometry is in the
+   * *untransformed* local space of the transformed element; each layer is emitted as
+   * `<g transform=matrix>` and `outerClip` (the clip in force outside that element) wraps it.
+   */
+  layers?: { matrix: [number, number, number, number, number, number]; outerClip?: Clip | null }[];
 }
 
 export interface GradientStop {
@@ -149,8 +155,8 @@ export interface BoxNode extends NodeBase {
   radii: CornerRadii;
   border?: BorderEdges | null;
   shadows?: BoxShadow[];
-  /** Sharp (blur 0) `inset` box-shadow layers — painted inside the padding box above the background. */
-  insetShadows?: { offsetX: number; offsetY: number; spread: number; color: string }[];
+  /** `inset` box-shadow layers (blur → feGaussianBlur σ=blur/2) — painted inside the padding box above the background. */
+  insetShadows?: { offsetX: number; offsetY: number; spread: number; color: string; blur?: number }[];
   /** CSS outline rendered outside the border box. */
   outline?: { width: number; color: string; style: string; offset: number } | null;
 }

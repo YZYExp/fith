@@ -232,7 +232,8 @@ export async function validate(
       fontMode: opts.fontMode === 'none' ? 'none' : 'embed',
       collectGlyphX: opts.fontMode === 'outline',
       externalCss: opts.fontMode === 'none' ? undefined : await collectExternalCss(page),
-      captureScrollableContent: true,
+      // the Node backend's default is false: `true` widens overflow:hidden clips to their scroll size
+      captureScrollableContent: process.env.FITH_SCROLLABLE === '1',
       containerRasterFallback: true,
     } as any);
     await resolveCorsImages(page, scene);

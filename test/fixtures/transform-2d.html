@@ -1,0 +1,15 @@
+<!doctype html><html><head><meta charset="utf-8"><style>
+body{margin:0;padding:20px;background:#fff;font:16px sans-serif}
+.row{display:flex;gap:28px;align-items:flex-start;margin-bottom:28px}
+.badge{width:130px;height:50px;background:#e8553d;color:#fff;font:700 20px/50px sans-serif;text-align:center;border-radius:8px;transform:rotate(-12deg)}
+.card{width:130px;height:90px;background:#2a7fd4;color:#fff;padding:8px;box-sizing:border-box;border-radius:12px;box-shadow:0 4px 10px rgba(0,0,0,.3);transform:rotate(8deg) scale(1.1)}
+.card .inner{margin-top:6px;background:#fff;color:#222;padding:4px 8px;border-radius:6px;transform:rotate(-5deg);display:inline-block}
+.skew{width:120px;height:56px;background:#2a7;color:#fff;font:700 18px/56px sans-serif;text-align:center;transform:skewX(-20deg)}
+.clipbox{width:120px;height:80px;overflow:hidden;border:2px solid #333;border-radius:10px}
+.clipbox .tilt{width:160px;height:60px;margin:10px;background:linear-gradient(90deg,#f90,#c0c);color:#fff;font:700 18px/60px sans-serif;text-align:center;transform:rotate(15deg)}
+.chev{width:22px;height:22px;border-right:4px solid #333;border-bottom:4px solid #333;transform:rotate(45deg);margin:14px}
+.vert{font:700 22px sans-serif;transform:rotate(90deg);transform-origin:left top;margin-left:30px;white-space:nowrap}
+</style></head><body>
+<div class="row"><div class="badge">Badge</div><div class="card">Card<div class="inner">nested</div></div><div class="skew">Skew</div></div>
+<div class="row"><div class="clipbox"><div class="tilt">clipped</div></div><div class="chev"></div><div class="vert">Vertical</div></div>
+</body></html>

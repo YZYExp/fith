@@ -141,6 +141,29 @@ describe('real-world regressions', () => {
     }
   }, 60_000);
 
+  it('vectorizes blurred inset shadows (feGaussianBlur on a clipped ring, no raster)', async () => {
+    const r = await validate(
+      { url: pathToFileURL(resolve(FIXTURES, 'inset-blur.html')).href },
+      { width: 700, height: 150, name: 'inset-blur', outDir: OUT, fontMode: 'none' },
+    );
+    const svg = readFileSync(resolve(OUT, 'inset-blur.svg'), 'utf8');
+    expect(svg).not.toContain('data:image/png');
+    expect(svg.match(/<feGaussianBlur/g)?.length).toBeGreaterThanOrEqual(5);
+    expect(r.ratio).toBeLessThan(0.02);
+  }, 60_000);
+
+  it('keeps rotated/skewed subtrees vector as <g transform> (text stays text, nested + clipped)', async () => {
+    const r = await validate(
+      { url: pathToFileURL(resolve(FIXTURES, 'transform-2d.html')).href },
+      { width: 560, height: 260, name: 'transform-2d', outDir: OUT, fontMode: 'none' },
+    );
+    const svg = readFileSync(resolve(OUT, 'transform-2d.svg'), 'utf8');
+    expect(svg).not.toContain('data:image/png'); // previously the whole subtree was a screenshot
+    expect(svg.match(/<g transform="matrix\(/g)?.length).toBeGreaterThanOrEqual(6);
+    for (const t of ['Badge', 'Card', 'nested', 'Skew', 'clipped', 'Vertical']) expect(svg).toContain(`>${t}</text>`);
+    expect(r.ratio).toBeLessThan(0.02);
+  }, 60_000);
+
   describe('webfont in an external stylesheet', () => {
     let base: { url: string; close: () => Promise<void> } | null = null;
     afterAll(async () => base?.close());

@@ -25,13 +25,19 @@ function emitInsetShadows(node: BoxNode, defs: Defs): string {
   for (const sh of node.insetShadows!) {
     const hx = px + sh.offsetX + sh.spread, hy = py + sh.offsetY + sh.spread;
     const hw = pw - sh.spread * 2, hh = ph - sh.spread * 2;
-    const outer = roundedRectPath(px, py, pw, ph, pr);
-    let d = outer;
+    // the shadow ring = a large frame minus the (offset, spread-shrunk) hole; blurring the frame lets
+    // the blur bleed inward across the padding-box edge, and the clip trims what falls outside
+    const big = 3 * (sh.blur ?? 0) + Math.abs(sh.offsetX) + Math.abs(sh.offsetY) + sh.spread + 8;
+    const frame = `M${n(px - big)},${n(py - big)}H${n(px + pw + big)}V${n(py + ph + big)}H${n(px - big)}Z`;
+    let d = frame;
     if (hw > 0 && hh > 0) {
       const hr = pr.map((v) => Math.max(0, v - sh.spread)) as CornerRadii;
       d += ' ' + roundedRectPath(hx, hy, hw, hh, hr);
+    } else {
+      d = frame; // spread swallowed the box: solid fill
     }
-    out += `<g clip-path="url(#${clip})"><path fill-rule="evenodd" d="${d}" fill="${esc(sh.color)}"/></g>`;
+    const filt = sh.blur && sh.blur > 0 ? ` filter="url(#${blurFilterId(defs, sh.blur / 2, { x: px - big, y: py - big, width: pw + big * 2, height: ph + big * 2 })})"` : '';
+    out += `<g clip-path="url(#${clip})"><path fill-rule="evenodd" d="${d}" fill="${esc(sh.color)}"${filt}/></g>`;
   }
   return out;
 }
@@ -248,6 +254,11 @@ function wrap(node: PaintNode, inner: string, defs: Defs): string {
   if (node.clip && node.clip.width > 0 && node.clip.height > 0)
     parts.push(`clip-path="url(#${clipId(defs, node.clip)})"`);
   let out = parts.length === 0 ? inner : `<g ${parts.join(' ')}>${inner}</g>`;
+  // transformed ancestors (rotate/skew), innermost first; each one's outer clip lives in the parent space
+  for (const L of node.layers ?? []) {
+    out = `<g transform="matrix(${L.matrix.map((v) => n(v)).join(' ')})">${out}</g>`;
+    if (L.outerClip && L.outerClip.width > 0 && L.outerClip.height > 0) out = `<g clip-path="url(#${clipId(defs, L.outerClip)})">${out}</g>`;
+  }
   // one nested <g> per mask: SVG allows a single mask per element
   for (const m of node.masks ?? []) out = `<g mask="url(#${maskGradientId(defs, m)})">${out}</g>`;
   for (const sh of node.clipShapes ?? []) out = `<g clip-path="url(#${shapeClipId(defs, sh)})">${out}</g>`;
