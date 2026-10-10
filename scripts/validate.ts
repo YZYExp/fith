@@ -80,6 +80,9 @@ export interface ValidateResult {
   contentRatio: number;
   /** worst 64px tile: differing fraction (localizes a failure the global ratio hides). */
   worstTile: number;
+  /** Page self-drift: diff between the reference screenshot and a second one of the ORIGINAL page taken after
+   *  capture. High drift = moving target (carousel/ads) — the diff ratio is then not a conversion error. */
+  drift: number;
 }
 
 export interface SceneStats {
@@ -160,7 +163,11 @@ export async function validate(
         const h = Math.min(document.documentElement.scrollHeight, 6000);
         for (let y = 0; y < h; y += Math.max(300, innerHeight * 0.8)) { scrollTo(0, y); await new Promise((r) => setTimeout(r, 120)); }
         scrollTo(0, 0);
-        await Promise.all(Array.from(document.images).map((i) => (i.complete ? Promise.resolve() : i.decode().catch(() => {}))));
+        // decode() never settles for images that never load: bound the wait
+        await Promise.race([
+          Promise.all(Array.from(document.images).map((i) => (i.complete ? Promise.resolve() : i.decode().catch(() => {})))),
+          new Promise((r) => setTimeout(r, 3000)),
+        ]);
       }).catch(() => {});
       await page.waitForTimeout(600);
     }
@@ -285,6 +292,13 @@ export async function validate(
     writeFileSync(resolve(opts.outDir, `${opts.name}.actual.png`), PNG.sync.write(actual));
     writeFileSync(resolve(opts.outDir, `${opts.name}.diff.png`), PNG.sync.write(diff));
 
+    // noise floor: how much did the original page itself change during the run?
+    let drift = 0;
+    try {
+      const again = PNG.sync.read(await page.screenshot({ clip: { x: 0, y: 0, width: opts.width, height }, animations: 'disabled' }));
+      const dw = Math.min(expected.width, again.width), dh = Math.min(expected.height, again.height);
+      drift = pixelmatch(cropTo(expected, dw, dh), cropTo(again, dw, dh), null, dw, dh, { threshold: 0.1 }) / (dw * dh);
+    } catch { /* page gone */ }
     const e = cropTo(expected, w, h), a2 = cropTo(actual, w, h);
     const bgR = e[0], bgG = e[1], bgB = e[2];
     let content = 0;
@@ -299,7 +313,7 @@ export async function validate(
     }
     const worstTile = tileDiff.reduce((m, d, k) => Math.max(m, d / tileTot[k]), 0);
     const total = w * h;
-    return { width: w, height: h, diffPixels, totalPixels: total, ratio: diffPixels / total, outDir: opts.outDir, stats: sceneStats(scene, domTextChars), svgBytes: Buffer.byteLength(svg), captureMs, contentRatio: diffPixels / Math.max(1, content), worstTile };
+    return { width: w, height: h, diffPixels, totalPixels: total, ratio: diffPixels / total, outDir: opts.outDir, stats: sceneStats(scene, domTextChars), svgBytes: Buffer.byteLength(svg), captureMs, contentRatio: diffPixels / Math.max(1, content), worstTile, drift };
   } finally {
     await browser.close();
   }

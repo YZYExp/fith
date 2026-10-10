@@ -60,6 +60,8 @@ Numbers are `diff` (whole page) unless stated. "→" = before → after.
 | E22 | pypi, Stripe, Bootstrap | cross-origin `<img>` (no CORS) = screenshot placeholder | Node backend downloads `src` via the context request API and emits a real `<image>` (full res, object-fit kept) | pypi raster 2→0 % (SVG 0.9→2 MB: real image bytes); stripe 32→12 % | ✅ |
 | E23 | Stripe | all body text in a fallback font — **zero** `@font-face` embedded | stylesheets on a CDN are opaque to `cssRules` and CORS-blocked for in-page `fetch`; Node backend fetches their text (request API) and passes it as `externalCss`; also carries `font-feature-settings`, `font-variation-settings`, `font-stretch`, `text-rendering` on the `<text>` | stripe 1.66→**0.72 %** | ✅ (regression test uses a CDN fixture with no CORS on CSS) |
 
+| E24 | 32 new live sites | 36氪 33 %, IKEA 13.6 %, Shopify 48 %, Figma 11.6 % — conversion bugs or moving targets? | harness: freeze CSS animations, scroll once for lazy loading, bounded image-decode wait; a second screenshot of the *original* page after capture gives `drift` (page self-change); `unstable` (>2 % drift) is reported, not gated. CDP `Emulation.setVirtualTimePolicy: pause` was tried and **deadlocks Playwright screenshots** (all targets errored) | measured drift: IKEA 11 %, 36氪 9 %, Figma 14 % ⇒ most of those diffs are page motion (carousels, lazy content), not conversion error | ✅ method; 📋 re-baseline those targets as `unstable` |
+
 ### Negative / neutral results (kept so they are not retried blindly)
 - **E14 (backdrop-filter vectorize)** barely moved raster area: the large rasters were `background-image` and
   `pseudo` on *ancestors*; backdrop-filter was only the first thing the triage printed.
