@@ -13,6 +13,8 @@ const only = argv.find((a) => a.startsWith('--only='))?.slice(7).split(',');
 const wantLive = !argv.includes('--local');
 const wantLocal = !argv.includes('--live');
 const update = argv.includes('--update-baseline');
+const repeat = parseInt(argv.find((a) => a.startsWith('--repeat='))?.slice(9) ?? '1', 10) || 1;
+const record = argv.find((a) => a.startsWith('--record='))?.slice(9);
 const OUT = resolve('bench/out');
 const BASELINE = resolve('bench/baseline.json');
 
@@ -51,7 +53,11 @@ async function main() {
   // local pages are served over http: fetch() of fonts/images from file:// is blocked by Chromium
   const server = await serveDir(resolve('bench'));
   for (const t of targets) {
-    const row = await runOne(t, server.url);
+    // live pages drift between runs (ads, rotating stories): take the median-diff of N runs
+    const runs: Row[] = [];
+    for (let k = 0; k < (t.kind === 'live' ? repeat : 1); k++) runs.push(await runOne(t, server.url));
+    const okRuns = runs.filter((r) => r.ratio !== undefined).sort((a, b) => a.ratio! - b.ratio!);
+    const row = okRuns.length ? okRuns[Math.floor((okRuns.length - 1) / 2)] : runs[0];
     const b = base[t.id];
     if (b?.ratio !== undefined && row.ratio !== undefined && row.ratio > Math.max(b.ratio * 1.5, b.ratio + 0.002) && row.status === 'ok') { row.status = 'regress'; row.note = `vs baseline ${(b.ratio * 100).toFixed(2)}%`; }
     rows.push(row);
@@ -67,6 +73,17 @@ async function main() {
     const nb = { ...base };
     for (const r of rows) if (r.status === 'ok' || r.status === 'regress') nb[r.id] = r;
     writeFileSync(BASELINE, JSON.stringify(nb, null, 2) + '\n');
+  }
+  if (record) {
+    const { execSync } = await import('node:child_process');
+    const sha = execSync('git rev-parse --short HEAD').toString().trim();
+    const dirty = execSync('git status --porcelain src scripts').toString().trim() ? '+dirty' : '';
+    const dir = resolve('bench/history');
+    mkdirSync(dir, { recursive: true });
+    const stamp = new Date().toISOString().slice(0, 16).replace(/[-:T]/g, '');
+    const file = join(dir, `${stamp}-${record}.json`);
+    writeFileSync(file, JSON.stringify({ label: record, commit: sha + dirty, date: new Date().toISOString(), repeat, rows: rows.map(({ top, ...r }) => ({ ...r, top: top?.slice(0, 3) })) }, null, 1) + '\n');
+    console.error(`recorded → ${file}`);
   }
   console.log(md);
   if (rows.some((r) => r.status === 'regress' || r.status === 'error')) process.exitCode = 1;

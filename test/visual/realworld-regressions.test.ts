@@ -76,6 +76,18 @@ describe('real-world regressions', () => {
     expect(r.ratio).toBeLessThan(0.005);
   }, 60_000);
 
+  it('vectorizes radial / alpha / px-stop / corner-keyword / multi-layer gradients (no raster)', async () => {
+    const r = await validate(
+      { url: pathToFileURL(resolve(FIXTURES, 'gradients-advanced.html')).href },
+      { width: 840, height: 270, name: 'gradients-advanced', outDir: OUT, fontMode: 'none' },
+    );
+    const svg = readFileSync(resolve(OUT, 'gradients-advanced.svg'), 'utf8');
+    expect(svg).not.toContain('data:image/png');
+    expect(svg.match(/<radialGradient/g)?.length).toBeGreaterThanOrEqual(4);
+    expect(svg.match(/<linearGradient/g)?.length).toBeGreaterThanOrEqual(4);
+    expect(r.ratio).toBeLessThan(0.02);
+  }, 60_000);
+
   describe('webfont in an external stylesheet', () => {
     let base: { url: string; close: () => Promise<void> } | null = null;
     afterAll(async () => base?.close());

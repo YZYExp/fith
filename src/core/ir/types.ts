@@ -96,8 +96,28 @@ export interface GradientStop {
   color: string;
 }
 
+/** Absolute px box a gradient is sized against (CSS padding box); defaults to the node rect. */
+export interface GradientBox {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+export interface RadialGradientFill {
+  type: 'radial-gradient';
+  /** Centre and radii in absolute px (rx==ry for `circle`). */
+  cx: number;
+  cy: number;
+  rx: number;
+  ry: number;
+  stops: GradientStop[];
+  box?: GradientBox;
+}
+
 export interface LinearGradientFill {
   type: 'linear-gradient';
+  box?: GradientBox;
   /** CSS angle in degrees (0 = to top, 90 = to right). */
   angle: number;
   stops: GradientStop[];
@@ -108,7 +128,9 @@ export interface BoxNode extends NodeBase {
   /** Solid background color, or null/absent for none. */
   fill?: string | null;
   /** Background gradient painted over `fill`. */
-  gradient?: LinearGradientFill | null;
+  gradient?: LinearGradientFill | RadialGradientFill | null;
+  /** Extra background layers (multi-layer `background-image`), painted bottom → top above `gradient`. */
+  gradients?: (LinearGradientFill | RadialGradientFill)[];
   radii: CornerRadii;
   border?: BorderEdges | null;
   shadows?: BoxShadow[];

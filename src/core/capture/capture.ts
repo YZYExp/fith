@@ -419,6 +419,208 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
     return null;
   };
 
+  // ---- background gradients (all layers) -------------------------------------------------
+  // Supports linear-/radial-gradient with %/px stops, corner keywords, alpha stops (resampled in
+  // premultiplied space like CSS) and multiple layers. null = something we can't reproduce exactly
+  // (conic, repeating-*, tiled layers, url() mixed in), which keeps the raster fallback.
+  type GBox = { x: number; y: number; width: number; height: number };
+  const rgbaOf = (c: string): [number, number, number, number] | null => {
+    const m = c.match(/rgba?\(\s*([\d.]+)[,\s]+([\d.]+)[,\s]+([\d.]+)(?:[,\s/]+([\d.]+%?))?\s*\)/i);
+    if (!m) return null;
+    const a = m[4] === undefined ? 1 : m[4].endsWith('%') ? parseFloat(m[4]) / 100 : parseFloat(m[4]);
+    return [parseFloat(m[1]), parseFloat(m[2]), parseFloat(m[3]), a];
+  };
+  const STOP_COLOR = /^((?:rgba?|hsla?|oklch|oklab|lab|lch|hwb|color)\([^)]+\)|#[0-9a-fA-F]+|[a-zA-Z]+)/;
+  // parts = comma-split stop list; lineLen = px length that 100% maps to
+  const parseGradientStops = (parts: string[], lineLen: number) => {
+    const raw: { offset: number | null; color: string }[] = [];
+    for (const seg of parts) {
+      const cm = seg.trim().match(STOP_COLOR);
+      if (!cm) return null; // transition hint / calc() / unknown
+      const color = normColor(cm[0]);
+      const rest = seg.trim().slice(cm[0].length).trim();
+      const positions = rest ? rest.split(/\s+/) : [];
+      if (positions.length === 0) raw.push({ offset: null, color });
+      else {
+        for (const pos of positions) {
+          if (/%$/.test(pos)) raw.push({ offset: parseFloat(pos) / 100, color });
+          else if (/px$/.test(pos) && lineLen > 0) raw.push({ offset: parseFloat(pos) / lineLen, color });
+          else if (pos === '0') raw.push({ offset: 0, color });
+          else return null;
+        }
+      }
+    }
+    if (raw.length < 2) return null;
+    if (raw[0].offset == null) raw[0].offset = 0;
+    if (raw[raw.length - 1].offset == null) raw[raw.length - 1].offset = 1;
+    let last = 0;
+    for (let k = 1; k < raw.length; k++) {
+      if (raw[k].offset != null) {
+        const gap = k - last;
+        if (gap > 1) {
+          const a = raw[last].offset as number, b = raw[k].offset as number;
+          for (let j = 1; j < gap; j++) raw[last + j].offset = a + ((b - a) * j) / gap;
+        }
+        last = k;
+      }
+    }
+    let prev = -Infinity;
+    const stops = raw.map((st) => {
+      const off = Math.max(st.offset as number, prev);
+      prev = off;
+      return { offset: off, color: st.color };
+    });
+    // SVG interpolates un-premultiplied, CSS premultiplied: where alpha changes between stops,
+    // insert intermediate stops sampled in premultiplied space so both agree visually.
+    const out: { offset: number; color: string }[] = [];
+    for (let k = 0; k < stops.length; k++) {
+      out.push(stops[k]);
+      if (k === stops.length - 1) break;
+      const c0 = rgbaOf(stops[k].color), c1 = rgbaOf(stops[k + 1].color);
+      const span = stops[k + 1].offset - stops[k].offset;
+      if (!c0 || !c1 || span <= 1e-6 || c0[3] === c1[3] && (c0[3] === 1 || (c0[0] === c1[0] && c0[1] === c1[1] && c0[2] === c1[2]))) continue;
+      const N = 7;
+      for (let j = 1; j < N; j++) {
+        const t = j / N;
+        const a = c0[3] + (c1[3] - c0[3]) * t;
+        const pm = [0, 1, 2].map((q) => (c0[q] * c0[3] * (1 - t) + c1[q] * c1[3] * t));
+        const col = a > 1e-4 ? pm.map((v) => Math.round(v / a)) : [c1[0], c1[1], c1[2]];
+        out.push({ offset: stops[k].offset + span * t, color: `rgba(${col[0]}, ${col[1]}, ${col[2]}, ${Math.round(a * 1000) / 1000})` });
+      }
+    }
+    // SVG stop offsets live in [0,1]
+    return out.map((st) => ({ offset: Math.min(1, Math.max(0, st.offset)), color: st.color }));
+  };
+
+  const lenToPx = (t: string, ref: number): number | null => {
+    if (/%$/.test(t)) return (parseFloat(t) / 100) * ref;
+    if (/px$/.test(t)) return parseFloat(t);
+    if (t === '0') return 0;
+    return null;
+  };
+
+  const parseGradientLayer = (layer: string, box: GBox) => {
+    const v = layer.trim();
+    const isLinear = /^linear-gradient\(/.test(v), isRadial = /^radial-gradient\(/.test(v);
+    if (!isLinear && !isRadial) return null;
+    if (v.lastIndexOf('gradient(') !== v.indexOf('gradient(')) return null;
+    const inner = v.slice(v.indexOf('(') + 1, v.lastIndexOf(')'));
+    const parts = splitTopLevel(inner).map((q) => q.trim());
+    if (parts.length < 2) return null;
+    const { width: w, height: h } = box;
+    if (w <= 0 || h <= 0) return null;
+    if (isLinear) {
+      let angle = 180, i = 0;
+      const first = parts[0];
+      if (/^-?[\d.]+(deg|rad|turn|grad)$/.test(first)) {
+        const f = parseFloat(first);
+        angle = /turn$/.test(first) ? f * 360 : /grad$/.test(first) ? f * 0.9 : /rad$/.test(first) ? (f * 180) / Math.PI : f;
+        i = 1;
+      } else if (/^to\b/.test(first)) {
+        const k = first.replace(/^to\s+/, '').split(/\s+/).sort().join(' ');
+        const deg = (Math.atan2(h, w) * 180) / Math.PI;
+        const map: Record<string, number> = { top: 0, right: 90, bottom: 180, left: 270, 'right top': deg, 'bottom right': 180 - deg, 'bottom left': 180 + deg, 'left top': 360 - deg };
+        if (!(k in map)) return null;
+        angle = map[k];
+        i = 1;
+      }
+      const rad = (angle * Math.PI) / 180;
+      const lineLen = Math.abs(w * Math.sin(rad)) + Math.abs(h * Math.cos(rad));
+      const stops = parseGradientStops(parts.slice(i), lineLen);
+      return stops ? { type: 'linear-gradient' as const, angle, stops, box } : null;
+    }
+    // radial-gradient([circle|ellipse] [size] [at pos], stops…)
+    let i = 0;
+    let shape: 'circle' | 'ellipse' = 'ellipse';
+    let sizeKw = 'farthest-corner';
+    let lens: number[] = [];
+    let atX = w / 2, atY = h / 2;
+    const head = /^(circle|ellipse|closest-side|farthest-side|closest-corner|farthest-corner|at\b|[-\d.]+(px|%))/.test(parts[0]) ? parts[0] : '';
+    if (head) {
+      i = 1;
+      let pre = head, at = '';
+      const ai = head.search(/\bat\b/);
+      if (ai >= 0) { pre = head.slice(0, ai).trim(); at = head.slice(ai + 2).trim(); }
+      for (const t of pre.split(/\s+/).filter(Boolean)) {
+        if (t === 'circle' || t === 'ellipse') shape = t;
+        else if (/^(closest|farthest)-(side|corner)$/.test(t)) sizeKw = t;
+        else {
+          const px = lenToPx(t, t.endsWith('%') ? w : 0);
+          if (px === null) return null;
+          lens.push(px);
+        }
+      }
+      if (lens.length === 1 && !pre.includes('circle') && !pre.includes('ellipse')) shape = 'circle';
+      if (lens.length === 2) shape = 'ellipse';
+      if (at) {
+        const toks = at.split(/\s+/);
+        const posTok = (t: string, ref: number, horiz: boolean): number | null => {
+          if (t === 'center') return ref / 2;
+          if (t === (horiz ? 'left' : 'top')) return 0;
+          if (t === (horiz ? 'right' : 'bottom')) return ref;
+          return lenToPx(t, ref);
+        };
+        let tx = toks[0], ty = toks[1] ?? 'center';
+        if (toks.length === 1) { if (toks[0] === 'top' || toks[0] === 'bottom') { ty = toks[0]; tx = 'center'; } }
+        else if (/^(top|bottom)$/.test(toks[0]) || /^(left|right)$/.test(toks[1])) { tx = toks[1]; ty = toks[0]; }
+        const px = posTok(tx, w, true), py = posTok(ty, h, false);
+        if (px === null || py === null || toks.length > 2) return null;
+        atX = px; atY = py;
+      }
+    }
+    const dxL = atX, dxR = w - atX, dyT = atY, dyB = h - atY;
+    let rx: number, ry: number;
+    if (lens.length) {
+      rx = lens[0]; ry = lens.length > 1 ? lens[1] : lens[0];
+      if (lens.length > 1 && lens[1] !== undefined) ry = lenToPx(String(lens[1]) + 'px', h) ?? ry;
+    } else if (sizeKw === 'closest-side') {
+      rx = Math.min(dxL, dxR); ry = Math.min(dyT, dyB);
+      if (shape === 'circle') rx = ry = Math.min(rx, ry);
+    } else if (sizeKw === 'farthest-side') {
+      rx = Math.max(dxL, dxR); ry = Math.max(dyT, dyB);
+      if (shape === 'circle') rx = ry = Math.max(rx, ry);
+    } else if (sizeKw === 'closest-corner') {
+      const cx2 = Math.min(dxL, dxR), cy2 = Math.min(dyT, dyB);
+      if (shape === 'circle') rx = ry = Math.hypot(cx2, cy2);
+      else { const fx = cx2, fy = cy2; rx = fx * Math.SQRT2; ry = fy * Math.SQRT2; }
+    } else {
+      const fx = Math.max(dxL, dxR), fy = Math.max(dyT, dyB);
+      if (shape === 'circle') rx = ry = Math.hypot(fx, fy);
+      else { rx = fx * Math.SQRT2; ry = fy * Math.SQRT2; }
+    }
+    if (!(rx > 0) || !(ry > 0)) return null;
+    const stops = parseGradientStops(parts.slice(i), rx);
+    return stops ? { type: 'radial-gradient' as const, cx: box.x + atX, cy: box.y + atY, rx, ry, stops, box } : null;
+  };
+
+  // All gradient layers of a background-image (CSS order: first = top). null when any layer is
+  // unsupported or sized/tiled (so raster stays the fallback instead of a wrong vector).
+  const parseBgLayers = (cs: CSSStyleDeclaration, box: GBox) => {
+    const value = cs.backgroundImage;
+    if (!value || value === 'none') return null;
+    if (cs.backgroundBlendMode && cs.backgroundBlendMode.split(',').some((m) => m.trim() !== 'normal')) return null;
+    const layers = splitTopLevel(value);
+    const sizes = splitTopLevel(cs.backgroundSize || 'auto');
+    const out: NonNullable<ReturnType<typeof parseGradientLayer>>[] = [];
+    for (let k = 0; k < layers.length; k++) {
+      if (layers[k].trim() === 'none') continue; // `image, color` shorthand leaves an empty layer
+      const size = (sizes[k % sizes.length] || 'auto').trim();
+      if (!['auto', 'auto auto', '100%', '100% 100%', 'cover', 'contain'].includes(size)) return null;
+      const g = parseGradientLayer(layers[k], box);
+      if (!g) return null;
+      out.push(g);
+    }
+    return out.length ? out : null;
+  };
+  // CSS background positioning area (padding box) of an element, absolute px
+  const paddingBoxOf = (el: Element, cs: CSSStyleDeclaration): GBox => {
+    const r = el.getBoundingClientRect();
+    const l = num(cs.borderLeftWidth), t = num(cs.borderTopWidth);
+    const origin = cs.backgroundOrigin;
+    if (origin === 'border-box') return { x: r.left, y: r.top, width: r.width, height: r.height };
+    return { x: r.left + l, y: r.top + t, width: r.width - l - num(cs.borderRightWidth), height: r.height - t - num(cs.borderBottomWidth) };
+  };
+
   // CSS mask-image: linear-gradient(...) is the ubiquitous "fade out the end of a
   // truncated label" pattern. Computed values keep px/calc() stop positions, which
   // parseLinearGradient rejects, so resolve them here against the gradient line
@@ -655,6 +857,7 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
     if (
       cs.backgroundImage &&
       cs.backgroundImage !== 'none' &&
+      !parseBgLayers(cs, paddingBoxOf(el, cs)) &&
       !parseFirstLinearGradient(cs.backgroundImage) &&
       !bgImageLayer(el, cs)
     )
@@ -719,7 +922,8 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
     if (!r) return;
     const id = nid();
     const desc = el ? el.tagName.toLowerCase() + (typeof (el as any).className === 'string' && (el as any).className ? '.' + (el as any).className.trim().split(/\s+/).slice(0, 2).join('.') : '') : undefined;
-    nodes.push({ kind: 'raster', id, rect: r, opacity, clip, reason, desc: desc && desc.slice(0, 80) } as PaintNode);
+    const detail = el && reason === 'background-image' ? ' ' + getComputedStyle(el).backgroundImage.slice(0, 90) : el && reason === 'clip-path' ? ' ' + getComputedStyle(el).clipPath.slice(0, 60) : '';
+    nodes.push({ kind: 'raster', id, rect: r, opacity, clip, reason, desc: desc && (desc.slice(0, 50) + detail) } as PaintNode);
     rasterTargets.push({ id, ...r });
     // in-page backends can re-render this element themselves when no screenshot is available
     if (el) opts.rasterElements?.set(id, el);
@@ -1126,8 +1330,11 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
     const fill = textClipped || canvasBg || transparent(cs.backgroundColor) ? null : normColor(cs.backgroundColor);
     const { border } = buildBorder(cs);
     const shadows = parseShadows(cs.boxShadow);
-    const gradient =
-      !textClipped && cs.backgroundImage && cs.backgroundImage !== 'none' ? parseFirstLinearGradient(cs.backgroundImage) : null;
+    const bgLayers = !textClipped && cs.backgroundImage && cs.backgroundImage !== 'none' ? parseBgLayers(cs, paddingBoxOf(el, cs)) : null;
+    const gradient: any = bgLayers
+      ? bgLayers.length === 1 ? bgLayers[0] : null
+      : !textClipped && cs.backgroundImage && cs.backgroundImage !== 'none' ? parseFirstLinearGradient(cs.backgroundImage) : null;
+    const gradients = bgLayers && bgLayers.length > 1 ? bgLayers.slice().reverse() : undefined;
     const outlineW = num(cs.outlineWidth);
     const outlineStyle = cs.outlineStyle;
     const outline =
@@ -1135,10 +1342,10 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
         ? { width: outlineW, color: normColor(cs.outlineColor), style: outlineStyle, offset: num(cs.outlineOffset) }
         : null;
     const bgImg = textClipped ? null : bgImageLayer(el, cs);
-    if (!fill && !gradient && !border && shadows.length === 0 && !outline && !bgImg && !(cs.boxShadow || '').includes('inset')) return;
+    if (!fill && !gradient && !gradients && !border && shadows.length === 0 && !outline && !bgImg && !(cs.boxShadow || '').includes('inset')) return;
     const blur = el.childNodes.length === 0 ? pureBlur(cs.filter) : null;
     const insetShadows = parseInsetShadows(cs.boxShadow) || [];
-    if (fill || gradient || border || shadows.length > 0 || outline || insetShadows.length > 0)
+    if (fill || gradient || gradients || border || shadows.length > 0 || outline || insetShadows.length > 0)
     nodes.push({
       kind: 'box',
       id: nid(),
@@ -1148,6 +1355,7 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
       blur: blur || undefined,
       fill,
       gradient,
+      gradients,
       radii: radiiOf(cs, r.width, r.height),
       border,
       shadows,
@@ -1211,9 +1419,11 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
     const height = cbY + cbH - num(ps.bottom) - num(ps.marginBottom) - y;
     if (width <= 0 || height <= 0) return { handled: true }; // collapsed → nothing visible
 
-    const gradient =
-      ps.backgroundImage && ps.backgroundImage !== 'none' ? parseFirstLinearGradient(ps.backgroundImage) : null;
-    if (ps.backgroundImage && ps.backgroundImage !== 'none' && !gradient) return { handled: false }; // url()/radial/conic
+    const hasBgImg = ps.backgroundImage && ps.backgroundImage !== 'none';
+    const pbl = hasBgImg ? parseBgLayers(ps, { x, y, width, height }) : null;
+    const gradient: any = pbl ? (pbl.length === 1 ? pbl[0] : null) : hasBgImg ? parseFirstLinearGradient(ps.backgroundImage) : null;
+    const pseudoGradients = pbl && pbl.length > 1 ? pbl.slice().reverse() : undefined;
+    if (hasBgImg && !gradient && !pseudoGradients) return { handled: false }; // url()/conic/tiled
     if (ps.boxShadow && ps.boxShadow.includes('inset')) return { handled: false };
     const blur = ps.filter && ps.filter !== 'none' ? pureBlur(ps.filter) : 0;
     if (blur === null) return { handled: false }; // other filter functions
@@ -1225,7 +1435,7 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
     }
     const fill = transparent(ps.backgroundColor) ? null : normColor(ps.backgroundColor);
     const shadows = parseShadows(ps.boxShadow);
-    if (!fill && !gradient && !border && shadows.length === 0) return { handled: true }; // nothing to draw
+    if (!fill && !gradient && !pseudoGradients && !border && shadows.length === 0) return { handled: true }; // nothing to draw
 
     // Clip the pseudo to the host's rounded content box when the host clips overflow,
     // so an inset overlay follows the card's rounded corners.
@@ -1243,6 +1453,7 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
         blur: blur || undefined,
         fill,
         gradient,
+        gradients: pseudoGradients,
         radii: radiiOf(ps, width, height),
         border,
         shadows,

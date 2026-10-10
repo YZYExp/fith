@@ -31,7 +31,8 @@
     "validate:example": "tsx scripts/validate-example.ts",
     "bench": "tsx bench/run.ts",
     "bench:fetch": "tsx bench/fetch.ts",
-    "inspect": "tsx scripts/inspect.ts"
+    "inspect": "tsx scripts/inspect.ts",
+    "bench:docs": "tsx bench/docs.ts"
   },
   "keywords": [
     "html",

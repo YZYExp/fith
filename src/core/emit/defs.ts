@@ -3,7 +3,7 @@
  * filters/masks, gradients). Each builder registers its markup with a Defs
  * instance and returns the generated id, deduplicating identical definitions.
  */
-import type { Clip, CornerRadii, LinearGradientFill } from '../ir/types.js';
+import type { Clip, CornerRadii, LinearGradientFill, RadialGradientFill } from '../ir/types.js';
 import { n, esc, noRadii, roundedRectPath } from './primitives.js';
 
 /** Content-addressed store of <defs> children; identical content shares one id. */
@@ -81,9 +81,24 @@ function splitColor(c: string): { color: string; opacity: string } {
 
 export function gradientId(
   defs: Defs,
-  g: LinearGradientFill,
-  rect: { x: number; y: number; width: number; height: number },
+  g: LinearGradientFill | RadialGradientFill,
+  rectIn: { x: number; y: number; width: number; height: number },
 ): string {
+  const rect = g.box ?? rectIn;
+  if (g.type === 'radial-gradient') {
+    const rstops = g.stops
+      .map((s) => {
+        const { color, opacity } = splitColor(s.color);
+        const op = opacity !== '1' ? ` stop-opacity="${opacity}"` : '';
+        return `<stop offset="${n(s.offset * 100)}%" stop-color="${esc(color)}"${op}/>`;
+      })
+      .join('');
+    // ellipse = circle of radius rx, squashed vertically about the centre
+    const tf = g.ry !== g.rx && g.rx > 0 ? ` gradientTransform="translate(${n(g.cx)} ${n(g.cy)}) scale(1 ${n(g.ry / g.rx)}) translate(${n(-g.cx)} ${n(-g.cy)})"` : '';
+    return defs.add(
+      `<radialGradient id="{ID}" gradientUnits="userSpaceOnUse" cx="${n(g.cx)}" cy="${n(g.cy)}" r="${n(g.rx)}"${tf}>${rstops}</radialGradient>`,
+    );
+  }
   // CSS 0deg = to top; direction vector in screen coords (y down) = (sinθ, -cosθ)
   const dx = Math.sin((g.angle * Math.PI) / 180);
   const dy = -Math.cos((g.angle * Math.PI) / 180);

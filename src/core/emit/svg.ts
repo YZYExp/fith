@@ -65,6 +65,7 @@ function emitBox(node: BoxNode, defs: Defs): string {
 
   if (node.fill) out += fillShape(rect, radii, esc(node.fill));
   if (node.gradient) out += fillShape(rect, radii, `url(#${gradientId(defs, node.gradient, rect)})`);
+  for (const g of node.gradients ?? []) out += fillShape(rect, radii, `url(#${gradientId(defs, g, rect)})`);
 
   if (node.insetShadows && node.insetShadows.length > 0) out += emitInsetShadows(node, defs);
 
