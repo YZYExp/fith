@@ -1047,7 +1047,7 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
     if (!r) return;
     const id = nid();
     const desc = el ? el.tagName.toLowerCase() + (typeof (el as any).className === 'string' && (el as any).className ? '.' + (el as any).className.trim().split(/\s+/).slice(0, 2).join('.') : '') : undefined;
-    const detail = el && reason === 'background-image' ? ' ' + getComputedStyle(el).backgroundImage.slice(0, 90) : el && reason === 'clip-path' ? ' ' + getComputedStyle(el).clipPath.slice(0, 60) : '';
+    const detail = el && reason === 'background-image' ? ' ' + getComputedStyle(el).backgroundImage.slice(0, 90) : el && reason === 'clip-path' ? ' ' + getComputedStyle(el).clipPath.slice(0, 60) : el && reason === 'mask' ? (() => { const c: any = getComputedStyle(el); return ' ' + String(c.maskImage || c.webkitMaskImage).slice(0, 80) + ' | ' + (c.maskSize || '') + ' | ' + (c.maskComposite || ''); })() : '';
     nodes.push({ kind: 'raster', id, rect: r, opacity, clip, reason, desc: desc && (desc.slice(0, 50) + detail) } as PaintNode);
     rasterTargets.push({ id, ...r });
     // in-page backends can re-render this element themselves when no screenshot is available
