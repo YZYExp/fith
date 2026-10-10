@@ -38,12 +38,12 @@ Status legend: ✅ shipped · 🔧 technique proven in the lab, not wired into c
 | CSS | SVG technique | lab diff | status |
 |---|---|---|---|
 | `filter: blur(r)` | `feGaussianBlur stdDeviation=r` (region = box ± 3r) | – | ✅ (childless boxes/pseudos only) |
-| `filter: grayscale/sepia/saturate/hue-rotate` | `feColorMatrix` (spec matrices) | grayscale **0.00 %**, hue-rotate **0.00 %** | 🔧 |
-| `filter: brightness/contrast/invert/opacity` | `feComponentTransfer` (`linear`/`table`) | **0.00 %** | 🔧 |
-| `filter: drop-shadow()` | `feDropShadow` | 0.28 % | 🔧 |
-| `filter` on a *subtree* | wrap the element's nodes in `<g filter>` (same mechanism as `clipShapes`/`masks`) | – | 🧭 — today the whole subtree is rastered |
+| `filter: grayscale/sepia/saturate/hue-rotate` | `feColorMatrix` (spec matrices) | grayscale **0.00 %**, hue-rotate **0.00 %** | ✅ (subtree group) |
+| `filter: brightness/contrast/invert/opacity` | `feComponentTransfer` (`linear`/`table`) | **0.00 %** | ✅ |
+| `filter: drop-shadow()` | `feDropShadow` (σ = blur/2) | 0.28 % | ✅ |
+| `filter` on a *subtree* | one `<g filter>` around all member nodes (`Scene.groups`) | – (fixture `filter-blend-groups`) | ✅ |
 | `filter: url(#svgFilter)` | copy the referenced `<filter>` into `<defs>` | – | 🧭 |
-| `mix-blend-mode` | `style="mix-blend-mode:…"` on the node group; needs an isolated stacking group | multiply **0.00 %**, difference (text) 1.08 % | 🔧 — blend works against the SVG's own earlier content, which is exactly the backdrop we emit |
+| `mix-blend-mode` | `style="mix-blend-mode:…"` on the node group | multiply **0.00 %**, difference (text) 1.08 % | ✅ — blends against the SVG's own earlier content, which is exactly the backdrop we emit |
 | `backdrop-filter: blur()` | re-emit everything painted *below* inside `<g clip-path=box><g filter=blur>…</g></g>` (`BackgroundImage` is unsupported in browsers); can reference one shared `<g id>` via `<use>` | **0.21 %** | 🔧 — today the blur is dropped (box stays vector) |
 | `opacity`, `isolation` | group `opacity`; `isolation:isolate` | – | ✅ / 🧭 |
 | `mask-image` linear / `url()` | `<mask>` alpha | – | ✅ |
