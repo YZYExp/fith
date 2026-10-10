@@ -611,6 +611,12 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
     if (v.lastIndexOf('gradient(') !== v.indexOf('gradient(')) return null;
     const inner = v.slice(v.indexOf('(') + 1, v.lastIndexOf(')'));
     const parts = splitTopLevel(inner).map((q) => q.trim());
+    // `in srgb` is the interpolation SVG already uses; other colour spaces (oklab, hsl…) would differ
+    const ci = parts[0].match(/^(.*?)\s*\bin\s+([\w-]+)(?:\s+\w+\s+hue)?$/);
+    if (ci) {
+      if (ci[2] !== 'srgb') return null;
+      if (ci[1]) parts[0] = ci[1]; else parts.shift();
+    }
     if (parts.length < 2) return null;
     const { width: w, height: h } = box;
     if (w <= 0 || h <= 0) return null;
@@ -1098,8 +1104,10 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
     for (let k = 0; k < layers.length; k++) {
       const lay = layers[k].trim();
       if (lay === 'none') continue;
-      if (atts[k % atts.length] === 'fixed') return null;
-      const area = boxes[orgs[k % orgs.length]], clipName = clips[k % clips.length];
+      // fixed: positioned against the viewport (scroll is 0 during capture ⇒ viewport px == page px)
+      const fixedAtt = atts[k % atts.length] === 'fixed';
+      const area = fixedAtt ? { x: 0, y: 0, width: document.documentElement.clientWidth, height: window.innerHeight } : boxes[orgs[k % orgs.length]];
+      const clipName = clips[k % clips.length];
       const clipBox = boxes[clipName];
       if (!area || !clipBox || area.width <= 0 || area.height <= 0) return null;
       const rt = reps[k % reps.length].split(/\s+/);

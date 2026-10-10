@@ -216,6 +216,17 @@ describe('real-world regressions', () => {
     expect(r.ratio).toBeLessThan(0.03);
   }, 60_000);
 
+  it('accepts `linear-gradient(in srgb, …)` (same interpolation as SVG)', async () => {
+    const r = await validate(
+      { url: pathToFileURL(resolve(FIXTURES, 'gradient-in-srgb.html')).href },
+      { width: 240, height: 120, name: 'gradient-in-srgb', outDir: OUT, fontMode: 'none' },
+    );
+    const svg = readFileSync(resolve(OUT, 'gradient-in-srgb.svg'), 'utf8');
+    expect(svg).toContain('<linearGradient');
+    expect(svg).not.toContain('data:image/png');
+    expect(r.ratio).toBeLessThan(0.005);
+  }, 60_000);
+
   describe('webfont in an external stylesheet', () => {
     let base: { url: string; close: () => Promise<void> } | null = null;
     afterAll(async () => base?.close());

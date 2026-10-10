@@ -21,7 +21,7 @@ Status legend: ✅ shipped · 🔧 technique proven in the lab, not wired into c
 | `repeating-linear-gradient` | `spreadMethod="repeat"` over one period | – (fixture `clip-conic-repeat`) | ✅ |
 | `conic-gradient` | no primitive → 180 painter's-algorithm pie slices (each slice covers the rest of the turn ⇒ every seam anti-aliased once) | – | ✅ (file-size cost ≈ 18 KB / gradient) |
 | multi-layer backgrounds | stack of fills bottom→top | – | ✅ (only default-sized layers) |
-| tiled / sized layers (`background-size: 20px`) | `<pattern>` | – | 🧭 (tailwindcss.com hatch, many sites) |
+| tiled / sized / positioned / clipped layers, url()+gradient mixes, `image-set`, `fixed` | `<pattern>` tile per layer + clip box | – (fixture `bg-layers`) | ✅ (`space`/`round`, non-sRGB interpolation ⇒ raster) |
 | `box-shadow` (outer, blur, spread) | blurred shape under an inverse mask | – | ✅ |
 | `box-shadow: inset` sharp | evenodd ring clipped to the padding box | 0.00 % (`inset-blur-shadow`) | ✅ |
 | `box-shadow: inset` with blur | same ring + `feGaussianBlur`, clipped to the padding box | **0.00 %** | ✅ |
