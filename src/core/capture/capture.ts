@@ -1889,8 +1889,8 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
     const m = ps.content.match(/^(["'])([\s\S]*)\1$/);
     const am = ps.content.match(/^attr\(\s*([\w-]+)\s*\)$/);
     if (!m && !am) return null; // url()/counter()/quotes: not plain text
-    // url() backgrounds need an async image fetch (not available here); gradients, borders, shadows are fine
-    if ((ps.backgroundImage || '').includes('url(')) return null;
+    // url() backgrounds are pre-loaded by walkNode (prepareImageLayers on the pseudo style); an unloaded one → raster
+    if ((ps.backgroundImage || '').includes('url(') && !splitTopLevel(ps.backgroundImage).every((l) => l.trim() === 'none' || /gradient\(/.test(l) || (layerUrl(l) !== null && imgInfo.get(layerUrl(l)!)))) return null;
     const text = am
       ? el.getAttribute(am[1]) || ''
       : m![2]
@@ -2310,6 +2310,11 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
     let afterPseudoNodes: PaintNode[] = [];
     let pseudoVectorized = false;
     if (boxReason === 'pseudo') {
+      // pseudo backgrounds may be url() images (accordion chevrons, icons): load them before the sync materialize
+      for (const sel of ['::before', '::after'] as const) {
+        const pbg = getComputedStyle(el, sel).backgroundImage;
+        if (pbg && pbg !== 'none') for (const layer of splitTopLevel(pbg)) { const u = layerUrl(layer); if (u) await loadImgInfo(u); }
+      }
       // Try to vectorize the decorative pseudo(s) rather than raster the whole box.
       const pseudoPart = (sel: '::before' | '::after') => {
         if (!pseudoVisible(el, sel)) return { handled: true as const, nodes: [] as PaintNode[] };
