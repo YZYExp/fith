@@ -17,24 +17,32 @@ export const esc = (s: string) =>
 export const uniformRadii = (r: CornerRadii) => r[0] === r[1] && r[1] === r[2] && r[2] === r[3];
 export const noRadii = (r: CornerRadii) => r[0] === 0 && r[1] === 0 && r[2] === 0 && r[3] === 0;
 
-/** Build an SVG path for a rectangle with (clamped) per-corner radii. */
-export function roundedRectPath(x: number, y: number, w: number, h: number, radii: CornerRadii): string {
-  let [tl, tr, br, bl] = radii;
-  const maxR = Math.min(w, h) / 2;
-  tl = Math.min(tl, maxR);
-  tr = Math.min(tr, maxR);
-  br = Math.min(br, maxR);
-  bl = Math.min(bl, maxR);
+/**
+ * SVG path for a rectangle with per-corner radii, scaled like CSS: if adjacent radii overflow a side, ALL
+ * radii shrink by the same factor (so a 9999px pill is a half-height capsule and 50% is an ellipse).
+ * `ry` are the vertical radii for elliptical corners (defaults to the horizontal ones).
+ */
+export function roundedRectPath(x: number, y: number, w: number, h: number, radii: CornerRadii, ry?: CornerRadii): string {
+  const rxs = radii, rys = ry ?? radii;
+  const f = Math.min(
+    1,
+    w / Math.max(1e-9, rxs[0] + rxs[1]),
+    w / Math.max(1e-9, rxs[3] + rxs[2]),
+    h / Math.max(1e-9, rys[0] + rys[3]),
+    h / Math.max(1e-9, rys[1] + rys[2]),
+  );
+  const [tlx, trx, brx, blx] = rxs.map((v) => v * f);
+  const [tly, try_, bry, bly] = rys.map((v) => v * f);
   return [
-    `M${n(x + tl)},${n(y)}`,
-    `H${n(x + w - tr)}`,
-    tr ? `A${n(tr)},${n(tr)} 0 0 1 ${n(x + w)},${n(y + tr)}` : '',
-    `V${n(y + h - br)}`,
-    br ? `A${n(br)},${n(br)} 0 0 1 ${n(x + w - br)},${n(y + h)}` : '',
-    `H${n(x + bl)}`,
-    bl ? `A${n(bl)},${n(bl)} 0 0 1 ${n(x)},${n(y + h - bl)}` : '',
-    `V${n(y + tl)}`,
-    tl ? `A${n(tl)},${n(tl)} 0 0 1 ${n(x + tl)},${n(y)}` : '',
+    `M${n(x + tlx)},${n(y)}`,
+    `H${n(x + w - trx)}`,
+    trx || try_ ? `A${n(trx)},${n(try_)} 0 0 1 ${n(x + w)},${n(y + try_)}` : '',
+    `V${n(y + h - bry)}`,
+    brx || bry ? `A${n(brx)},${n(bry)} 0 0 1 ${n(x + w - brx)},${n(y + h)}` : '',
+    `H${n(x + blx)}`,
+    blx || bly ? `A${n(blx)},${n(bly)} 0 0 1 ${n(x)},${n(y + h - bly)}` : '',
+    `V${n(y + tly)}`,
+    tlx || tly ? `A${n(tlx)},${n(tly)} 0 0 1 ${n(x + tlx)},${n(y)}` : '',
     'Z',
   ]
     .filter(Boolean)

@@ -169,6 +169,11 @@ export async function validate(
           new Promise((r) => setTimeout(r, 3000)),
         ]);
       }).catch(() => {});
+      // images that were still loading (lazy / slow CDN): poll until complete, bounded
+      await page.evaluate(async () => {
+        const t0 = Date.now();
+        while (Date.now() - t0 < 6000 && Array.from(document.images).some((i) => !i.complete && i.getBoundingClientRect().top < innerHeight * 3)) await new Promise((r) => setTimeout(r, 250));
+      }).catch(() => {});
       await page.waitForTimeout(600);
     }
     else await page.setContent(target.html, { waitUntil: 'networkidle' });

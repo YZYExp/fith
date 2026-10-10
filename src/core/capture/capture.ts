@@ -275,9 +275,21 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
     const one = (v: string): number => {
       const parts = (v || '0').trim().split(/\s+/);
       const res = parts.map((t, i) => (t.endsWith('%') ? (parseFloat(t) / 100) * (i === 0 ? w ?? 0 : h ?? w ?? 0) : num(t)));
-      return Math.min(...res);
+      return res[0];
     };
     return [one(cs.borderTopLeftRadius), one(cs.borderTopRightRadius), one(cs.borderBottomRightRadius), one(cs.borderBottomLeftRadius)];
+  };
+
+  // vertical radii of elliptical corners (`50%`, `10px / 30px`); undefined when every corner is circular
+  const radiiYOf = (cs: CSSStyleDeclaration, w: number, h: number): CornerRadii | undefined => {
+    const one = (v: string): [number, number] => {
+      const parts = (v || '0').trim().split(/\s+/);
+      const px = (t: string, ref: number) => (t.endsWith('%') ? (parseFloat(t) / 100) * ref : num(t));
+      return [px(parts[0], w), px(parts[1] ?? parts[0], h)];
+    };
+    const c = [cs.borderTopLeftRadius, cs.borderTopRightRadius, cs.borderBottomRightRadius, cs.borderBottomLeftRadius].map(one);
+    if (c.every((q) => Math.abs(q[0] - q[1]) < 0.01)) return undefined;
+    return c.map((q) => q[1]) as CornerRadii;
   };
 
   const intersect = (a: Clip | null, b: Clip): Clip => {
@@ -1497,6 +1509,7 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
       gradient,
       gradients,
       radii: radiiOf(cs, r.width, r.height),
+      radiiY: radiiYOf(cs, r.width, r.height),
       border,
       shadows,
       insetShadows: insetShadows.length ? insetShadows : undefined,

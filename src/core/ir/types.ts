@@ -153,6 +153,8 @@ export interface BoxNode extends NodeBase {
   /** Extra background layers (multi-layer `background-image`), painted bottom → top above `gradient`. */
   gradients?: (LinearGradientFill | RadialGradientFill | ConicGradientFill)[];
   radii: CornerRadii;
+  /** Vertical radii when corners are elliptical (e.g. `border-radius: 50%` on a non-square box). */
+  radiiY?: CornerRadii;
   border?: BorderEdges | null;
   shadows?: BoxShadow[];
   /** `inset` box-shadow layers (blur → feGaussianBlur σ=blur/2) — painted inside the padding box above the background. */

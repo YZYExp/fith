@@ -175,6 +175,14 @@ describe('real-world regressions', () => {
     expect(r.ratio).toBeLessThan(0.01);
   }, 60_000);
 
+  it('clamps huge uniform radii (9999px pills) to half the shorter side instead of a lens', async () => {
+    const r = await validate(
+      { url: pathToFileURL(resolve(FIXTURES, 'pill-radius.html')).href },
+      { width: 300, height: 140, name: 'pill-radius', outDir: OUT, fontMode: 'none' },
+    );
+    expect(r.ratio).toBeLessThan(0.006);
+  }, 60_000);
+
   describe('webfont in an external stylesheet', () => {
     let base: { url: string; close: () => Promise<void> } | null = null;
     afterAll(async () => base?.close());

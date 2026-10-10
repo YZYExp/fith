@@ -69,9 +69,9 @@ function emitBox(node: BoxNode, defs: Defs): string {
     }
   }
 
-  if (node.fill) out += fillShape(rect, radii, esc(node.fill));
+  if (node.fill) out += fillShape(rect, radii, esc(node.fill), node.radiiY);
   const paintGradient = (g: NonNullable<BoxNode['gradient']>) => {
-    if (g.type !== 'conic-gradient') return fillShape(rect, radii, `url(#${gradientId(defs, g, rect)})`);
+    if (g.type !== 'conic-gradient') return fillShape(rect, radii, `url(#${gradientId(defs, g, rect)})`, node.radiiY);
     // wedge fan clipped to the (rounded) box
     const cid = clipId(defs, { ...rect, radii });
     return `<g clip-path="url(#${cid})">${conicWedges(g, rect)}</g>`;
@@ -108,16 +108,21 @@ function fillShape(
   rect: { x: number; y: number; width: number; height: number },
   radii: CornerRadii,
   fill: string,
+  radiiY?: CornerRadii,
 ): string {
+  if (radiiY) return `<path d="${roundedRectPath(rect.x, rect.y, rect.width, rect.height, radii, radiiY)}" fill="${fill}"/>`;
   if (noRadii(radii)) {
     return `<rect x="${n(rect.x)}" y="${n(rect.y)}" width="${n(rect.width)}" height="${n(
       rect.height,
     )}" fill="${fill}"/>`;
   }
   if (uniformRadii(radii)) {
+    // SVG clamps rx to width/2 and ry (=rx) to height/2 *separately*: a 9999px pill would become a
+    // lens. CSS clamps the radius itself to half the shorter side.
+    const rr = Math.min(radii[0], rect.width / 2, rect.height / 2);
     return `<rect x="${n(rect.x)}" y="${n(rect.y)}" width="${n(rect.width)}" height="${n(
       rect.height,
-    )}" rx="${n(radii[0])}" fill="${fill}"/>`;
+    )}" rx="${n(rr)}" fill="${fill}"/>`;
   }
   return `<path d="${roundedRectPath(rect.x, rect.y, rect.width, rect.height, radii)}" fill="${fill}"/>`;
 }
@@ -260,7 +265,7 @@ function wrap(node: PaintNode, inner: string, defs: Defs): string {
   let out = parts.length === 0 ? inner : `<g ${parts.join(' ')}>${inner}</g>`;
   // transformed ancestors (rotate/skew), innermost first; each one's outer clip lives in the parent space
   for (const L of node.layers ?? []) {
-    out = `<g transform="matrix(${L.matrix.map((v) => n(v)).join(' ')})">${out}</g>`;
+    out = `<g transform="matrix(${L.matrix.map((v) => String(Math.round(v * 1e6) / 1e6)).join(' ')})">${out}</g>`;
     if (L.outerClip && L.outerClip.width > 0 && L.outerClip.height > 0) out = `<g clip-path="url(#${clipId(defs, L.outerClip)})">${out}</g>`;
   }
   // one nested <g> per mask: SVG allows a single mask per element
