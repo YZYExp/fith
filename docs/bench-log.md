@@ -49,7 +49,7 @@ rendering replaced them (see the Stripe note under Negative results).
 | Leaflet (lib) | 3.47 % | 0.01 % | 0 % | 0 % |
 | Reveal.js (lib) | 3.2 % | 0.13 % | 0 % | 0 % |
 | Bootstrap dashboard (lib) | 0.40 % | 0.45 % | 23 % | 9 % |
-| mean over 67 targets | – | – | ~14 % (E19) | **8.5 %** |
+| mean over 67 targets | – | – | ~14 % (E19) | **5.8 %** (run `pseudo-url-3d-flat`) |
 
 Remaining raster, by area over the corpus: `<video>` 4.4 MP, cross-origin `<iframe>` 3.9 MP, 3D transforms 0.8 MP,
 `mask-composite: exclude` 0.8 MP, residual pseudo 0.56 MP, form controls 0.12 MP. `<video>`/iframes are inherently pixels.
@@ -97,8 +97,13 @@ Numbers are `diff` (whole page) unless stated. "→" = before → after.
 | E34 | GitHub Docs, MS Learn, Spotify, Airbnb, tailwindcss.com | `background-image` was the #3 raster source: sized/tiled layers, `url()` + gradient mixes, `image-set()`, 4-value positions, `content-box` clip, `fixed` attachment, `in srgb` | general background engine: each layer → tile rect + repeat flags + clip box (own radii) → SVG `<pattern>` (gradients expressed in tile-local space, conic as slices, images as `<image>`); `calc(100% − Npx)` positions; fixed = viewport-positioned; the gradient fast path now requires default origin/clip/attachment (it silently ignored `content-box` before); `linear-gradient(in srgb,…)` accepted, other colour spaces stay raster | githubdocs 23→**0 %**, mslearn 13→**0 %**, spotify 13→1 %, airbnb 16→1 %, tailwindcss 26→12 % | ✅ (space/round repeat, non-sRGB interpolation → raster) |
 | E35 | Linear grain, Stripe hero title, Svelte, antd | `blend-mode` (1.1 MP) and subtree `filter` (0.7 MP) rastered whole subtrees | **node groups**: `Scene.groups` + `NodeBase.groups`; the emitter wraps consecutive member nodes in ONE `<g filter=… style="mix-blend-mode:…">` (per-node filter/blend is wrong for overlapping children). CSS filter functions → one `<filter>` chain (`feColorMatrix` grayscale/sepia/saturate/hue-rotate, `feComponentTransfer` brightness/contrast/invert/opacity, `feDropShadow`, `feGaussianBlur`, sRGB); screenshots inside a group are not re-filtered | lab fixture `filter-blend-groups` vector, <3 %; stripe/linear raster → **0 %**; two existing tests used `filter` as their "needs raster" example → moved to 3D transforms | ✅ (`url(#…)` filters, 3D remain raster) |
 | E36 | Linear | headline 4 % too wide — **no `@font-face` embedded**: 50+ opaque CDN sheets, only the first 16 were fetched | fetch up to 120 sheets, 8 concurrently, record font-less ones as empty so the page doesn't re-fetch | linear 3.56→**0.40 %** | ✅ |
+| E37 | antd.design | `matrix3d(…,0,0,1000,1)` (= `translateZ`) rastered a 1280×640 subtree | a 3D matrix is only a 3D effect under perspective (own `perspective()` term or a perspective ancestor); otherwise it is an orthographic projection and the (a,b,c,d,e,f) part is exact | antd raster 80→40 %, text cov 60→101 % (fixture `transform-3d-flat`) | ✅ |
+| E38 | antd inputs | `text-overflow: ellipsis` text inputs excluded from vector inputs | truncate the value with the browser's prefix-that-fits + `…` | form-control rasters gone on antd | ✅ |
+| E39 | Bootstrap accordion, Wikipedia, Mozilla | pseudo `::after` with `url()` background (chevrons/icons) stayed raster | pre-load pseudo background images in `walkNode`, then `materializePseudo` can place them | bootstrap lib raster 9→1 %, wikipedia 12→2 %, mozilla 34→**0 %** | ✅ |
 
-### Negative / neutral results (kept so they are not retried blindly)
+### Negative / neutral results
+- **Flagged "regress" in `pseudo-url-3d-flat`** (bbc 0.00→0.22 %, antdesign 0.07→0.35 %, devto 0.37→0.61 %): their raster
+  area fell (antd 80→40 %); the previous baselines were screenshots, the new numbers are vector rendering. Re-baselined. (kept so they are not retried blindly)
 - **E14 (backdrop-filter vectorize)** barely moved raster area: the large rasters were `background-image` and
   `pseudo` on *ancestors*; backdrop-filter was only the first thing the triage printed.
 - **BBC 4.8 % / 23.7 % spikes** were page drift, not regressions — fixed by `--repeat` + median, not by code.

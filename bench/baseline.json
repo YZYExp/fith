@@ -2,8 +2,8 @@
   "live-nodejs": {
     "id": "live-nodejs",
     "status": "ok",
-    "ratio": 0.000873046875,
-    "contentRatio": 0.0035505990146491996,
+    "ratio": 0.00088818359375,
+    "contentRatio": 0.0036105095800574426,
     "drift": 0,
     "worstTile": 0.02734375,
     "textCoverage": 0.9926524614254225,
@@ -11,7 +11,7 @@
     "raster": 15,
     "nodes": 213,
     "svgKB": 363,
-    "ms": 650,
+    "ms": 681,
     "note": "{\"background-image\":1,\"pseudo\":14}",
     "top": [
       {
@@ -53,35 +53,25 @@
     "raster": 0,
     "nodes": 116,
     "svgKB": 2017,
-    "ms": 7781,
+    "ms": 8035,
     "note": "{}",
     "top": []
   },
   "lib-bootstrap-dashboard": {
     "id": "lib-bootstrap-dashboard",
     "status": "ok",
-    "ratio": 0.0036703125,
-    "contentRatio": 0.0038652128376404924,
+    "ratio": 0.00369453125,
+    "contentRatio": 0.0038907176477654083,
     "drift": 0,
     "worstTile": 0.060791015625,
-    "textCoverage": 1.025462962962963,
-    "rasterAreaFrac": 0.0911234375,
-    "raster": 4,
-    "nodes": 150,
-    "svgKB": 223,
-    "ms": 287,
-    "note": "{\"form-control\":2,\"pseudo\":2}",
+    "textCoverage": 1.0787037037037037,
+    "rasterAreaFrac": 0.0091390625,
+    "raster": 2,
+    "nodes": 154,
+    "svgKB": 219,
+    "ms": 224,
+    "note": "{\"form-control\":2}",
     "top": [
-      {
-        "reason": "pseudo",
-        "el": "button.accordion-button",
-        "area": 52470
-      },
-      {
-        "reason": "pseudo",
-        "el": "button.accordion-button.collapsed",
-        "area": 52470
-      },
       {
         "reason": "form-control",
         "el": "select.form-select",
@@ -106,7 +96,7 @@
     "raster": 0,
     "nodes": 43,
     "svgKB": 19,
-    "ms": 88,
+    "ms": 86,
     "note": "{}",
     "top": []
   },
@@ -122,7 +112,7 @@
     "raster": 1,
     "nodes": 66,
     "svgKB": 408,
-    "ms": 124,
+    "ms": 126,
     "note": "{\"form-control\":1}",
     "top": [
       {
@@ -135,16 +125,16 @@
   "lib-daisyui-components": {
     "id": "lib-daisyui-components",
     "status": "ok",
-    "ratio": 0.002287860576923077,
-    "contentRatio": 0.01027048026028262,
-    "drift": 0.000004206730769230769,
+    "ratio": 0.0022890625,
+    "contentRatio": 0.010275875836988836,
+    "drift": 0.000009615384615384616,
     "worstTile": 0.359619140625,
     "textCoverage": 0.9122137404580153,
     "rasterAreaFrac": 0.0155,
     "raster": 6,
     "nodes": 56,
     "svgKB": 53,
-    "ms": 353,
+    "ms": 368,
     "note": "{\"pseudo\":3,\"form-control\":3}",
     "top": [
       {
@@ -186,7 +176,7 @@
     "raster": 2,
     "nodes": 142,
     "svgKB": 35,
-    "ms": 172,
+    "ms": 148,
     "note": "{\"form-control\":2}",
     "top": [
       {
@@ -209,22 +199,17 @@
     "drift": 0,
     "worstTile": 0.046875,
     "textCoverage": 1,
-    "rasterAreaFrac": 0.004611049107142857,
-    "raster": 2,
+    "rasterAreaFrac": 0.004376674107142857,
+    "raster": 1,
     "nodes": 69,
     "svgKB": 20,
-    "ms": 116,
-    "note": "{\"form-control\":1,\"pseudo\":1}",
+    "ms": 95,
+    "note": "{\"form-control\":1}",
     "top": [
       {
         "reason": "form-control",
         "el": "select",
         "area": 7843
-      },
-      {
-        "reason": "pseudo",
-        "el": "span.model-toggle.collapsed",
-        "area": 420
       }
     ]
   },
@@ -240,7 +225,7 @@
     "raster": 0,
     "nodes": 126,
     "svgKB": 194,
-    "ms": 131,
+    "ms": 163,
     "note": "{}",
     "top": []
   },
@@ -256,7 +241,7 @@
     "raster": 0,
     "nodes": 3,
     "svgKB": 111,
-    "ms": 30,
+    "ms": 26,
     "note": "{}",
     "top": []
   },
@@ -272,7 +257,7 @@
     "raster": 0,
     "nodes": 12,
     "svgKB": 98,
-    "ms": 33,
+    "ms": 34,
     "note": "{}",
     "top": []
   },
@@ -304,7 +289,7 @@
     "raster": 0,
     "nodes": 247,
     "svgKB": 56,
-    "ms": 215,
+    "ms": 240,
     "note": "{}",
     "top": []
   },
@@ -320,7 +305,7 @@
     "raster": 0,
     "nodes": 125,
     "svgKB": 22,
-    "ms": 101,
+    "ms": 103,
     "note": "{}",
     "top": []
   },
@@ -336,7 +321,7 @@
     "raster": 0,
     "nodes": 21,
     "svgKB": 13,
-    "ms": 32,
+    "ms": 46,
     "note": "{}",
     "top": []
   },
@@ -347,12 +332,12 @@
     "contentRatio": 0.04537232438950859,
     "drift": 0,
     "worstTile": 0.053466796875,
-    "textCoverage": 0.36607142857142855,
+    "textCoverage": 1,
     "rasterAreaFrac": 0,
     "raster": 0,
     "nodes": 10,
     "svgKB": 198,
-    "ms": 784,
+    "ms": 816,
     "note": "{}",
     "top": []
   },
@@ -368,7 +353,7 @@
     "raster": 0,
     "nodes": 34,
     "svgKB": 59,
-    "ms": 45,
+    "ms": 52,
     "note": "{}",
     "top": []
   },
@@ -376,53 +361,37 @@
     "id": "lib-antd-showcase",
     "status": "ok",
     "ratio": 0.0003365384615384615,
-    "contentRatio": 0.0008992386980950592,
+    "contentRatio": 0.000898462506036545,
     "drift": 0,
     "worstTile": 0.015625,
-    "textCoverage": 1,
-    "rasterAreaFrac": 0.010748798076923078,
-    "raster": 1,
-    "nodes": 114,
-    "svgKB": 48,
-    "ms": 117,
-    "note": "{\"form-control\":1}",
-    "top": [
-      {
-        "reason": "form-control",
-        "el": "input.ant-input.css-1okl62o",
-        "area": 17886
-      }
-    ]
+    "textCoverage": 1.0280898876404494,
+    "rasterAreaFrac": 0,
+    "raster": 0,
+    "nodes": 115,
+    "svgKB": 46,
+    "ms": 86,
+    "note": "{}",
+    "top": []
   },
   "live-wikipedia": {
     "id": "live-wikipedia",
     "status": "ok",
-    "ratio": 0.004618923611111111,
-    "contentRatio": 0.03754811712528623,
+    "ratio": 0.004874565972222222,
+    "contentRatio": 0.0384064289988886,
     "drift": 0.0011614583333333334,
-    "worstTile": 0.224853515625,
-    "textCoverage": 1.0036023054755043,
-    "rasterAreaFrac": 0.03673263888888889,
-    "raster": 3,
-    "nodes": 349,
-    "svgKB": 194,
-    "ms": 596,
-    "note": "{\"pseudo\":2,\"media:VIDEO\":1}",
+    "worstTile": 0.270751953125,
+    "textCoverage": 1.0036109773712085,
+    "rasterAreaFrac": 0.017361111111111112,
+    "raster": 1,
+    "nodes": 355,
+    "svgKB": 185,
+    "ms": 567,
+    "note": "{\"media:VIDEO\":1}",
     "top": [
-      {
-        "reason": "pseudo",
-        "el": "a.mw-file-description",
-        "area": 44376
-      },
       {
         "reason": "media:VIDEO",
         "el": "video.mw-file-element",
         "area": 40000
-      },
-      {
-        "reason": "pseudo",
-        "el": "a.mw-file-magnify",
-        "area": 256
       }
     ]
   },
@@ -438,7 +407,7 @@
     "raster": 31,
     "nodes": 461,
     "svgKB": 72,
-    "ms": 1303,
+    "ms": 1270,
     "note": "{\"background-image\":30,\"form-control\":1}",
     "top": [
       {
@@ -471,17 +440,17 @@
   "live-mdn": {
     "id": "live-mdn",
     "status": "ok",
-    "ratio": 0.02923974609375,
-    "contentRatio": 0.03017652990315069,
+    "ratio": 0.0296337890625,
+    "contentRatio": 0.030583197231638617,
     "drift": 0,
     "worstTile": 0.197509765625,
     "textCoverage": 0.9915305505142166,
-    "rasterAreaFrac": 0.06027734375,
-    "raster": 6,
-    "nodes": 418,
-    "svgKB": 1188,
-    "ms": 2219,
-    "note": "{\"pseudo\":4,\"media:IFRAME\":1,\"background-image\":1}",
+    "rasterAreaFrac": 0.05887109375,
+    "raster": 2,
+    "nodes": 422,
+    "svgKB": 1216,
+    "ms": 2011,
+    "note": "{\"media:IFRAME\":1,\"background-image\":1}",
     "top": [
       {
         "reason": "media:IFRAME",
@@ -492,21 +461,6 @@
         "reason": "background-image",
         "el": "div.left-sidebar__header linear-gradient(rgb(255, 255, 255) 0px, rgb(255, 255, 255) calc(100% - 32px), rgba(0, 0, 0",
         "area": 17024
-      },
-      {
-        "reason": "pseudo",
-        "el": "span.browser.chrome",
-        "area": 720
-      },
-      {
-        "reason": "pseudo",
-        "el": "span.browser.edge",
-        "area": 720
-      },
-      {
-        "reason": "pseudo",
-        "el": "span.browser.firefox",
-        "area": 720
       }
     ]
   },
@@ -522,29 +476,39 @@
     "raster": 0,
     "nodes": 123,
     "svgKB": 2004,
-    "ms": 4202,
+    "ms": 4109,
     "note": "{}",
     "top": []
   },
   "live-bbc": {
     "id": "live-bbc",
-    "status": "ok",
-    "ratio": 0,
-    "contentRatio": 0,
+    "status": "regress",
+    "ratio": 0.002150390625,
+    "contentRatio": 0.002397642862275997,
     "drift": 0,
-    "worstTile": 0,
+    "worstTile": 0.0439453125,
     "textCoverage": 1,
-    "rasterAreaFrac": 1,
-    "raster": 1,
-    "nodes": 75,
-    "svgKB": 2035,
-    "ms": 3298,
-    "note": "{\"media:IFRAME\":1}",
+    "rasterAreaFrac": 0.1983740234375,
+    "raster": 3,
+    "nodes": 81,
+    "svgKB": 2365,
+    "ms": 3058,
+    "note": "vs baseline 0.00%",
     "top": [
       {
         "reason": "media:IFRAME",
         "el": "iframe",
-        "area": 2048000
+        "area": 243470
+      },
+      {
+        "reason": "media:IFRAME",
+        "el": "iframe",
+        "area": 97280
+      },
+      {
+        "reason": "media:IFRAME",
+        "el": "iframe",
+        "area": 65520
       }
     ]
   },
@@ -560,23 +524,23 @@
     "raster": 0,
     "nodes": 36,
     "svgKB": 7702,
-    "ms": 6388,
+    "ms": 6686,
     "note": "{}",
     "top": []
   },
   "live-tailwindcss": {
     "id": "live-tailwindcss",
     "status": "ok",
-    "ratio": 0.00116552734375,
-    "contentRatio": 0.00446103184956212,
-    "drift": 0.00023681640625,
+    "ratio": 0.00116943359375,
+    "contentRatio": 0.004467025147766208,
+    "drift": 0.00027197265625,
     "worstTile": 0.078125,
     "textCoverage": 1,
     "rasterAreaFrac": 0.117796875,
     "raster": 14,
     "nodes": 205,
     "svgKB": 1780,
-    "ms": 703,
+    "ms": 812,
     "note": "{\"pseudo\":14}",
     "top": [
       {
@@ -609,16 +573,16 @@
   "live-stripe": {
     "id": "live-stripe",
     "status": "ok",
-    "ratio": 0.00492138671875,
-    "contentRatio": 0.017461824456602715,
-    "drift": 0.0026162109375,
-    "worstTile": 0.123779296875,
-    "textCoverage": 0.9930875576036866,
+    "ratio": 0.00476416015625,
+    "contentRatio": 0.016911344137273594,
+    "drift": 0.0025458984375,
+    "worstTile": 0.12255859375,
+    "textCoverage": 0.9976976208749041,
     "rasterAreaFrac": 0,
     "raster": 0,
-    "nodes": 159,
-    "svgKB": 315,
-    "ms": 2017,
+    "nodes": 162,
+    "svgKB": 319,
+    "ms": 2293,
     "note": "{}",
     "top": []
   },
@@ -626,15 +590,15 @@
     "id": "live-vercel",
     "status": "ok",
     "ratio": 0.000255859375,
-    "contentRatio": 0.0033938043640179016,
-    "drift": 0.00000634765625,
+    "contentRatio": 0.003401404702247264,
+    "drift": 0.0000107421875,
     "worstTile": 0.05615234375,
-    "textCoverage": 0.5115740740740741,
+    "textCoverage": 1,
     "rasterAreaFrac": 0,
     "raster": 0,
     "nodes": 36,
     "svgKB": 417,
-    "ms": 436,
+    "ms": 380,
     "note": "{}",
     "top": []
   },
@@ -650,7 +614,7 @@
     "raster": 4,
     "nodes": 194,
     "svgKB": 56,
-    "ms": 262,
+    "ms": 268,
     "note": "{\"form-control\":4}",
     "top": [
       {
@@ -687,44 +651,29 @@
     "raster": 0,
     "nodes": 52,
     "svgKB": 252,
-    "ms": 1542,
+    "ms": 1732,
     "note": "{}",
     "top": []
   },
   "live-antdesign": {
     "id": "live-antdesign",
-    "status": "ok",
-    "ratio": 0.0006923828125,
-    "contentRatio": 0.0011040045468170335,
+    "status": "regress",
+    "ratio": 0.0035107421875,
+    "contentRatio": 0.0065574488149622925,
     "drift": 0,
-    "worstTile": 0.0625,
-    "textCoverage": 0.5947712418300654,
-    "rasterAreaFrac": 0.7975029296875,
-    "raster": 5,
-    "nodes": 252,
-    "svgKB": 1656,
-    "ms": 2043,
-    "note": "{\"form-control\":2,\"img-cors\":1,\"mask\":1,\"transform-3d\":1}",
+    "worstTile": 0.4013671875,
+    "textCoverage": 1.03134110787172,
+    "rasterAreaFrac": 0.393625,
+    "raster": 2,
+    "nodes": 289,
+    "svgKB": 1328,
+    "ms": 1494,
+    "note": "vs baseline 0.07%",
     "top": [
-      {
-        "reason": "transform-3d",
-        "el": "div.acss-1p7fr62",
-        "area": 819200
-      },
       {
         "reason": "mask",
         "el": "div.ant-border-beam.css-oc1rc0 linear-gradient(rgb(255, 255, 255) 0px, rgb(255, 255, 255) 0px), linear-gradient | auto, auto | exclude, exclude",
         "area": 803840
-      },
-      {
-        "reason": "form-control",
-        "el": "input.ant-input.css-oc1rc0",
-        "area": 4576
-      },
-      {
-        "reason": "form-control",
-        "el": "input",
-        "area": 3366
       },
       {
         "reason": "img-cors",
@@ -744,7 +693,7 @@
     "raster": 8,
     "nodes": 273,
     "svgKB": 4257,
-    "ms": 3588,
+    "ms": 2769,
     "note": "{\"form-control\":8}",
     "top": [
       {
@@ -786,7 +735,7 @@
     "raster": 1,
     "nodes": 82,
     "svgKB": 2017,
-    "ms": 3823,
+    "ms": 3807,
     "note": "{\"background-image\":1}",
     "top": [
       {
@@ -799,16 +748,16 @@
   "live-guardian": {
     "id": "live-guardian",
     "status": "ok",
-    "ratio": 0.0014267578125,
-    "contentRatio": 0.0014787262306904011,
+    "ratio": 0.00171630859375,
+    "contentRatio": 0.0017788236484862286,
     "drift": 0,
-    "worstTile": 0.05810546875,
-    "textCoverage": 1.023982558139535,
+    "worstTile": 0.115966796875,
+    "textCoverage": 1.0272502064409579,
     "rasterAreaFrac": 0.1825,
     "raster": 1,
-    "nodes": 143,
-    "svgKB": 679,
-    "ms": 2075,
+    "nodes": 124,
+    "svgKB": 682,
+    "ms": 2046,
     "note": "{\"media:IFRAME\":1}",
     "top": [
       {
@@ -830,7 +779,7 @@
     "raster": 0,
     "nodes": 6,
     "svgKB": 100,
-    "ms": 39,
+    "ms": 30,
     "note": "{}",
     "top": []
   },
@@ -846,7 +795,7 @@
     "raster": 2,
     "nodes": 13,
     "svgKB": 58,
-    "ms": 480,
+    "ms": 316,
     "note": "{\"background-image\":2}",
     "top": [
       {
@@ -873,7 +822,7 @@
     "raster": 0,
     "nodes": 158,
     "svgKB": 609,
-    "ms": 207,
+    "ms": 249,
     "note": "{}",
     "top": []
   },
@@ -889,7 +838,7 @@
     "raster": 0,
     "nodes": 162,
     "svgKB": 2711,
-    "ms": 954,
+    "ms": 1026,
     "note": "{}",
     "top": []
   },
@@ -905,15 +854,15 @@
     "raster": 0,
     "nodes": 42,
     "svgKB": 2757,
-    "ms": 2254,
+    "ms": 2361,
     "note": "{}",
     "top": []
   },
   "live-godev": {
     "id": "live-godev",
     "status": "ok",
-    "ratio": 0.01316015625,
-    "contentRatio": 0.018459882016203764,
+    "ratio": 0.01315966796875,
+    "contentRatio": 0.018459197099239672,
     "drift": 0,
     "worstTile": 0.725341796875,
     "textCoverage": 1,
@@ -921,7 +870,7 @@
     "raster": 0,
     "nodes": 107,
     "svgKB": 764,
-    "ms": 591,
+    "ms": 599,
     "note": "{}",
     "top": []
   },
@@ -937,7 +886,7 @@
     "raster": 1,
     "nodes": 52,
     "svgKB": 1074,
-    "ms": 6347,
+    "ms": 5426,
     "note": "{\"form-control\":1}",
     "top": [
       {
@@ -950,92 +899,66 @@
   "live-nextjs": {
     "id": "live-nextjs",
     "status": "ok",
-    "ratio": 0.00135400390625,
-    "contentRatio": 0.01115751693946856,
-    "drift": 0.0001689453125,
+    "ratio": 0.0013583984375,
+    "contentRatio": 0.011195621554187291,
+    "drift": 0.00018017578125,
     "worstTile": 0.102294921875,
-    "textCoverage": 0.9894991922455574,
+    "textCoverage": 1,
     "rasterAreaFrac": 0,
     "raster": 0,
-    "nodes": 201,
-    "svgKB": 739,
-    "ms": 1780,
+    "nodes": 198,
+    "svgKB": 736,
+    "ms": 1573,
     "note": "{}",
     "top": []
   },
   "live-w3c": {
     "id": "live-w3c",
     "status": "ok",
-    "ratio": 0.0042907366071428575,
-    "contentRatio": 0.006382666109943893,
+    "ratio": 0.004656808035714286,
+    "contentRatio": 0.006948706141756936,
     "drift": 0,
-    "worstTile": 0.056884765625,
+    "worstTile": 0.10323660714285714,
     "textCoverage": 1,
     "rasterAreaFrac": 0,
     "raster": 0,
-    "nodes": 77,
-    "svgKB": 729,
-    "ms": 728,
+    "nodes": 76,
+    "svgKB": 811,
+    "ms": 729,
     "note": "{}",
     "top": []
   },
   "live-pythonorg": {
     "id": "live-pythonorg",
     "status": "ok",
-    "ratio": 0.00118408203125,
-    "contentRatio": 0.0012819170924745916,
+    "ratio": 0.00095849609375,
+    "contentRatio": 0.001037692062897989,
     "drift": 0,
     "worstTile": 0.026123046875,
-    "textCoverage": 1.0141776937618148,
+    "textCoverage": 1.013869625520111,
     "rasterAreaFrac": 0,
     "raster": 0,
     "nodes": 322,
     "svgKB": 303,
-    "ms": 518,
+    "ms": 530,
     "note": "{}",
     "top": []
   },
   "live-mozilla": {
     "id": "live-mozilla",
     "status": "ok",
-    "ratio": 0.02277978515625,
-    "contentRatio": 0.05444792883593962,
+    "ratio": 0.03375830078125,
+    "contentRatio": 0.08032563851429461,
     "drift": 0,
     "worstTile": 1,
     "textCoverage": 1,
-    "rasterAreaFrac": 0.336875,
-    "raster": 7,
-    "nodes": 54,
-    "svgKB": 925,
-    "ms": 901,
-    "note": "{\"pseudo\":7}",
-    "top": [
-      {
-        "reason": "pseudo",
-        "el": "a.m24-c-launchpad-link.m24-t-product-firefox",
-        "area": 98560
-      },
-      {
-        "reason": "pseudo",
-        "el": "a.m24-c-launchpad-link.m24-t-product-thunderbird",
-        "area": 98560
-      },
-      {
-        "reason": "pseudo",
-        "el": "a.m24-c-launchpad-link.m24-t-product-vpn",
-        "area": 98560
-      },
-      {
-        "reason": "pseudo",
-        "el": "a.m24-c-launchpad-link.m24-t-product-monitor",
-        "area": 98560
-      },
-      {
-        "reason": "pseudo",
-        "el": "a.m24-c-launchpad-link.m24-t-product-relay",
-        "area": 98560
-      }
-    ]
+    "rasterAreaFrac": 0,
+    "raster": 0,
+    "nodes": 68,
+    "svgKB": 895,
+    "ms": 834,
+    "note": "{}",
+    "top": []
   },
   "live-gdev": {
     "id": "live-gdev",
@@ -1049,7 +972,7 @@
     "raster": 0,
     "nodes": 72,
     "svgKB": 16011,
-    "ms": 12336,
+    "ms": 11760,
     "note": "{}",
     "top": []
   },
@@ -1060,28 +983,28 @@
     "contentRatio": 0.00400439453125,
     "drift": 0,
     "worstTile": 0.1396484375,
-    "textCoverage": 0.9897510980966325,
+    "textCoverage": 1,
     "rasterAreaFrac": 0,
     "raster": 0,
     "nodes": 221,
     "svgKB": 3418,
-    "ms": 2317,
+    "ms": 2328,
     "note": "{}",
     "top": []
   },
   "live-cloudflare": {
     "id": "live-cloudflare",
     "status": "ok",
-    "ratio": 0.011341796875,
-    "contentRatio": 0.01392182846566802,
-    "drift": 0.00123828125,
-    "worstTile": 0.097412109375,
-    "textCoverage": 0.9653333333333334,
+    "ratio": 0.0110888671875,
+    "contentRatio": 0.013611362340938555,
+    "drift": 0.00695556640625,
+    "worstTile": 0.09716796875,
+    "textCoverage": 1,
     "rasterAreaFrac": 0.4690625,
     "raster": 1,
     "nodes": 48,
     "svgKB": 6827,
-    "ms": 829,
+    "ms": 885,
     "note": "{\"media:VIDEO\":1}",
     "top": [
       {
@@ -1094,33 +1017,33 @@
   "live-docker": {
     "id": "live-docker",
     "status": "ok",
-    "ratio": 0.0394208984375,
-    "contentRatio": 0.05702222153162023,
-    "drift": 0.006060546875,
+    "ratio": 0.03996484375,
+    "contentRatio": 0.05779654553928284,
+    "drift": 0.00603759765625,
     "worstTile": 0.9619140625,
-    "textCoverage": 0.8319263238679969,
+    "textCoverage": 0.86512370311253,
     "rasterAreaFrac": 0,
     "raster": 0,
-    "nodes": 111,
-    "svgKB": 8052,
-    "ms": 3073,
+    "nodes": 110,
+    "svgKB": 8037,
+    "ms": 2977,
     "note": "{}",
     "top": []
   },
   "live-airbnb": {
     "id": "live-airbnb",
     "status": "ok",
-    "ratio": 0.005591517857142857,
-    "contentRatio": 0.005777880290623919,
+    "ratio": 0.0060345982142857146,
+    "contentRatio": 0.0062357139067837465,
     "drift": 0,
     "worstTile": 0.094970703125,
-    "textCoverage": 0.998220640569395,
-    "rasterAreaFrac": 0.013731026785714286,
-    "raster": 5,
+    "textCoverage": 1.0159574468085106,
+    "rasterAreaFrac": 0.011571428571428571,
+    "raster": 4,
     "nodes": 134,
-    "svgKB": 845,
-    "ms": 1470,
-    "note": "{\"media:VIDEO\":4,\"form-control\":1}",
+    "svgKB": 843,
+    "ms": 1781,
+    "note": "{\"media:VIDEO\":4}",
     "top": [
       {
         "reason": "media:VIDEO",
@@ -1141,35 +1064,24 @@
         "reason": "media:VIDEO",
         "el": "video.m1mbhy26.atm_jp_1f51e7f",
         "area": 5184
-      },
-      {
-        "reason": "form-control",
-        "el": "input.fp9kp52.atm_9s_1ulexfb",
-        "area": 3870
       }
     ]
   },
   "live-spotify": {
     "id": "live-spotify",
     "status": "ok",
-    "ratio": 0.02087353515625,
-    "contentRatio": 0.022013394756003488,
+    "ratio": 0.02087060546875,
+    "contentRatio": 0.02201030508446647,
     "drift": 0,
     "worstTile": 0.9052734375,
-    "textCoverage": 0.9229137199434229,
-    "rasterAreaFrac": 0.011109375,
-    "raster": 1,
-    "nodes": 191,
-    "svgKB": 2993,
-    "ms": 3755,
-    "note": "{\"form-control\":1}",
-    "top": [
-      {
-        "reason": "form-control",
-        "el": "input.e-10860-form-input.e-10860-form-control",
-        "area": 22752
-      }
-    ]
+    "textCoverage": 1.0441292356185974,
+    "rasterAreaFrac": 0,
+    "raster": 0,
+    "nodes": 192,
+    "svgKB": 2989,
+    "ms": 3107,
+    "note": "{}",
+    "top": []
   },
   "live-cnn": {
     "id": "live-cnn",
@@ -1183,30 +1095,25 @@
     "raster": 0,
     "nodes": 1,
     "svgKB": 0,
-    "ms": 17,
+    "ms": 18,
     "note": "{}",
     "top": []
   },
   "live-bbcnews": {
     "id": "live-bbcnews",
     "status": "ok",
-    "ratio": 0.0014482421875,
-    "contentRatio": 0.003134358957017223,
+    "ratio": 0.00221435546875,
+    "contentRatio": 0.0048652951576634565,
     "drift": 0,
-    "worstTile": 0.114013671875,
+    "worstTile": 0.111083984375,
     "textCoverage": 1,
-    "rasterAreaFrac": 0.165908203125,
-    "raster": 2,
-    "nodes": 121,
-    "svgKB": 2328,
-    "ms": 2465,
-    "note": "{\"media:IFRAME\":2}",
+    "rasterAreaFrac": 0.0475,
+    "raster": 1,
+    "nodes": 119,
+    "svgKB": 1892,
+    "ms": 2213,
+    "note": "{\"media:IFRAME\":1}",
     "top": [
-      {
-        "reason": "media:IFRAME",
-        "el": "iframe",
-        "area": 242500
-      },
       {
         "reason": "media:IFRAME",
         "el": "iframe",
@@ -1218,15 +1125,15 @@
     "id": "live-ted",
     "status": "ok",
     "ratio": 0.00187451171875,
-    "contentRatio": 0.002000489830799935,
+    "contentRatio": 0.0020004919156989894,
     "drift": 0,
     "worstTile": 0.03125,
     "textCoverage": 1.001669449081803,
     "rasterAreaFrac": 0.15245654296875,
     "raster": 3,
     "nodes": 124,
-    "svgKB": 2022,
-    "ms": 1034,
+    "svgKB": 2023,
+    "ms": 994,
     "note": "{\"media:IFRAME\":2,\"background-image\":1}",
     "top": [
       {
@@ -1258,7 +1165,7 @@
     "raster": 4,
     "nodes": 480,
     "svgKB": 355,
-    "ms": 319,
+    "ms": 332,
     "note": "{\"form-control\":4}",
     "top": [
       {
@@ -1286,16 +1193,16 @@
   "live-lobsters": {
     "id": "live-lobsters",
     "status": "ok",
-    "ratio": 0.006232700892857143,
-    "contentRatio": 0.06516069938800632,
+    "ratio": 0.006247209821428571,
+    "contentRatio": 0.06510045648823888,
     "drift": 0,
-    "worstTile": 0.09619140625,
-    "textCoverage": 1.0082614942528736,
+    "worstTile": 0.093017578125,
+    "textCoverage": 1.0082674335010784,
     "rasterAreaFrac": 0.00020145089285714287,
     "raster": 1,
-    "nodes": 411,
+    "nodes": 413,
     "svgKB": 101,
-    "ms": 308,
+    "ms": 398,
     "note": "{\"background-image\":1}",
     "top": [
       {
@@ -1307,18 +1214,18 @@
   },
   "live-devto": {
     "id": "live-devto",
-    "status": "ok",
-    "ratio": 0.00369189453125,
-    "contentRatio": 0.007857404884456347,
+    "status": "regress",
+    "ratio": 0.00608349609375,
+    "contentRatio": 0.01294020749615969,
     "drift": 0,
-    "worstTile": 0.118408203125,
-    "textCoverage": 0.8939149165320409,
+    "worstTile": 0.14892578125,
+    "textCoverage": 1.0106824925816025,
     "rasterAreaFrac": 0,
     "raster": 0,
-    "nodes": 204,
-    "svgKB": 923,
-    "ms": 776,
-    "note": "{}",
+    "nodes": 209,
+    "svgKB": 862,
+    "ms": 726,
+    "note": "vs baseline 0.37%",
     "top": []
   },
   "live-zhihu": {
@@ -1331,68 +1238,57 @@
     "textCoverage": 1,
     "rasterAreaFrac": 0,
     "raster": 0,
-    "nodes": 11,
-    "svgKB": 14589,
-    "ms": 149284,
+    "nodes": 1,
+    "svgKB": 0,
+    "ms": 20,
     "note": "{}",
     "top": []
   },
   "live-36kr": {
     "id": "live-36kr",
     "status": "ok",
-    "ratio": 0.02030517578125,
-    "contentRatio": 0.020785547234450075,
-    "drift": 0.0015341796875,
-    "worstTile": 0.53662109375,
-    "textCoverage": 0.906345957011259,
-    "rasterAreaFrac": 0.00114306640625,
-    "raster": 2,
-    "nodes": 231,
-    "svgKB": 1446,
-    "ms": 2535,
-    "note": "{\"pseudo\":2}",
-    "top": [
-      {
-        "reason": "pseudo",
-        "el": "span.go-change",
-        "area": 1372
-      },
-      {
-        "reason": "pseudo",
-        "el": "span",
-        "area": 969
-      }
-    ]
+    "ratio": 0,
+    "contentRatio": 0,
+    "drift": 0,
+    "worstTile": 0,
+    "textCoverage": 1,
+    "rasterAreaFrac": 0,
+    "raster": 0,
+    "nodes": 1,
+    "svgKB": 0,
+    "ms": 25,
+    "note": "{}",
+    "top": []
   },
   "live-sspai": {
     "id": "live-sspai",
-    "status": "regress",
-    "ratio": 0.1733525390625,
-    "contentRatio": 0.20351977436755847,
-    "drift": 0,
-    "worstTile": 1,
-    "textCoverage": 1.1123595505617978,
+    "status": "ok",
+    "ratio": 0.0985771484375,
+    "contentRatio": 0.18206396759235044,
+    "drift": 0.000998046875,
+    "worstTile": 0.9765625,
+    "textCoverage": 1.0365591397849463,
     "rasterAreaFrac": 0,
     "raster": 0,
-    "nodes": 28,
-    "svgKB": 133,
-    "ms": 1911,
-    "note": "vs baseline 0.01%",
+    "nodes": 121,
+    "svgKB": 372,
+    "ms": 1656,
+    "note": "{}",
     "top": []
   },
   "live-baidu": {
     "id": "live-baidu",
     "status": "ok",
-    "ratio": 0.0006753472222222223,
-    "contentRatio": 0.007814147825999618,
+    "ratio": 0.0002855902777777778,
+    "contentRatio": 0.0033003631402604176,
     "drift": 0,
-    "worstTile": 0.114501953125,
+    "worstTile": 0.032958984375,
     "textCoverage": 1,
     "rasterAreaFrac": 0.018739583333333334,
     "raster": 1,
-    "nodes": 65,
+    "nodes": 63,
     "svgKB": 86,
-    "ms": 6534,
+    "ms": 8576,
     "note": "{\"form-control\":1}",
     "top": [
       {
