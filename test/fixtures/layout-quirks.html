@@ -1,0 +1,18 @@
+<!doctype html><html><head><style>
+body{margin:0;background:#fff;font:16px sans-serif}
+table{border-collapse:collapse;width:420px;margin:10px}
+td{padding:8px;border-bottom:1px solid #ddd;box-shadow:inset 0 0 0 9999px rgba(0,0,0,0)}
+tr.hl td{box-shadow:inset 0 0 0 9999px rgba(220,53,69,.15)}
+.ring{width:80px;height:50px;margin:10px;background:#fff;box-shadow:inset 0 0 0 4px #4f8cff;border-radius:10px}
+.av{width:48px;height:48px;border-radius:50%;margin:10px;border:3px solid #333;display:block;padding:0}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(1px,1px,1px,1px)}
+.pane{position:absolute;left:0;top:0;width:0;height:0}
+.pane .dot{position:absolute;left:520px;top:20px;width:40px;height:40px;border-radius:50%;background:#2a2}
+.pane svg{position:absolute;left:0;top:0;transform:translate3d(500px,90px,0)}
+</style></head><body>
+<span class="sr">this screen-reader only text must never be painted</span>
+<table><tr><td>plain</td><td>row</td></tr><tr class="hl"><td>highlighted</td><td>row</td></tr></table>
+<div class="ring"></div>
+<img class="av" alt="" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='48' height='48'%3E%3Crect width='48' height='48' fill='%23f80'/%3E%3C/svg%3E">
+<div class="pane"><div class="dot"></div><svg width="60" height="60"><circle cx="30" cy="30" r="25" fill="#c33"/></svg></div>
+</body></html>

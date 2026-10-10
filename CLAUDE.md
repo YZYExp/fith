@@ -75,6 +75,14 @@ Re-run all of it after every rebase or merge from `main`. Every new capture beha
 `test/fixtures/` plus a test in `test/visual/` (pixel diff **and** a structural assertion such as "this text
 is still vector" / "no `data:image/png`"), so a silent fall-back to raster fails the build.
 
+## Real-world Benchmark (`bench/`)
+
+`pnpm bench` runs fith on live sites and on real third-party UI libraries (fetched from npm by
+`pnpm bench:fetch`), reporting pixel diff, content-only diff, worst tile, vector-text coverage and raster
+area against `bench/baseline.json`. See `bench/README.md`. When a target regresses or looks wrong: compare its
+`bench/out/<id>.expected|actual.png`, trace the hotspot with `pnpm inspect <url|file> <x> <y>`, fix, then pin the
+behaviour with a fixture + test in `test/visual/realworld-regressions.test.ts` and update the baseline.
+
 ## Test Layout
 
 ```

@@ -6,3 +6,5 @@ test/visual/__out__/
 test/visual/__diff__/
 examples/**/dist/
 out.svg
+bench/out/
+bench/.cache/

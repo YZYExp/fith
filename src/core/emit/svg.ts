@@ -8,10 +8,66 @@ import type {
   RasterNode,
   CornerRadii,
   BorderEdges,
+  BgLayer,
 } from '../ir/types.js';
 import type { Outliner } from './outline.js';
 import { n, esc, uniformRadii, noRadii, roundedRectPath } from './primitives.js';
-import { Defs, clipId, shadowFilterId, shadowMaskId, gradientId, maskGradientId } from './defs.js';
+import { Defs, clipId, shapeClipId, conicWedges, blurFilterId, shadowFilterId, shadowMaskId, gradientId, maskGradientId } from './defs.js';
+
+/** Sharp inset shadows: padding box minus the (offset, spread-shrunk) hole, clipped to the padding box. */
+function emitInsetShadows(node: BoxNode, defs: Defs): string {
+  const { rect, radii, border } = node;
+  const bt = border?.top.width ?? 0, br = border?.right.width ?? 0, bb = border?.bottom.width ?? 0, bl = border?.left.width ?? 0;
+  const px = rect.x + bl, py = rect.y + bt, pw = rect.width - bl - br, ph = rect.height - bt - bb;
+  if (pw <= 0 || ph <= 0) return '';
+  const pr = [Math.max(0, radii[0] - Math.max(bl, bt)), Math.max(0, radii[1] - Math.max(br, bt)), Math.max(0, radii[2] - Math.max(br, bb)), Math.max(0, radii[3] - Math.max(bl, bb))] as CornerRadii;
+  const clip = defs.add(`<clipPath id="{ID}"><path d="${roundedRectPath(px, py, pw, ph, pr)}"/></clipPath>`);
+  let out = '';
+  for (const sh of node.insetShadows!) {
+    const hx = px + sh.offsetX + sh.spread, hy = py + sh.offsetY + sh.spread;
+    const hw = pw - sh.spread * 2, hh = ph - sh.spread * 2;
+    // the shadow ring = a large frame minus the (offset, spread-shrunk) hole; blurring the frame lets
+    // the blur bleed inward across the padding-box edge, and the clip trims what falls outside
+    const big = 3 * (sh.blur ?? 0) + Math.abs(sh.offsetX) + Math.abs(sh.offsetY) + sh.spread + 8;
+    const frame = `M${n(px - big)},${n(py - big)}H${n(px + pw + big)}V${n(py + ph + big)}H${n(px - big)}Z`;
+    let d = frame;
+    if (hw > 0 && hh > 0) {
+      const hr = pr.map((v) => Math.max(0, v - sh.spread)) as CornerRadii;
+      d += ' ' + roundedRectPath(hx, hy, hw, hh, hr);
+    } else {
+      d = frame; // spread swallowed the box: solid fill
+    }
+    const filt = sh.blur && sh.blur > 0 ? ` filter="url(#${blurFilterId(defs, sh.blur / 2, { x: px - big, y: py - big, width: pw + big * 2, height: ph + big * 2 })})"` : '';
+    out += `<g clip-path="url(#${clip})"><path fill-rule="evenodd" d="${d}" fill="${esc(sh.color)}"${filt}/></g>`;
+  }
+  return out;
+}
+
+/** One general background layer: a <pattern> tile painted over its clip box (a single tile when not repeating). */
+function emitBgLayer(L: BgLayer, defs: Defs): string {
+  const { tile, clip } = L;
+  if (tile.width <= 0 || tile.height <= 0 || clip.width <= 0 || clip.height <= 0) return '';
+  let content = '';
+  if (L.gradient) {
+    const g = L.gradient;
+    if (g.type === 'conic-gradient') content = conicWedges(g, { x: 0, y: 0, width: tile.width, height: tile.height });
+    else content = `<rect width="${n(tile.width)}" height="${n(tile.height)}" fill="url(#${gradientId(defs, g, { x: 0, y: 0, width: tile.width, height: tile.height })})"/>`;
+  } else if (L.href) {
+    content = `<image width="${n(tile.width)}" height="${n(tile.height)}" preserveAspectRatio="none" href="${L.href}"/>`;
+  } else return '';
+  const pat = defs.add(
+    `<pattern id="{ID}" patternUnits="userSpaceOnUse" x="${n(tile.x)}" y="${n(tile.y)}" width="${n(tile.width)}" height="${n(tile.height)}"` +
+      `${L.gradient?.type === 'conic-gradient' ? ' overflow="hidden"' : ''}>${content}</pattern>`,
+  );
+  // paint only where tiles exist: the whole clip box when repeating on an axis, else the single tile span
+  const x0 = L.repeatX ? clip.x : Math.max(clip.x, tile.x);
+  const x1 = L.repeatX ? clip.x + clip.width : Math.min(clip.x + clip.width, tile.x + tile.width);
+  const y0 = L.repeatY ? clip.y : Math.max(clip.y, tile.y);
+  const y1 = L.repeatY ? clip.y + clip.height : Math.min(clip.y + clip.height, tile.y + tile.height);
+  if (x1 <= x0 || y1 <= y0) return '';
+  const cid = clipId(defs, { ...clip, radii: L.clipRadii });
+  return `<g clip-path="url(#${cid})"><rect x="${n(x0)}" y="${n(y0)}" width="${n(x1 - x0)}" height="${n(y1 - y0)}" fill="url(#${pat})"/></g>`;
+}
 
 function emitBox(node: BoxNode, defs: Defs): string {
   const { rect, radii } = node;
@@ -40,10 +96,20 @@ function emitBox(node: BoxNode, defs: Defs): string {
     }
   }
 
-  if (node.fill) out += fillShape(rect, radii, esc(node.fill));
-  if (node.gradient) out += fillShape(rect, radii, `url(#${gradientId(defs, node.gradient, rect)})`);
+  if (node.fill) out += fillShape(rect, radii, esc(node.fill), node.radiiY);
+  const paintGradient = (g: NonNullable<BoxNode['gradient']>) => {
+    if (g.type !== 'conic-gradient') return fillShape(rect, radii, `url(#${gradientId(defs, g, rect)})`, node.radiiY);
+    // wedge fan clipped to the (rounded) box
+    const cid = clipId(defs, { ...rect, radii });
+    return `<g clip-path="url(#${cid})">${conicWedges(g, rect)}</g>`;
+  };
+  if (node.bgLayers) for (const L of node.bgLayers) out += emitBgLayer(L, defs);
+  if (node.gradient) out += paintGradient(node.gradient);
+  for (const g of node.gradients ?? []) out += paintGradient(g);
 
-  if (node.border) out += emitBorder(node.border, rect, radii);
+  if (node.insetShadows && node.insetShadows.length > 0) out += emitInsetShadows(node, defs);
+
+  if (node.border) out += emitBorder(node.border, rect, radii, defs);
 
   if (node.outline) {
     const o = node.outline;
@@ -70,16 +136,21 @@ function fillShape(
   rect: { x: number; y: number; width: number; height: number },
   radii: CornerRadii,
   fill: string,
+  radiiY?: CornerRadii,
 ): string {
+  if (radiiY) return `<path d="${roundedRectPath(rect.x, rect.y, rect.width, rect.height, radii, radiiY)}" fill="${fill}"/>`;
   if (noRadii(radii)) {
     return `<rect x="${n(rect.x)}" y="${n(rect.y)}" width="${n(rect.width)}" height="${n(
       rect.height,
     )}" fill="${fill}"/>`;
   }
   if (uniformRadii(radii)) {
+    // SVG clamps rx to width/2 and ry (=rx) to height/2 *separately*: a 9999px pill would become a
+    // lens. CSS clamps the radius itself to half the shorter side.
+    const rr = Math.min(radii[0], rect.width / 2, rect.height / 2);
     return `<rect x="${n(rect.x)}" y="${n(rect.y)}" width="${n(rect.width)}" height="${n(
       rect.height,
-    )}" rx="${n(radii[0])}" fill="${fill}"/>`;
+    )}" rx="${n(rr)}" fill="${fill}"/>`;
   }
   return `<path d="${roundedRectPath(rect.x, rect.y, rect.width, rect.height, radii)}" fill="${fill}"/>`;
 }
@@ -90,7 +161,7 @@ function dash(style: string, w: number): string {
   return '';
 }
 
-function emitBorder(b: BorderEdges, rect: { x: number; y: number; width: number; height: number }, radii: CornerRadii): string {
+function emitBorder(b: BorderEdges, rect: { x: number; y: number; width: number; height: number }, radii: CornerRadii, defs: Defs): string {
   const sameW = b.top.width === b.right.width && b.right.width === b.bottom.width && b.bottom.width === b.left.width;
   const sameC = b.top.color === b.right.color && b.right.color === b.bottom.color && b.bottom.color === b.left.color;
   const allSolid = [b.top, b.right, b.bottom, b.left].every((e) => e.style === 'solid' || e.width === 0);
@@ -114,23 +185,27 @@ function emitBorder(b: BorderEdges, rect: { x: number; y: number; width: number;
     )}" stroke-width="${n(w)}"${d}/>`;
   }
 
-  // per-side approximation: filled rectangles along each edge
-  let out = '';
+  // Per-side borders: each edge is a mitered trapezoid (corner to corner, like the browser draws mixed
+  // widths/colours — e.g. a zero-size box with three transparent edges is a CSS triangle). Transparent
+  // edges are skipped; with radii the polygons are clipped to the rounded border ring.
   const { x, y, width: w, height: h } = rect;
-  if (b.top.width > 0)
-    out += `<rect x="${n(x)}" y="${n(y)}" width="${n(w)}" height="${n(b.top.width)}" fill="${esc(b.top.color)}"/>`;
-  if (b.bottom.width > 0)
-    out += `<rect x="${n(x)}" y="${n(y + h - b.bottom.width)}" width="${n(w)}" height="${n(
-      b.bottom.width,
-    )}" fill="${esc(b.bottom.color)}"/>`;
-  if (b.left.width > 0)
-    out += `<rect x="${n(x)}" y="${n(y)}" width="${n(b.left.width)}" height="${n(h)}" fill="${esc(
-      b.left.color,
-    )}"/>`;
-  if (b.right.width > 0)
-    out += `<rect x="${n(x + w - b.right.width)}" y="${n(y)}" width="${n(b.right.width)}" height="${n(
-      h,
-    )}" fill="${esc(b.right.color)}"/>`;
+  const t = b.top.width, r = b.right.width, bt = b.bottom.width, l = b.left.width;
+  const visible = (e: { width: number; color: string }) => e.width > 0 && !/^(transparent|rgba\([^)]*,\s*0(\.0+)?\))$/.test(e.color.trim());
+  const poly = (pts: number[][], color: string) =>
+    `<path d="M${pts.map((p) => `${n(p[0])},${n(p[1])}`).join('L')}Z" fill="${esc(color)}"/>`;
+  let out = '';
+  if (visible(b.top)) out += poly([[x, y], [x + w, y], [x + w - r, y + t], [x + l, y + t]], b.top.color);
+  if (visible(b.right)) out += poly([[x + w, y], [x + w, y + h], [x + w - r, y + h - bt], [x + w - r, y + t]], b.right.color);
+  if (visible(b.bottom)) out += poly([[x + w, y + h], [x, y + h], [x + l, y + h - bt], [x + w - r, y + h - bt]], b.bottom.color);
+  if (visible(b.left)) out += poly([[x, y + h], [x, y], [x + l, y + t], [x + l, y + h - bt]], b.left.color);
+  if (out && !noRadii(radii)) {
+    const inner = [
+      Math.max(0, radii[0] - Math.max(l, t)), Math.max(0, radii[1] - Math.max(r, t)),
+      Math.max(0, radii[2] - Math.max(r, bt)), Math.max(0, radii[3] - Math.max(l, bt)),
+    ] as CornerRadii;
+    const ring = `${roundedRectPath(x, y, w, h, radii)} ${roundedRectPath(x + l, y + t, Math.max(0, w - l - r), Math.max(0, h - t - bt), inner)}`;
+    out = `<g clip-path="url(#${defs.add(`<clipPath id="{ID}"><path clip-rule="evenodd" d="${ring}"/></clipPath>`)})">${out}</g>`;
+  }
   return out;
 }
 
@@ -165,6 +240,8 @@ function emitText(node: TextNode, defs: Defs, outline?: Outliner): string {
     (node.letterSpacing ? ` letter-spacing="${n(node.letterSpacing)}"` : '') +
     (node.wordSpacing ? ` word-spacing="${n(node.wordSpacing)}"` : '') +
     (decoVal ? ` text-decoration="${decoVal}"` : '') +
+    (node.preserveSpace ? ' xml:space="preserve"' : '') +
+    (node.fontExtra ? ` style="${esc(node.fontExtra)}"` : '') +
     (node.textAnchor && node.textAnchor !== 'start' ? ` text-anchor="${node.textAnchor}"` : '');
   return node.lines
     .map((l) => `<text x="${n(l.x)}" y="${n(l.baseline)}" ${attrs}>${esc(l.text)}</text>`)
@@ -207,13 +284,21 @@ function emitInlineSvg(node: InlineSvgNode, defs: Defs, dedupe: boolean): string
 
 function wrap(node: PaintNode, inner: string, defs: Defs): string {
   if (!inner) return '';
+  // CSS applies filter before clip/opacity, so blur wraps the content innermost
+  if (node.blur && node.blur > 0) inner = `<g filter="url(#${blurFilterId(defs, node.blur, node.rect)})">${inner}</g>`;
   const parts: string[] = [];
   if (node.opacity < 0.999) parts.push(`opacity="${n(node.opacity)}"`);
   if (node.clip && node.clip.width > 0 && node.clip.height > 0)
     parts.push(`clip-path="url(#${clipId(defs, node.clip)})"`);
   let out = parts.length === 0 ? inner : `<g ${parts.join(' ')}>${inner}</g>`;
+  // transformed ancestors (rotate/skew), innermost first; each one's outer clip lives in the parent space
+  for (const L of node.layers ?? []) {
+    out = `<g transform="matrix(${L.matrix.map((v) => String(Math.round(v * 1e6) / 1e6)).join(' ')})">${out}</g>`;
+    if (L.outerClip && L.outerClip.width > 0 && L.outerClip.height > 0) out = `<g clip-path="url(#${clipId(defs, L.outerClip)})">${out}</g>`;
+  }
   // one nested <g> per mask: SVG allows a single mask per element
   for (const m of node.masks ?? []) out = `<g mask="url(#${maskGradientId(defs, m)})">${out}</g>`;
+  for (const sh of node.clipShapes ?? []) out = `<g clip-path="url(#${shapeClipId(defs, sh)})">${out}</g>`;
   return out;
 }
 
@@ -302,6 +387,7 @@ function emitFonts(fonts: Scene['fonts']): string {
       (f) =>
         `@font-face{font-family:'${f.family.replace(/'/g, '')}';` +
         `font-weight:${f.weight};font-style:${f.style};` +
+        (f.unicodeRange ? `unicode-range:${f.unicodeRange};` : '') +
         `src:url(${f.src}) format('${f.format}');}`,
     )
     .join('');

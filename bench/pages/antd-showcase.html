@@ -1,0 +1,13 @@
+<!doctype html><html><head><meta charset="utf-8"><title>antd</title><script src="../.cache/node_modules/react/umd/react.production.min.js"></script><script src="../.cache/node_modules/react-dom/umd/react-dom.production.min.js"></script><script src="../.cache/node_modules/dayjs/dayjs.min.js"></script><script src="../.cache/node_modules/antd/dist/antd.min.js"></script><style>body{margin:0;background:#f5f5f5}#r{padding:24px;max-width:1100px;margin:auto}</style></head><body><div id="r"></div><script>
+const {Button,Card,Table,Tag,Tabs,Steps,Form,Input,Select,Switch,Alert,Space,Progress,Badge,Avatar,Rate,Segmented,Statistic,Row,Col,Timeline,Divider}=antd; const h=React.createElement;
+const cols=[{title:'Name',dataIndex:'n'},{title:'Age',dataIndex:'a'},{title:'Tags',dataIndex:'t',render:t=>h(Space,null,t.map(x=>h(Tag,{key:x,color:x==='dev'?'geekblue':'green'},x)))},{title:'Action',render:()=>h('a',null,'Delete')}];
+const data=[{key:1,n:'John Brown',a:32,t:['nice','dev']},{key:2,n:'Jim Green',a:42,t:['loser']},{key:3,n:'Joe Black',a:32,t:['cool','teacher']}];
+const App=()=>h(Space,{direction:'vertical',size:16,style:{display:'flex'}},
+ h(Alert,{message:'Success Tips',type:'success',showIcon:true,closable:true}),
+ h(Row,{gutter:16},[1,2,3].map(i=>h(Col,{span:8,key:i},h(Card,{bordered:false},h(Statistic,{title:'Active Users '+i,value:112893*i}))))),
+ h(Card,{title:'Controls',extra:h('a',null,'More')},h(Space,{wrap:true},h(Button,{type:'primary'},'Primary'),h(Button,null,'Default'),h(Button,{type:'dashed'},'Dashed'),h(Button,{danger:true},'Danger'),h(Button,{type:'link'},'Link'),h(Switch,{defaultChecked:true}),h(Rate,{defaultValue:3}),h(Segmented,{options:['Daily','Weekly','Monthly']}),h(Badge,{count:5},h(Avatar,{shape:'square',size:'large'})))),
+ h(Steps,{current:1,items:[{title:'Finished',description:'This is a description.'},{title:'In Progress'},{title:'Waiting'}]}),
+ h(Table,{columns:cols,dataSource:data,pagination:false}),
+ h(Row,{gutter:16},h(Col,{span:12},h(Form,{layout:'vertical'},h(Form.Item,{label:'Username'},h(Input,{placeholder:'Basic usage'})),h(Form.Item,{label:'Role'},h(Select,{defaultValue:'a',options:[{value:'a',label:'Admin'}]})),h(Progress,{percent:60}))),h(Col,{span:12},h(Timeline,{items:[{children:'Create a services site 2015-09-01'},{color:'green',children:'Solve initial network problems'},{color:'red',children:'Technical testing'}]}))));
+ReactDOM.createRoot(document.getElementById('r')).render(h(App));
+</script></body></html>

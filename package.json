@@ -28,7 +28,12 @@
     "test": "vitest run",
     "render": "tsx scripts/render.ts",
     "validate": "tsx scripts/validate.ts",
-    "validate:example": "tsx scripts/validate-example.ts"
+    "validate:example": "tsx scripts/validate-example.ts",
+    "bench": "tsx bench/run.ts",
+    "bench:fetch": "tsx bench/fetch.ts",
+    "inspect": "tsx scripts/inspect.ts",
+    "bench:docs": "tsx bench/docs.ts",
+    "bench:effects": "tsx bench/effects/lab.ts"
   },
   "keywords": [
     "html",

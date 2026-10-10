@@ -13,6 +13,8 @@ import pixelmatch from 'pixelmatch';
 import sparticuz from '@sparticuz/chromium';
 import { captureScene } from '../src/core/capture/capture.js';
 import { emitSvg } from '../src/core/emit/svg.js';
+import { collectExternalCss } from '../src/backends/node/external-css.js';
+import { resolveCorsImages } from '../src/backends/node/cors-images.js';
 import { createOutliner } from '../src/core/emit/outline.js';
 import { systemFontLoader } from '../src/backends/node/fonts.js';
 import type { Scene } from '../src/core/ir/types.js';
@@ -27,6 +29,12 @@ const MIME: Record<string, string> = {
   '.otf': 'font/otf',
   '.woff': 'font/woff',
   '.woff2': 'font/woff2',
+  '.json': 'application/json',
+  '.mjs': 'text/javascript',
+  '.map': 'application/json',
+  '.jpg': 'image/jpeg',
+  '.gif': 'image/gif',
+  '.eot': 'application/vnd.ms-fontobject',
   '.png': 'image/png',
   '.svg': 'image/svg+xml',
 };
@@ -64,6 +72,52 @@ export interface ValidateResult {
   totalPixels: number;
   ratio: number;
   outDir: string;
+  /** Scene statistics for the bench harness. */
+  stats: SceneStats;
+  svgBytes: number;
+  captureMs: number;
+  /** diff pixels / pixels that differ from the page background in either image (undiluted by whitespace). */
+  contentRatio: number;
+  /** worst 64px tile: differing fraction (localizes a failure the global ratio hides). */
+  worstTile: number;
+  /** Page self-drift: diff between the reference screenshot and a second one of the ORIGINAL page taken after
+   *  capture. High drift = moving target (carousel/ads) — the diff ratio is then not a conversion error. */
+  drift: number;
+}
+
+export interface SceneStats {
+  nodes: number;
+  box: number;
+  text: number;
+  image: number;
+  inlineSvg: number;
+  raster: number;
+  rasterArea: number;
+  /** Characters in vector <text> nodes. */
+  textChars: number;
+  /** Visible characters of DOM text nodes (rendered), for coverage checks. */
+  domTextChars: number;
+  rasterReasons: Record<string, number>;
+  /** Largest raster nodes (reason, element, area px) for triage. */
+  topRasters: { reason: string; el?: string; area: number }[];
+}
+
+export function sceneStats(scene: Scene, domTextChars: number): SceneStats {
+  const st: SceneStats = { nodes: scene.nodes.length, box: 0, text: 0, image: 0, inlineSvg: 0, raster: 0, rasterArea: 0, textChars: 0, domTextChars, rasterReasons: {}, topRasters: [] };
+  for (const n of scene.nodes) {
+    if (n.kind === 'box') st.box++;
+    else if (n.kind === 'text') { st.text++; for (const l of n.lines) st.textChars += l.text.replace(/\s/g, '').length; }
+    else if (n.kind === 'image') st.image++;
+    else if (n.kind === 'inline-svg') {
+      st.inlineSvg++;
+      // text inside transplanted <svg> (charts, diagrams) is still vector text
+      for (const m of n.markup.matchAll(/<text\b[^>]*>([\s\S]*?)<\/text>/g)) st.textChars += m[1].replace(/<[^>]*>/g, '').replace(/&[a-z#0-9]+;/g, 'x').replace(/\s/g, '').length;
+    }
+    else if (n.kind === 'raster') { st.raster++; st.rasterArea += n.rect.width * n.rect.height; st.rasterReasons[n.reason] = (st.rasterReasons[n.reason] || 0) + 1; st.topRasters.push({ reason: n.reason, el: n.desc, area: Math.round(n.rect.width * n.rect.height) }); }
+  }
+  st.topRasters.sort((a, b) => b.area - a.area);
+  st.topRasters = st.topRasters.slice(0, 5);
+  return st;
 }
 
 export async function validate(
@@ -78,18 +132,50 @@ export async function validate(
     initScript?: string;
     /** Extra settle time (ms) after networkidle before capturing. */
     settleMs?: number;
+    /** HTTP(S) proxy for live-site runs (defaults to $HTTPS_PROXY when target is a remote URL). */
+    proxy?: string;
+    /** Capture only the viewport (no full-page height). */
+    viewportOnly?: boolean;
   },
 ): Promise<ValidateResult> {
   const execPath = process.env.CHROMIUM_PATH || (await sparticuz.executablePath());
-  const browser: Browser = await chromium.launch({ executablePath: execPath, args: ARGS });
+  const browser: Browser = await chromium.launch({
+    executablePath: execPath,
+    args: ARGS,
+    proxy: 'url' in target && /^https?:\/\/(?!(localhost|127\.|\[::1\]))/.test(target.url) && (opts.proxy || process.env.HTTPS_PROXY) ? { server: (opts.proxy || process.env.HTTPS_PROXY)! } : undefined,
+  });
   try {
     const context = await browser.newContext({
       viewport: { width: opts.width, height: opts.height || 800 },
       deviceScaleFactor: 1,
+      ignoreHTTPSErrors: true,
     });
     if (opts.initScript) await context.addInitScript(opts.initScript);
     const page = await context.newPage();
-    if ('url' in target) await page.goto(target.url, { waitUntil: 'networkidle' });
+    if ('url' in target) {
+      // real sites with analytics/ads rarely reach networkidle: settle on 'load' + a bounded idle wait
+      await page.goto(target.url, { waitUntil: 'load', timeout: 45_000 });
+      await page.waitForLoadState('networkidle', { timeout: 12_000 }).catch(() => {});
+      // Stabilise the moving target so reference screenshot and capture see the same page: freeze CSS
+      // animations/transitions, scroll through once to trigger lazy loading, wait for images to decode.
+      await page.addStyleTag({ content: '*,*::before,*::after{animation-duration:0s!important;animation-delay:0s!important;animation-iteration-count:1!important;transition-duration:0s!important;transition-delay:0s!important;scroll-behavior:auto!important;caret-color:transparent!important}' }).catch(() => {});
+      await page.evaluate(async () => {
+        const h = Math.min(document.documentElement.scrollHeight, 6000);
+        for (let y = 0; y < h; y += Math.max(300, innerHeight * 0.8)) { scrollTo(0, y); await new Promise((r) => setTimeout(r, 120)); }
+        scrollTo(0, 0);
+        // decode() never settles for images that never load: bound the wait
+        await Promise.race([
+          Promise.all(Array.from(document.images).map((i) => (i.complete ? Promise.resolve() : i.decode().catch(() => {})))),
+          new Promise((r) => setTimeout(r, 3000)),
+        ]);
+      }).catch(() => {});
+      // images that were still loading (lazy / slow CDN): poll until complete, bounded
+      await page.evaluate(async () => {
+        const t0 = Date.now();
+        while (Date.now() - t0 < 6000 && Array.from(document.images).some((i) => !i.complete && i.getBoundingClientRect().top < innerHeight * 3)) await new Promise((r) => setTimeout(r, 250));
+      }).catch(() => {});
+      await page.waitForTimeout(600);
+    }
     else await page.setContent(target.html, { waitUntil: 'networkidle' });
     if (opts.settleMs) await page.waitForTimeout(opts.settleMs);
 
@@ -98,6 +184,7 @@ export async function validate(
     });
     const height =
       opts.height ||
+      (opts.viewportOnly ? 800 : 0) ||
       (await page.evaluate(() =>
         Math.max(document.documentElement.scrollHeight, document.body.scrollHeight),
       ));
@@ -113,18 +200,48 @@ export async function validate(
 
     // generate SVG
     await page.evaluate(() => {
-      const g = globalThis as any;
-      if (!g.__name) g.__name = (t: any) => t;
+      // unconditional: some pages define their own __name with different semantics (returns undefined)
+      (globalThis as any).__name = (t: any) => t;
     });
+    const t0 = Date.now();
+    const domTextChars = await page.evaluate(([capW, capH]) => {
+      let n = 0;
+      const w = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+      for (let t = w.nextNode() as Text | null; t; t = w.nextNode() as Text | null) {
+        const el = t.parentElement;
+        if (!el || /^(SCRIPT|STYLE|NOSCRIPT|TEMPLATE)$/.test(el.tagName)) continue;
+        const cs = getComputedStyle(el);
+        if (cs.display === 'none' || cs.visibility === 'hidden') continue;
+        // skip visually-hidden (sr-only, clip:rect) text
+        let hidden = false;
+        for (let a: Element | null = el; a && !hidden; a = a.parentElement) {
+          const c = getComputedStyle(a);
+          const m = c.clip.match(/rect\(([^)]*)\)/);
+          if (m && c.position === 'absolute') {
+            const v = m[1].split(/[ ,]+/).map(parseFloat);
+            if (v[1] - v[3] <= 0 || v[2] - v[0] <= 0) hidden = true;
+          }
+        }
+        if (hidden) continue;
+        const r = el.getBoundingClientRect();
+        if (r.width <= 0 || r.height <= 0) continue;
+        if (r.top >= capH || r.bottom <= 0 || r.left >= capW || r.right <= 0) continue; // outside the captured region
+        n += (t.data || '').replace(/\s/g, '').length;
+      }
+      return n;
+    }, [opts.width, height] as [number, number]);
     const scene: Scene = await page.evaluate(captureScene, {
       width: opts.width,
       height,
       deviceScaleFactor: 2,
       fontMode: opts.fontMode === 'none' ? 'none' : 'embed',
       collectGlyphX: opts.fontMode === 'outline',
-      captureScrollableContent: true,
+      externalCss: opts.fontMode === 'none' ? undefined : await collectExternalCss(page),
+      // the Node backend's default is false: `true` widens overflow:hidden clips to their scroll size
+      captureScrollableContent: process.env.FITH_SCROLLABLE === '1',
       containerRasterFallback: true,
     } as any);
+    await resolveCorsImages(page, scene);
     const byId = new Map(scene.rasterTargets.map((t) => [t.id, t]));
     for (const node of scene.nodes) {
       if (node.kind !== 'raster') continue;
@@ -149,6 +266,7 @@ export async function validate(
       svg = emitSvg(scene);
     }
 
+    const captureMs = Date.now() - t0;
     mkdirSync(opts.outDir, { recursive: true });
     const svgPath = resolve(opts.outDir, `${opts.name}.svg`);
     writeFileSync(svgPath, svg);
@@ -180,8 +298,28 @@ export async function validate(
     writeFileSync(resolve(opts.outDir, `${opts.name}.actual.png`), PNG.sync.write(actual));
     writeFileSync(resolve(opts.outDir, `${opts.name}.diff.png`), PNG.sync.write(diff));
 
+    // noise floor: how much did the original page itself change during the run?
+    let drift = 0;
+    try {
+      const again = PNG.sync.read(await page.screenshot({ clip: { x: 0, y: 0, width: opts.width, height }, animations: 'disabled' }));
+      const dw = Math.min(expected.width, again.width), dh = Math.min(expected.height, again.height);
+      drift = pixelmatch(cropTo(expected, dw, dh), cropTo(again, dw, dh), null, dw, dh, { threshold: 0.1 }) / (dw * dh);
+    } catch { /* page gone */ }
+    const e = cropTo(expected, w, h), a2 = cropTo(actual, w, h);
+    const bgR = e[0], bgG = e[1], bgB = e[2];
+    let content = 0;
+    const T = 64, tilesX = Math.ceil(w / T), tileDiff = new Array(tilesX * Math.ceil(h / T)).fill(0), tileTot = new Array(tileDiff.length).fill(0);
+    for (let i = 0, px = 0; i < e.length; i += 4, px++) {
+      const x = px % w, y = (px / w) | 0, t = ((y / T) | 0) * tilesX + ((x / T) | 0);
+      tileTot[t]++;
+      const eb = e[i] !== bgR || e[i + 1] !== bgG || e[i + 2] !== bgB;
+      const ab = a2[i] !== bgR || a2[i + 1] !== bgG || a2[i + 2] !== bgB;
+      if (eb || ab) content++;
+      if (diff.data[i] === 255 && diff.data[i + 1] === 0 && diff.data[i + 2] === 0) tileDiff[t]++;
+    }
+    const worstTile = tileDiff.reduce((m, d, k) => Math.max(m, d / tileTot[k]), 0);
     const total = w * h;
-    return { width: w, height: h, diffPixels, totalPixels: total, ratio: diffPixels / total, outDir: opts.outDir };
+    return { width: w, height: h, diffPixels, totalPixels: total, ratio: diffPixels / total, outDir: opts.outDir, stats: sceneStats(scene, domTextChars), svgBytes: Buffer.byteLength(svg), captureMs, contentRatio: diffPixels / Math.max(1, content), worstTile, drift };
   } finally {
     await browser.close();
   }

@@ -1,3 +1,5 @@
+import { resolveCorsImages } from './cors-images.js';
+import { collectExternalCss } from './external-css.js';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { writeFileSync, unlinkSync } from 'node:fs';
@@ -159,6 +161,7 @@ async function captureAndEmit(page: Page, opts: RenderOptions): Promise<RenderRe
     // outline mode still needs @font-face bytes to outline webfont glyphs
     fontMode: (opts.fontMode === 'none' ? 'none' : 'embed') as 'embed' | 'none',
     collectGlyphX: opts.fontMode === 'outline',
+    externalCss: opts.fontMode === 'none' ? undefined : await collectExternalCss(page),
   });
 
   // Full-page base-layer screenshot (guarantees visual floor; optional).
@@ -170,6 +173,9 @@ async function captureAndEmit(page: Page, opts: RenderOptions): Promise<RenderRe
     });
     scene.baseLayer = 'data:image/png;base64,' + buf.toString('base64');
   }
+
+  // Prefer the real bytes of cross-origin <img>s over screenshots of them.
+  await resolveCorsImages(page, scene);
 
   // Resolve raster targets via screenshots.
   const byId = new Map(scene.rasterTargets.map((t) => [t.id, t]));

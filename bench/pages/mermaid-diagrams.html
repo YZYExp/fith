@@ -1,0 +1,27 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Mermaid</title><script src="../.cache/node_modules/mermaid/dist/mermaid.min.js"></script><style>body{font-family:sans-serif;margin:20px}.pre{margin-bottom:30px}</style></head><body>
+<pre class="mermaid">
+flowchart LR
+  A[Client] -->|HTTPS| B(Load balancer)
+  B --> C{Healthy?}
+  C -->|yes| D[(App server)]
+  C -->|no| E[Failover]
+  D --> F[[Cache]]
+</pre>
+<pre class="mermaid">
+sequenceDiagram
+  participant U as User
+  participant S as Server
+  U->>S: GET /report
+  activate S
+  S-->>U: 200 OK
+  deactivate S
+  Note over U,S: Cached for 60s
+</pre>
+<pre class="mermaid">
+pie title Traffic sources
+  "Organic" : 52
+  "Direct" : 23
+  "Referral" : 15
+  "Social" : 10
+</pre>
+<script>mermaid.initialize({startOnLoad:true,theme:'default'})</script></body></html>

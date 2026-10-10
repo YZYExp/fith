@@ -1,0 +1,1460 @@
+{
+  "live-nodejs": {
+    "id": "live-nodejs",
+    "status": "ok",
+    "ratio": 0.00089306640625,
+    "contentRatio": 0.0036312738246505718,
+    "drift": 0,
+    "worstTile": 0.02734375,
+    "textCoverage": 0.9926524614254225,
+    "rasterAreaFrac": 0.0971630859375,
+    "raster": 15,
+    "nodes": 213,
+    "svgKB": 363,
+    "ms": 649,
+    "note": "{\"background-image\":1,\"pseudo\":14}",
+    "top": [
+      {
+        "reason": "background-image",
+        "el": "h1.special linear-gradient(rgb(44, 52, 55) 0%, oklab(0.318678 -0.00897822 -0.00820449 / 0.8) 100%)",
+        "area": 51600
+      },
+      {
+        "reason": "pseudo",
+        "el": "span.line",
+        "area": 11220
+      },
+      {
+        "reason": "pseudo",
+        "el": "span.line",
+        "area": 10710
+      },
+      {
+        "reason": "pseudo",
+        "el": "span.line",
+        "area": 10710
+      },
+      {
+        "reason": "pseudo",
+        "el": "span.line",
+        "area": 10710
+      }
+    ]
+  },
+  "live-pypi": {
+    "id": "live-pypi",
+    "status": "ok",
+    "ratio": 0.0024308035714285716,
+    "contentRatio": 0.002585661922922819,
+    "drift": 0,
+    "worstTile": 0.041015625,
+    "textCoverage": 1.039279869067103,
+    "rasterAreaFrac": 0,
+    "raster": 0,
+    "nodes": 116,
+    "svgKB": 2017,
+    "ms": 7844,
+    "note": "{}",
+    "top": []
+  },
+  "lib-bootstrap-dashboard": {
+    "id": "lib-bootstrap-dashboard",
+    "status": "ok",
+    "ratio": 0.0036703125,
+    "contentRatio": 0.0038652128376404924,
+    "drift": 0,
+    "worstTile": 0.060791015625,
+    "textCoverage": 1.025462962962963,
+    "rasterAreaFrac": 0.0911234375,
+    "raster": 4,
+    "nodes": 150,
+    "svgKB": 223,
+    "ms": 281,
+    "note": "{\"form-control\":2,\"pseudo\":2}",
+    "top": [
+      {
+        "reason": "pseudo",
+        "el": "button.accordion-button",
+        "area": 52470
+      },
+      {
+        "reason": "pseudo",
+        "el": "button.accordion-button.collapsed",
+        "area": 52470
+      },
+      {
+        "reason": "form-control",
+        "el": "select.form-select",
+        "area": 11154
+      },
+      {
+        "reason": "form-control",
+        "el": "input.form-check-input",
+        "area": 544
+      }
+    ]
+  },
+  "lib-tailwind-landing": {
+    "id": "lib-tailwind-landing",
+    "status": "ok",
+    "ratio": 0.0009126420454545455,
+    "contentRatio": 0.0009131732165229633,
+    "drift": 0,
+    "worstTile": 0.027587890625,
+    "textCoverage": 1,
+    "rasterAreaFrac": 0,
+    "raster": 0,
+    "nodes": 43,
+    "svgKB": 19,
+    "ms": 84,
+    "note": "{}",
+    "top": []
+  },
+  "lib-bulma-landing": {
+    "id": "lib-bulma-landing",
+    "status": "ok",
+    "ratio": 0.0012744140625,
+    "contentRatio": 0.0013891372659223871,
+    "drift": 0,
+    "worstTile": 0.03125,
+    "textCoverage": 1.0588235294117647,
+    "rasterAreaFrac": 0.005125,
+    "raster": 1,
+    "nodes": 66,
+    "svgKB": 408,
+    "ms": 121,
+    "note": "{\"form-control\":1}",
+    "top": [
+      {
+        "reason": "form-control",
+        "el": "progress.progress.is-primary",
+        "area": 5248
+      }
+    ]
+  },
+  "lib-daisyui-components": {
+    "id": "lib-daisyui-components",
+    "status": "ok",
+    "ratio": 0.0022884615384615383,
+    "contentRatio": 0.010273178048635728,
+    "drift": 0.000005408653846153846,
+    "worstTile": 0.359619140625,
+    "textCoverage": 0.9122137404580153,
+    "rasterAreaFrac": 0.0155,
+    "raster": 6,
+    "nodes": 56,
+    "svgKB": 53,
+    "ms": 351,
+    "note": "{\"pseudo\":3,\"form-control\":3}",
+    "top": [
+      {
+        "reason": "pseudo",
+        "el": "li.step.step-primary",
+        "area": 6080
+      },
+      {
+        "reason": "pseudo",
+        "el": "li.step.step-primary",
+        "area": 6080
+      },
+      {
+        "reason": "pseudo",
+        "el": "li.step",
+        "area": 6080
+      },
+      {
+        "reason": "form-control",
+        "el": "input.range.range-primary",
+        "area": 4608
+      },
+      {
+        "reason": "form-control",
+        "el": "progress.progress.progress-accent",
+        "area": 1792
+      }
+    ]
+  },
+  "lib-github-readme": {
+    "id": "lib-github-readme",
+    "status": "ok",
+    "ratio": 0.0014545454545454545,
+    "contentRatio": 0.0086803985749679,
+    "drift": 0,
+    "worstTile": 0.043701171875,
+    "textCoverage": 1.022189349112426,
+    "rasterAreaFrac": 0.0002206060606060606,
+    "raster": 2,
+    "nodes": 142,
+    "svgKB": 35,
+    "ms": 142,
+    "note": "{\"form-control\":2}",
+    "top": [
+      {
+        "reason": "form-control",
+        "el": "input",
+        "area": 182
+      },
+      {
+        "reason": "form-control",
+        "el": "input",
+        "area": 182
+      }
+    ]
+  },
+  "lib-swagger-ui": {
+    "id": "lib-swagger-ui",
+    "status": "ok",
+    "ratio": 0.002072544642857143,
+    "contentRatio": 0.009622733903166382,
+    "drift": 0,
+    "worstTile": 0.046875,
+    "textCoverage": 1,
+    "rasterAreaFrac": 0.004611049107142857,
+    "raster": 2,
+    "nodes": 69,
+    "svgKB": 20,
+    "ms": 110,
+    "note": "{\"form-control\":1,\"pseudo\":1}",
+    "top": [
+      {
+        "reason": "form-control",
+        "el": "select",
+        "area": 7843
+      },
+      {
+        "reason": "pseudo",
+        "el": "span.model-toggle.collapsed",
+        "area": 420
+      }
+    ]
+  },
+  "lib-katex-math": {
+    "id": "lib-katex-math",
+    "status": "ok",
+    "ratio": 0.0019319444444444445,
+    "contentRatio": 0.09893314366998578,
+    "drift": 0,
+    "worstTile": 0.030029296875,
+    "textCoverage": 0.8861386138613861,
+    "rasterAreaFrac": 0,
+    "raster": 0,
+    "nodes": 126,
+    "svgKB": 194,
+    "ms": 147,
+    "note": "{}",
+    "top": []
+  },
+  "lib-mermaid-diagrams": {
+    "id": "lib-mermaid-diagrams",
+    "status": "ok",
+    "ratio": 0.00046666666666666666,
+    "contentRatio": 0.0036016938251532005,
+    "drift": 0,
+    "worstTile": 0.026123046875,
+    "textCoverage": 0.6329113924050633,
+    "rasterAreaFrac": 0,
+    "raster": 0,
+    "nodes": 3,
+    "svgKB": 111,
+    "ms": 27,
+    "note": "{}",
+    "top": []
+  },
+  "lib-echarts-dashboard": {
+    "id": "lib-echarts-dashboard",
+    "status": "ok",
+    "ratio": 0,
+    "contentRatio": 0,
+    "drift": 0,
+    "worstTile": 0,
+    "textCoverage": 1,
+    "rasterAreaFrac": 0,
+    "raster": 0,
+    "nodes": 12,
+    "svgKB": 98,
+    "ms": 30,
+    "note": "{}",
+    "top": []
+  },
+  "lib-chartjs-canvas": {
+    "id": "lib-chartjs-canvas",
+    "status": "ok",
+    "ratio": 0,
+    "contentRatio": 0,
+    "drift": 0,
+    "worstTile": 0,
+    "textCoverage": 1,
+    "rasterAreaFrac": 0,
+    "raster": 0,
+    "nodes": 3,
+    "svgKB": 144,
+    "ms": 28,
+    "note": "{}",
+    "top": []
+  },
+  "lib-ag-grid": {
+    "id": "lib-ag-grid",
+    "status": "ok",
+    "ratio": 0.0015029296875,
+    "contentRatio": 0.0036652020147894117,
+    "drift": 0,
+    "worstTile": 0.0322265625,
+    "textCoverage": 1.0434782608695652,
+    "rasterAreaFrac": 0,
+    "raster": 0,
+    "nodes": 247,
+    "svgKB": 56,
+    "ms": 207,
+    "note": "{}",
+    "top": []
+  },
+  "lib-fullcalendar": {
+    "id": "lib-fullcalendar",
+    "status": "ok",
+    "ratio": 0.0032222222222222222,
+    "contentRatio": 0.04493565920563632,
+    "drift": 0,
+    "worstTile": 0.024169921875,
+    "textCoverage": 1.013157894736842,
+    "rasterAreaFrac": 0,
+    "raster": 0,
+    "nodes": 125,
+    "svgKB": 22,
+    "ms": 94,
+    "note": "{}",
+    "top": []
+  },
+  "lib-leaflet-map": {
+    "id": "lib-leaflet-map",
+    "status": "ok",
+    "ratio": 0.000028125,
+    "contentRatio": 0.0003222514635587303,
+    "drift": 0,
+    "worstTile": 0.00244140625,
+    "textCoverage": 1,
+    "rasterAreaFrac": 0,
+    "raster": 0,
+    "nodes": 21,
+    "svgKB": 13,
+    "ms": 34,
+    "note": "{}",
+    "top": []
+  },
+  "lib-reveal-slides": {
+    "id": "lib-reveal-slides",
+    "status": "ok",
+    "ratio": 0.001306423611111111,
+    "contentRatio": 0.04537232438950859,
+    "drift": 0,
+    "worstTile": 0.053466796875,
+    "textCoverage": 0.36607142857142855,
+    "rasterAreaFrac": 0,
+    "raster": 0,
+    "nodes": 10,
+    "svgKB": 198,
+    "ms": 733,
+    "note": "{}",
+    "top": []
+  },
+  "lib-quill-editor": {
+    "id": "lib-quill-editor",
+    "status": "ok",
+    "ratio": 0.00012962962962962963,
+    "contentRatio": 0.0018410878198890086,
+    "drift": 0,
+    "worstTile": 0.01025390625,
+    "textCoverage": 1.0824742268041236,
+    "rasterAreaFrac": 0,
+    "raster": 0,
+    "nodes": 34,
+    "svgKB": 59,
+    "ms": 51,
+    "note": "{}",
+    "top": []
+  },
+  "lib-antd-showcase": {
+    "id": "lib-antd-showcase",
+    "status": "ok",
+    "ratio": 0.0003365384615384615,
+    "contentRatio": 0.0008992386980950592,
+    "drift": 0,
+    "worstTile": 0.015625,
+    "textCoverage": 1,
+    "rasterAreaFrac": 0.010748798076923078,
+    "raster": 1,
+    "nodes": 114,
+    "svgKB": 48,
+    "ms": 115,
+    "note": "{\"form-control\":1}",
+    "top": [
+      {
+        "reason": "form-control",
+        "el": "input.ant-input.css-1okl62o",
+        "area": 17886
+      }
+    ]
+  },
+  "live-wikipedia": {
+    "id": "live-wikipedia",
+    "status": "ok",
+    "ratio": 0.004626302083333333,
+    "contentRatio": 0.036445137400116935,
+    "drift": 0.0011614583333333334,
+    "worstTile": 0.270751953125,
+    "textCoverage": 1.0036109773712085,
+    "rasterAreaFrac": 0.03673263888888889,
+    "raster": 3,
+    "nodes": 355,
+    "svgKB": 204,
+    "ms": 546,
+    "note": "{\"pseudo\":2,\"media:VIDEO\":1}",
+    "top": [
+      {
+        "reason": "pseudo",
+        "el": "a.mw-file-description",
+        "area": 44376
+      },
+      {
+        "reason": "media:VIDEO",
+        "el": "video.mw-file-element",
+        "area": 40000
+      },
+      {
+        "reason": "pseudo",
+        "el": "a.mw-file-magnify",
+        "area": 256
+      }
+    ]
+  },
+  "live-hackernews": {
+    "id": "live-hackernews",
+    "status": "ok",
+    "ratio": 0.000049479166666666665,
+    "contentRatio": 0.00005938873364465533,
+    "drift": 0,
+    "worstTile": 0.0185546875,
+    "textCoverage": 1,
+    "rasterAreaFrac": 0.004267578125,
+    "raster": 31,
+    "nodes": 461,
+    "svgKB": 72,
+    "ms": 1248,
+    "note": "{\"background-image\":30,\"form-control\":1}",
+    "top": [
+      {
+        "reason": "form-control",
+        "el": "input",
+        "area": 3255
+      },
+      {
+        "reason": "background-image",
+        "el": "div.votearrow url(\"https://news.ycombinator.com/triangle.svg\"), linear-gradient(rgba(0, 0, 0, 0), rgba(0",
+        "area": 110
+      },
+      {
+        "reason": "background-image",
+        "el": "div.votearrow url(\"https://news.ycombinator.com/triangle.svg\"), linear-gradient(rgba(0, 0, 0, 0), rgba(0",
+        "area": 110
+      },
+      {
+        "reason": "background-image",
+        "el": "div.votearrow url(\"https://news.ycombinator.com/triangle.svg\"), linear-gradient(rgba(0, 0, 0, 0), rgba(0",
+        "area": 110
+      },
+      {
+        "reason": "background-image",
+        "el": "div.votearrow url(\"https://news.ycombinator.com/triangle.svg\"), linear-gradient(rgba(0, 0, 0, 0), rgba(0",
+        "area": 110
+      }
+    ]
+  },
+  "live-mdn": {
+    "id": "live-mdn",
+    "status": "ok",
+    "ratio": 0.0290693359375,
+    "contentRatio": 0.03000066014151217,
+    "drift": 0,
+    "worstTile": 0.197509765625,
+    "textCoverage": 0.9972776769509982,
+    "rasterAreaFrac": 0.06027734375,
+    "raster": 6,
+    "nodes": 418,
+    "svgKB": 1169,
+    "ms": 2059,
+    "note": "{\"pseudo\":4,\"media:IFRAME\":1,\"background-image\":1}",
+    "top": [
+      {
+        "reason": "media:IFRAME",
+        "el": "iframe",
+        "area": 103544
+      },
+      {
+        "reason": "background-image",
+        "el": "div.left-sidebar__header linear-gradient(rgb(255, 255, 255) 0px, rgb(255, 255, 255) calc(100% - 32px), rgba(0, 0, 0",
+        "area": 17024
+      },
+      {
+        "reason": "pseudo",
+        "el": "span.browser.chrome",
+        "area": 720
+      },
+      {
+        "reason": "pseudo",
+        "el": "span.browser.edge",
+        "area": 720
+      },
+      {
+        "reason": "pseudo",
+        "el": "span.browser.firefox",
+        "area": 720
+      }
+    ]
+  },
+  "live-reactdev": {
+    "id": "live-reactdev",
+    "status": "ok",
+    "ratio": 0.007779296875,
+    "contentRatio": 0.014817983965475548,
+    "drift": 0,
+    "worstTile": 0.11328125,
+    "textCoverage": 1,
+    "rasterAreaFrac": 0.000650390625,
+    "raster": 1,
+    "nodes": 123,
+    "svgKB": 2004,
+    "ms": 4286,
+    "note": "{\"filter\":1}",
+    "top": [
+      {
+        "reason": "filter",
+        "el": "svg",
+        "area": 1332
+      }
+    ]
+  },
+  "live-bbc": {
+    "id": "live-bbc",
+    "status": "ok",
+    "ratio": 0.00145263671875,
+    "contentRatio": 0.0018125014469549366,
+    "drift": 0,
+    "worstTile": 0.0283203125,
+    "textCoverage": 1,
+    "rasterAreaFrac": 0.20267578125,
+    "raster": 3,
+    "nodes": 80,
+    "svgKB": 2246,
+    "ms": 2320,
+    "note": "{\"media:IFRAME\":3}",
+    "top": [
+      {
+        "reason": "media:IFRAME",
+        "el": "iframe",
+        "area": 242500
+      },
+      {
+        "reason": "media:IFRAME",
+        "el": "iframe",
+        "area": 97280
+      },
+      {
+        "reason": "media:IFRAME",
+        "el": "iframe",
+        "area": 75300
+      }
+    ]
+  },
+  "live-apple": {
+    "id": "live-apple",
+    "status": "ok",
+    "ratio": 0.000359375,
+    "contentRatio": 0.0003689894451972966,
+    "drift": 0,
+    "worstTile": 0.030029296875,
+    "textCoverage": 1,
+    "rasterAreaFrac": 0,
+    "raster": 0,
+    "nodes": 36,
+    "svgKB": 7702,
+    "ms": 6011,
+    "note": "{}",
+    "top": []
+  },
+  "live-tailwindcss": {
+    "id": "live-tailwindcss",
+    "status": "ok",
+    "ratio": 0.00116943359375,
+    "contentRatio": 0.004467025147766208,
+    "drift": 0.00021337890625,
+    "worstTile": 0.078125,
+    "textCoverage": 1,
+    "rasterAreaFrac": 0.117796875,
+    "raster": 14,
+    "nodes": 205,
+    "svgKB": 1780,
+    "ms": 720,
+    "note": "{\"pseudo\":14}",
+    "top": [
+      {
+        "reason": "pseudo",
+        "el": "span.line",
+        "area": 17232
+      },
+      {
+        "reason": "pseudo",
+        "el": "span.line",
+        "area": 17232
+      },
+      {
+        "reason": "pseudo",
+        "el": "span.line",
+        "area": 17232
+      },
+      {
+        "reason": "pseudo",
+        "el": "span.line",
+        "area": 17232
+      },
+      {
+        "reason": "pseudo",
+        "el": "span.line",
+        "area": 17232
+      }
+    ]
+  },
+  "live-stripe": {
+    "id": "live-stripe",
+    "status": "ok",
+    "ratio": 0.00511474609375,
+    "contentRatio": 0.018124279786972664,
+    "drift": 0.002419921875,
+    "worstTile": 0.134033203125,
+    "textCoverage": 0.8418640183346066,
+    "rasterAreaFrac": 0.1210888671875,
+    "raster": 4,
+    "nodes": 137,
+    "svgKB": 462,
+    "ms": 2846,
+    "note": "{\"blend-mode\":4}",
+    "top": [
+      {
+        "reason": "blend-mode",
+        "el": "h1.hds-heading.hero-section__title",
+        "area": 223210
+      },
+      {
+        "reason": "blend-mode",
+        "el": "div.hero-section__eyebrow",
+        "area": 22220
+      },
+      {
+        "reason": "blend-mode",
+        "el": "span.hero-section__fullbleed-line.hero-section__fu",
+        "area": 1280
+      },
+      {
+        "reason": "blend-mode",
+        "el": "span.hero-section__fullbleed-line.hero-section__fu",
+        "area": 1280
+      }
+    ]
+  },
+  "live-vercel": {
+    "id": "live-vercel",
+    "status": "ok",
+    "ratio": 0.000255859375,
+    "contentRatio": 0.003366527465467395,
+    "drift": 0.00001806640625,
+    "worstTile": 0.05615234375,
+    "textCoverage": 0.5115740740740741,
+    "rasterAreaFrac": 0,
+    "raster": 0,
+    "nodes": 36,
+    "svgKB": 417,
+    "ms": 576,
+    "note": "{}",
+    "top": []
+  },
+  "live-pydocs": {
+    "id": "live-pydocs",
+    "status": "ok",
+    "ratio": 0.00136181640625,
+    "contentRatio": 0.0032679470519930494,
+    "drift": 0,
+    "worstTile": 0.033935546875,
+    "textCoverage": 1.010194624652456,
+    "rasterAreaFrac": 0.00427734375,
+    "raster": 4,
+    "nodes": 194,
+    "svgKB": 56,
+    "ms": 250,
+    "note": "{\"form-control\":4}",
+    "top": [
+      {
+        "reason": "form-control",
+        "el": "select.language-select",
+        "area": 5360
+      },
+      {
+        "reason": "form-control",
+        "el": "select.version-select",
+        "area": 1600
+      },
+      {
+        "reason": "form-control",
+        "el": "select.theme-selector",
+        "area": 1000
+      },
+      {
+        "reason": "form-control",
+        "el": "input",
+        "area": 800
+      }
+    ]
+  },
+  "live-bootstrap": {
+    "id": "live-bootstrap",
+    "status": "ok",
+    "ratio": 0.00136669921875,
+    "contentRatio": 0.0018211866667534207,
+    "drift": 0,
+    "worstTile": 0.070068359375,
+    "textCoverage": 1,
+    "rasterAreaFrac": 0.025845703125,
+    "raster": 1,
+    "nodes": 54,
+    "svgKB": 308,
+    "ms": 2143,
+    "note": "{\"pseudo\":1}",
+    "top": [
+      {
+        "reason": "pseudo",
+        "el": "div.carbon-responsive-wrap.carbon-responsive-wrap-",
+        "area": 52932
+      }
+    ]
+  },
+  "live-antdesign": {
+    "id": "live-antdesign",
+    "status": "ok",
+    "ratio": 0.00017138671875,
+    "contentRatio": 0.00035252042057393537,
+    "drift": 0,
+    "worstTile": 0.01953125,
+    "textCoverage": 0.5824255628177197,
+    "rasterAreaFrac": 0.80811083984375,
+    "raster": 6,
+    "nodes": 245,
+    "svgKB": 2393,
+    "ms": 2103,
+    "note": "{\"form-control\":2,\"img-cors\":1,\"mask\":1,\"filter\":1,\"transform-3d\":1}",
+    "top": [
+      {
+        "reason": "transform-3d",
+        "el": "div.acss-1p7fr62",
+        "area": 819200
+      },
+      {
+        "reason": "mask",
+        "el": "div.ant-border-beam.css-oc1rc0 linear-gradient(rgb(255, 255, 255) 0px, rgb(255, 255, 255) 0px), linear-gradient | auto, auto | exclude, exclude",
+        "area": 803840
+      },
+      {
+        "reason": "filter",
+        "el": "div.css-oc1rc0.ant-popover",
+        "area": 21725
+      },
+      {
+        "reason": "form-control",
+        "el": "input.ant-input.css-oc1rc0",
+        "area": 4576
+      },
+      {
+        "reason": "form-control",
+        "el": "input",
+        "area": 3366
+      }
+    ]
+  },
+  "live-mui": {
+    "id": "live-mui",
+    "status": "ok",
+    "ratio": 0.002857421875,
+    "contentRatio": 0.002857424665453775,
+    "drift": 0.00032763671875,
+    "worstTile": 0.31103515625,
+    "textCoverage": 1,
+    "rasterAreaFrac": 0.00027978515625,
+    "raster": 8,
+    "nodes": 273,
+    "svgKB": 4257,
+    "ms": 2858,
+    "note": "{\"form-control\":8}",
+    "top": [
+      {
+        "reason": "form-control",
+        "el": "input",
+        "area": 289
+      },
+      {
+        "reason": "form-control",
+        "el": "input",
+        "area": 272
+      },
+      {
+        "reason": "form-control",
+        "el": "input.MuiRating-visuallyHidden",
+        "area": 2
+      },
+      {
+        "reason": "form-control",
+        "el": "input.MuiRating-visuallyHidden",
+        "area": 2
+      },
+      {
+        "reason": "form-control",
+        "el": "input.MuiRating-visuallyHidden",
+        "area": 2
+      }
+    ]
+  },
+  "live-vuejs": {
+    "id": "live-vuejs",
+    "status": "ok",
+    "ratio": 0.0074384765625,
+    "contentRatio": 0.030781043209440005,
+    "drift": 0,
+    "worstTile": 0.156982421875,
+    "textCoverage": 0.9810344827586207,
+    "rasterAreaFrac": 0.019451171875,
+    "raster": 1,
+    "nodes": 82,
+    "svgKB": 2017,
+    "ms": 3491,
+    "note": "{\"background-image\":1}",
+    "top": [
+      {
+        "reason": "background-image",
+        "el": "span.accent -webkit-linear-gradient(315deg, rgb(66, 211, 146) 25%, rgb(100, 126, 255))",
+        "area": 39836
+      }
+    ]
+  },
+  "live-guardian": {
+    "id": "live-guardian",
+    "status": "ok",
+    "ratio": 0.00145556640625,
+    "contentRatio": 0.0015085841525284346,
+    "drift": 0,
+    "worstTile": 0.05810546875,
+    "textCoverage": 1.0228531855955678,
+    "rasterAreaFrac": 0.1825,
+    "raster": 1,
+    "nodes": 144,
+    "svgKB": 679,
+    "ms": 1775,
+    "note": "{\"media:IFRAME\":1}",
+    "top": [
+      {
+        "reason": "media:IFRAME",
+        "el": "iframe",
+        "area": 373760
+      }
+    ]
+  },
+  "live-reddit": {
+    "id": "live-reddit",
+    "status": "ok",
+    "ratio": 0,
+    "contentRatio": 0,
+    "drift": 0,
+    "worstTile": 0,
+    "textCoverage": 1,
+    "rasterAreaFrac": 0,
+    "raster": 0,
+    "nodes": 6,
+    "svgKB": 100,
+    "ms": 35,
+    "note": "{}",
+    "top": []
+  },
+  "live-amazon": {
+    "id": "live-amazon",
+    "status": "ok",
+    "ratio": 0.00044287109375,
+    "contentRatio": 0.008375193912979242,
+    "drift": 0,
+    "worstTile": 0.0517578125,
+    "textCoverage": 1,
+    "rasterAreaFrac": 0.032431640625,
+    "raster": 2,
+    "nodes": 13,
+    "svgKB": 58,
+    "ms": 431,
+    "note": "{\"background-image\":2}",
+    "top": [
+      {
+        "reason": "background-image",
+        "el": "div.a-divider-inner -webkit-linear-gradient(top, rgba(0, 0, 0, 0.14), rgba(0, 0, 0, 0.03) 3px, rgba(0, 0, 0, 0",
+        "area": 57600
+      },
+      {
+        "reason": "background-image",
+        "el": "span.a-button-inner -webkit-linear-gradient(top, rgb(247, 223, 165), rgb(240, 193, 75))",
+        "area": 8820
+      }
+    ]
+  },
+  "live-githubdocs": {
+    "id": "live-githubdocs",
+    "status": "ok",
+    "ratio": 0.00195654296875,
+    "contentRatio": 0.014465442862042202,
+    "drift": 0,
+    "worstTile": 0.0732421875,
+    "textCoverage": 1.0076670317634173,
+    "rasterAreaFrac": 0,
+    "raster": 0,
+    "nodes": 158,
+    "svgKB": 609,
+    "ms": 235,
+    "note": "{}",
+    "top": []
+  },
+  "live-mslearn": {
+    "id": "live-mslearn",
+    "status": "ok",
+    "ratio": 0.00334423828125,
+    "contentRatio": 0.0034956718794659264,
+    "drift": 0,
+    "worstTile": 0.176513671875,
+    "textCoverage": 0.9962756052141527,
+    "rasterAreaFrac": 0,
+    "raster": 0,
+    "nodes": 162,
+    "svgKB": 2711,
+    "ms": 982,
+    "note": "{}",
+    "top": []
+  },
+  "live-k8s": {
+    "id": "live-k8s",
+    "status": "ok",
+    "ratio": 0.0018291015625,
+    "contentRatio": 0.0021909866575580265,
+    "drift": 0,
+    "worstTile": 0.111083984375,
+    "textCoverage": 1.0137236962488563,
+    "rasterAreaFrac": 0,
+    "raster": 0,
+    "nodes": 42,
+    "svgKB": 2757,
+    "ms": 2782,
+    "note": "{}",
+    "top": []
+  },
+  "live-godev": {
+    "id": "live-godev",
+    "status": "ok",
+    "ratio": 0.0131591796875,
+    "contentRatio": 0.018458512182275583,
+    "drift": 0,
+    "worstTile": 0.725341796875,
+    "textCoverage": 1,
+    "rasterAreaFrac": 0,
+    "raster": 0,
+    "nodes": 107,
+    "svgKB": 764,
+    "ms": 533,
+    "note": "{}",
+    "top": []
+  },
+  "live-rustlang": {
+    "id": "live-rustlang",
+    "status": "ok",
+    "ratio": 0.0008916015625,
+    "contentRatio": 0.0012033527807268488,
+    "drift": 0,
+    "worstTile": 0.03369140625,
+    "textCoverage": 1,
+    "rasterAreaFrac": 0.00159375,
+    "raster": 1,
+    "nodes": 52,
+    "svgKB": 1074,
+    "ms": 5819,
+    "note": "{\"form-control\":1}",
+    "top": [
+      {
+        "reason": "form-control",
+        "el": "select",
+        "area": 3264
+      }
+    ]
+  },
+  "live-nextjs": {
+    "id": "live-nextjs",
+    "status": "ok",
+    "ratio": 0.0013408203125,
+    "contentRatio": 0.01104990161322125,
+    "drift": 0.00021435546875,
+    "worstTile": 0.102294921875,
+    "textCoverage": 0.9894991922455574,
+    "rasterAreaFrac": 0,
+    "raster": 0,
+    "nodes": 198,
+    "svgKB": 737,
+    "ms": 1638,
+    "note": "{}",
+    "top": []
+  },
+  "live-w3c": {
+    "id": "live-w3c",
+    "status": "ok",
+    "ratio": 0.004035714285714286,
+    "contentRatio": 0.006003308792705714,
+    "drift": 0,
+    "worstTile": 0.056884765625,
+    "textCoverage": 1,
+    "rasterAreaFrac": 0,
+    "raster": 0,
+    "nodes": 77,
+    "svgKB": 742,
+    "ms": 711,
+    "note": "{}",
+    "top": []
+  },
+  "live-pythonorg": {
+    "id": "live-pythonorg",
+    "status": "ok",
+    "ratio": 0.00095947265625,
+    "contentRatio": 0.0010387493141082774,
+    "drift": 0,
+    "worstTile": 0.026123046875,
+    "textCoverage": 1.0140646976090013,
+    "rasterAreaFrac": 0,
+    "raster": 0,
+    "nodes": 322,
+    "svgKB": 303,
+    "ms": 534,
+    "note": "{}",
+    "top": []
+  },
+  "live-mozilla": {
+    "id": "live-mozilla",
+    "status": "ok",
+    "ratio": 0.02277978515625,
+    "contentRatio": 0.05444792883593962,
+    "drift": 0,
+    "worstTile": 1,
+    "textCoverage": 1,
+    "rasterAreaFrac": 0.336875,
+    "raster": 7,
+    "nodes": 54,
+    "svgKB": 925,
+    "ms": 891,
+    "note": "{\"pseudo\":7}",
+    "top": [
+      {
+        "reason": "pseudo",
+        "el": "a.m24-c-launchpad-link.m24-t-product-firefox",
+        "area": 98560
+      },
+      {
+        "reason": "pseudo",
+        "el": "a.m24-c-launchpad-link.m24-t-product-thunderbird",
+        "area": 98560
+      },
+      {
+        "reason": "pseudo",
+        "el": "a.m24-c-launchpad-link.m24-t-product-vpn",
+        "area": 98560
+      },
+      {
+        "reason": "pseudo",
+        "el": "a.m24-c-launchpad-link.m24-t-product-monitor",
+        "area": 98560
+      },
+      {
+        "reason": "pseudo",
+        "el": "a.m24-c-launchpad-link.m24-t-product-relay",
+        "area": 98560
+      }
+    ]
+  },
+  "live-gdev": {
+    "id": "live-gdev",
+    "status": "ok",
+    "ratio": 0.01833203125,
+    "contentRatio": 0.025904133180252583,
+    "drift": 0,
+    "worstTile": 0.703125,
+    "textCoverage": 1.0195530726256983,
+    "rasterAreaFrac": 0,
+    "raster": 0,
+    "nodes": 72,
+    "svgKB": 16011,
+    "ms": 10303,
+    "note": "{}",
+    "top": []
+  },
+  "live-linear": {
+    "id": "live-linear",
+    "status": "ok",
+    "ratio": 0.014435546875,
+    "contentRatio": 0.014435546875,
+    "drift": 0,
+    "worstTile": 0.190673828125,
+    "textCoverage": 0.7181551976573939,
+    "rasterAreaFrac": 0.587939453125,
+    "raster": 9,
+    "nodes": 198,
+    "svgKB": 2420,
+    "ms": 4407,
+    "note": "{\"filter\":8,\"blend-mode\":1}",
+    "top": [
+      {
+        "reason": "blend-mode",
+        "el": "div.SPbJba_grain.SPbJba_grainSubtle",
+        "area": 895346
+      },
+      {
+        "reason": "filter",
+        "el": "span.hide-mobile.QI8oKG_titleLine",
+        "area": 105400
+      },
+      {
+        "reason": "filter",
+        "el": "span.hide-mobile.QI8oKG_titleLine",
+        "area": 95480
+      },
+      {
+        "reason": "filter",
+        "el": "div.q1lnWq_message",
+        "area": 30096
+      },
+      {
+        "reason": "filter",
+        "el": "div",
+        "area": 28386
+      }
+    ]
+  },
+  "live-cloudflare": {
+    "id": "live-cloudflare",
+    "status": "ok",
+    "ratio": 0.01058154296875,
+    "contentRatio": 0.014719726784047732,
+    "drift": 0.007875,
+    "worstTile": 0.09228515625,
+    "textCoverage": 0.9653333333333334,
+    "rasterAreaFrac": 0.4690625,
+    "raster": 1,
+    "nodes": 48,
+    "svgKB": 6827,
+    "ms": 829,
+    "note": "{\"media:VIDEO\":1}",
+    "top": [
+      {
+        "reason": "media:VIDEO",
+        "el": "video.absolute.bottom-0",
+        "area": 960640
+      }
+    ]
+  },
+  "live-docker": {
+    "id": "live-docker",
+    "status": "ok",
+    "ratio": 0.039494140625,
+    "contentRatio": 0.05712352634169734,
+    "drift": 0.00560546875,
+    "worstTile": 0.9619140625,
+    "textCoverage": 0.8319263238679969,
+    "rasterAreaFrac": 0,
+    "raster": 0,
+    "nodes": 111,
+    "svgKB": 8053,
+    "ms": 2574,
+    "note": "{}",
+    "top": []
+  },
+  "live-airbnb": {
+    "id": "live-airbnb",
+    "status": "ok",
+    "ratio": 0.005809709821428572,
+    "contentRatio": 0.006006340378518867,
+    "drift": 0,
+    "worstTile": 0.094970703125,
+    "textCoverage": 0.995571302037201,
+    "rasterAreaFrac": 0.0026417410714285714,
+    "raster": 2,
+    "nodes": 135,
+    "svgKB": 845,
+    "ms": 1490,
+    "note": "{\"blend-mode\":1,\"form-control\":1}",
+    "top": [
+      {
+        "reason": "form-control",
+        "el": "input.fp9kp52.atm_9s_1ulexfb",
+        "area": 3870
+      },
+      {
+        "reason": "blend-mode",
+        "el": "span.l1fec0wt.atm_c8_1h3mmnw",
+        "area": 864
+      }
+    ]
+  },
+  "live-spotify": {
+    "id": "live-spotify",
+    "status": "ok",
+    "ratio": 0.02087353515625,
+    "contentRatio": 0.022013394756003488,
+    "drift": 0,
+    "worstTile": 0.9052734375,
+    "textCoverage": 0.9229137199434229,
+    "rasterAreaFrac": 0.011109375,
+    "raster": 1,
+    "nodes": 191,
+    "svgKB": 2993,
+    "ms": 5270,
+    "note": "{\"form-control\":1}",
+    "top": [
+      {
+        "reason": "form-control",
+        "el": "input.e-10860-form-input.e-10860-form-control",
+        "area": 22752
+      }
+    ]
+  },
+  "live-cnn": {
+    "id": "live-cnn",
+    "status": "ok",
+    "ratio": 0,
+    "contentRatio": 0,
+    "drift": 0,
+    "worstTile": 0,
+    "textCoverage": 1,
+    "rasterAreaFrac": 0,
+    "raster": 0,
+    "nodes": 1,
+    "svgKB": 0,
+    "ms": 16,
+    "note": "{}",
+    "top": []
+  },
+  "live-bbcnews": {
+    "id": "live-bbcnews",
+    "status": "ok",
+    "ratio": 0.0014892578125,
+    "contentRatio": 0.0036129007802681128,
+    "drift": 0,
+    "worstTile": 0.10205078125,
+    "textCoverage": 1,
+    "rasterAreaFrac": 0.07984765625,
+    "raster": 2,
+    "nodes": 122,
+    "svgKB": 2026,
+    "ms": 2427,
+    "note": "{\"media:IFRAME\":2}",
+    "top": [
+      {
+        "reason": "media:IFRAME",
+        "el": "iframe",
+        "area": 97280
+      },
+      {
+        "reason": "media:IFRAME",
+        "el": "iframe",
+        "area": 66248
+      }
+    ]
+  },
+  "live-ted": {
+    "id": "live-ted",
+    "status": "ok",
+    "ratio": 0.00187451171875,
+    "contentRatio": 0.002000488788352038,
+    "drift": 0,
+    "worstTile": 0.03125,
+    "textCoverage": 1.001669449081803,
+    "rasterAreaFrac": 0.15245654296875,
+    "raster": 3,
+    "nodes": 124,
+    "svgKB": 2022,
+    "ms": 1038,
+    "note": "{\"media:IFRAME\":2,\"background-image\":1}",
+    "top": [
+      {
+        "reason": "media:IFRAME",
+        "el": "iframe",
+        "area": 242500
+      },
+      {
+        "reason": "media:IFRAME",
+        "el": "iframe",
+        "area": 66248
+      },
+      {
+        "reason": "background-image",
+        "el": "div.to-pureBlack.lg-tui:right-20 linear-gradient(to right in oklab, rgba(0, 0, 0, 0) 0%, rgb(0, 0, 0) 100%)",
+        "area": 3483
+      }
+    ]
+  },
+  "live-arxiv": {
+    "id": "live-arxiv",
+    "status": "ok",
+    "ratio": 0.00013151041666666666,
+    "contentRatio": 0.00013727582246566406,
+    "drift": 0,
+    "worstTile": 0.0107421875,
+    "textCoverage": 1.004391314954867,
+    "rasterAreaFrac": 0.006881510416666667,
+    "raster": 4,
+    "nodes": 480,
+    "svgKB": 355,
+    "ms": 365,
+    "note": "{\"form-control\":4}",
+    "top": [
+      {
+        "reason": "form-control",
+        "el": "select",
+        "area": 5620
+      },
+      {
+        "reason": "form-control",
+        "el": "input",
+        "area": 2244
+      },
+      {
+        "reason": "form-control",
+        "el": "input",
+        "area": 1430
+      },
+      {
+        "reason": "form-control",
+        "el": "input",
+        "area": 1276
+      }
+    ]
+  },
+  "live-lobsters": {
+    "id": "live-lobsters",
+    "status": "ok",
+    "ratio": 0.006297991071428572,
+    "contentRatio": 0.06529360717385016,
+    "drift": 0,
+    "worstTile": 0.096435546875,
+    "textCoverage": 1.0082407739161592,
+    "rasterAreaFrac": 0.00020145089285714287,
+    "raster": 1,
+    "nodes": 415,
+    "svgKB": 102,
+    "ms": 324,
+    "note": "{\"background-image\":1}",
+    "top": [
+      {
+        "reason": "background-image",
+        "el": "a url(\"https://lobste.rs/assets/logo-transparent-e4f2f8b4.svg\")",
+        "area": 361
+      }
+    ]
+  },
+  "live-devto": {
+    "id": "live-devto",
+    "status": "ok",
+    "ratio": 0.00369189453125,
+    "contentRatio": 0.007857249744361403,
+    "drift": 0,
+    "worstTile": 0.118408203125,
+    "textCoverage": 0.8939149165320409,
+    "rasterAreaFrac": 0,
+    "raster": 0,
+    "nodes": 204,
+    "svgKB": 923,
+    "ms": 1095,
+    "note": "{}",
+    "top": []
+  },
+  "live-zhihu": {
+    "id": "live-zhihu",
+    "status": "ok",
+    "ratio": 0,
+    "contentRatio": 0,
+    "drift": 0,
+    "worstTile": 0,
+    "textCoverage": 1,
+    "rasterAreaFrac": 0,
+    "raster": 0,
+    "nodes": 9,
+    "svgKB": 14590,
+    "ms": 153566,
+    "note": "{}",
+    "top": []
+  },
+  "live-36kr": {
+    "id": "live-36kr",
+    "status": "ok",
+    "ratio": 0.01864794921875,
+    "contentRatio": 0.019087235227146646,
+    "drift": 0,
+    "worstTile": 0.53662109375,
+    "textCoverage": 0.9006514657980456,
+    "rasterAreaFrac": 0.00114306640625,
+    "raster": 2,
+    "nodes": 233,
+    "svgKB": 1445,
+    "ms": 21057,
+    "note": "{\"pseudo\":2}",
+    "top": [
+      {
+        "reason": "pseudo",
+        "el": "span.go-change",
+        "area": 1372
+      },
+      {
+        "reason": "pseudo",
+        "el": "span",
+        "area": 969
+      }
+    ]
+  },
+  "live-sspai": {
+    "id": "live-sspai",
+    "status": "ok",
+    "ratio": 0.00008984375,
+    "contentRatio": 0.0001279932330534177,
+    "drift": 0,
+    "worstTile": 0.01416015625,
+    "textCoverage": 1,
+    "rasterAreaFrac": 0,
+    "raster": 0,
+    "nodes": 4,
+    "svgKB": 36,
+    "ms": 3743,
+    "note": "{}",
+    "top": []
+  },
+  "live-baidu": {
+    "id": "live-baidu",
+    "status": "ok",
+    "ratio": 0.0001996527777777778,
+    "contentRatio": 0.0021015697812539974,
+    "drift": 0,
+    "worstTile": 0.018798828125,
+    "textCoverage": 1,
+    "rasterAreaFrac": 0.018739583333333334,
+    "raster": 1,
+    "nodes": 81,
+    "svgKB": 96,
+    "ms": 5827,
+    "note": "{\"form-control\":1}",
+    "top": [
+      {
+        "reason": "form-control",
+        "el": "textarea.chat-input-textarea.chat-input-scroll-sty",
+        "area": 21588
+      }
+    ]
+  }
+}

@@ -1,0 +1,8 @@
+<!doctype html><html><head><meta charset="utf-8"><title>KaTeX</title><link rel="stylesheet" href="../.cache/node_modules/katex/dist/katex.min.css"><script src="../.cache/node_modules/katex/dist/katex.min.js"></script>
+<style>body{font:18px/1.6 Georgia,serif;max-width:760px;margin:30px auto;padding:0 20px;color:#222}h2{font-family:sans-serif}</style></head><body>
+<h2>Selected identities</h2><p>Euler: <span class="m" data-t="e^{i\pi}+1=0"></span> and the Gaussian integral <span class="m" data-t="\int_{-\infty}^{\infty} e^{-x^2}\,dx=\sqrt{\pi}"></span> appear inline.</p>
+<div class="m" data-d="1" data-t="\sum_{n=1}^{\infty}\frac{1}{n^2}=\frac{\pi^2}{6}"></div>
+<div class="m" data-d="1" data-t="\mathbf{A}=\begin{pmatrix} a_{11} & a_{12} \\ a_{21} & a_{22} \end{pmatrix},\quad \det\mathbf{A}=a_{11}a_{22}-a_{12}a_{21}"></div>
+<div class="m" data-d="1" data-t="\frac{-b\pm\sqrt{b^2-4ac}}{2a}\qquad \nabla\times\vec{E}=-\frac{\partial\vec{B}}{\partial t}"></div>
+<div class="m" data-d="1" data-t="\lim_{x\to 0}\frac{\sin x}{x}=1 \quad \binom{n}{k}=\frac{n!}{k!(n-k)!} \quad \oint_C \vec F\cdot d\vec r"></div>
+<script>document.querySelectorAll('.m').forEach(e=>katex.render(e.dataset.t,e,{displayMode:!!e.dataset.d,throwOnError:false}))</script></body></html>

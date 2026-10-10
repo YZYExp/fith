@@ -1,0 +1,7 @@
+<!doctype html><html><head><meta charset="utf-8"><style>body{margin:0;padding:16px;background:#fff;font:14px sans-serif}canvas{border:2px solid #333;border-radius:8px;margin-right:12px;vertical-align:top}</style></head><body>
+<canvas id="a" width="200" height="120"></canvas><canvas id="b" width="100" height="100" style="width:160px;height:160px;padding:6px"></canvas>
+<script>
+const a=document.getElementById('a').getContext('2d');a.fillStyle='#f4f1ea';a.fillRect(0,0,200,120);
+['#e8553d','#2a7fd4','#2a7'].forEach((c,i)=>{a.fillStyle=c;a.fillRect(20+i*55,100-(30+i*20),40,30+i*20)});a.font='bold 14px sans-serif';a.fillStyle='#222';a.fillText('canvas text',10,16);
+const b=document.getElementById('b').getContext('2d');const g=b.createRadialGradient(50,50,5,50,50,50);g.addColorStop(0,'#fff');g.addColorStop(1,'#c0c');b.fillStyle=g;b.fillRect(0,0,100,100);
+</script></body></html>

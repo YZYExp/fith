@@ -37,6 +37,8 @@ export interface FontFace {
   /** base64 data URI of the font file. */
   src: string;
   format: string;
+  /** CSS unicode-range of this face (subsetted webfonts such as Google Fonts). */
+  unicodeRange?: string;
 }
 
 export interface RasterTarget {
@@ -73,7 +75,9 @@ export interface Clip {
  */
 export interface MaskGradient {
   rect: Rect;
-  gradient?: LinearGradientFill;
+  gradient?: LinearGradientFill | RadialGradientFill;
+  /** several gradient layers, unioned (mask-composite: add), painted bottom → top as listed last → first */
+  gradients?: (LinearGradientFill | RadialGradientFill)[];
   image?: { href: string; x: number; y: number; width: number; height: number };
 }
 
@@ -84,6 +88,16 @@ export interface NodeBase {
   clip?: Clip | null;
   /** Alpha masks (from mask-image on the node or an ancestor) applied multiplicatively. */
   masks?: MaskGradient[];
+  /** CSS filter: blur(Npx) on a childless box (glows/scrims) → SVG feGaussianBlur, stdDeviation in px. */
+  blur?: number;
+  /** CSS clip-path basic shapes (inset/circle/ellipse/polygon) as absolute-px SVG path data; all apply. */
+  clipShapes?: { d: string; evenodd?: boolean }[];
+  /**
+   * 2D CSS transforms (rotate/skew) on ancestors, innermost first. The node's own geometry is in the
+   * *untransformed* local space of the transformed element; each layer is emitted as
+   * `<g transform=matrix>` and `outerClip` (the clip in force outside that element) wraps it.
+   */
+  layers?: { matrix: [number, number, number, number, number, number]; outerClip?: Clip | null }[];
 }
 
 export interface GradientStop {
@@ -92,11 +106,62 @@ export interface GradientStop {
   color: string;
 }
 
+/** Absolute px box a gradient is sized against (CSS padding box); defaults to the node rect. */
+export interface GradientBox {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+export interface RadialGradientFill {
+  type: 'radial-gradient';
+  /** Centre and radii in absolute px (rx==ry for `circle`). */
+  cx: number;
+  cy: number;
+  rx: number;
+  ry: number;
+  stops: GradientStop[];
+  box?: GradientBox;
+}
+
+export interface ConicGradientFill {
+  type: 'conic-gradient';
+  /** Centre in absolute px; `from` is the start angle in degrees (CSS: 0 = up, clockwise). */
+  cx: number;
+  cy: number;
+  from: number;
+  /** Offsets are fractions of a full turn. */
+  stops: GradientStop[];
+  box?: GradientBox;
+}
+
 export interface LinearGradientFill {
   type: 'linear-gradient';
+  box?: GradientBox;
+  /** repeating-linear-gradient: the [from,to] span (fractions of the gradient line) of one period. */
+  repeat?: { from: number; to: number };
   /** CSS angle in degrees (0 = to top, 90 = to right). */
   angle: number;
   stops: GradientStop[];
+}
+
+/**
+ * One CSS background layer with its own size/position/repeat/clip (general engine, used when the simple
+ * "gradient fills the box" fast path does not apply). Painted via an SVG <pattern> tile.
+ */
+export interface BgLayer {
+  /** Tile rect in absolute px (one repetition of the image/gradient). */
+  tile: Rect;
+  repeatX: boolean;
+  repeatY: boolean;
+  /** Area the layer is clipped to (border/padding/content box) and its radii. */
+  clip: Rect;
+  clipRadii: CornerRadii;
+  /** Gradient fill expressed in tile-local coordinates (box = {0,0,tile.w,tile.h}). */
+  gradient?: LinearGradientFill | RadialGradientFill | ConicGradientFill;
+  /** base64 image data URI. */
+  href?: string;
 }
 
 export interface BoxNode extends NodeBase {
@@ -104,10 +169,18 @@ export interface BoxNode extends NodeBase {
   /** Solid background color, or null/absent for none. */
   fill?: string | null;
   /** Background gradient painted over `fill`. */
-  gradient?: LinearGradientFill | null;
+  gradient?: LinearGradientFill | RadialGradientFill | ConicGradientFill | null;
+  /** General background layers (sized/tiled/mixed url+gradient), painted bottom → top above `fill`. */
+  bgLayers?: BgLayer[];
+  /** Extra background layers (multi-layer `background-image`), painted bottom → top above `gradient`. */
+  gradients?: (LinearGradientFill | RadialGradientFill | ConicGradientFill)[];
   radii: CornerRadii;
+  /** Vertical radii when corners are elliptical (e.g. `border-radius: 50%` on a non-square box). */
+  radiiY?: CornerRadii;
   border?: BorderEdges | null;
   shadows?: BoxShadow[];
+  /** `inset` box-shadow layers (blur → feGaussianBlur σ=blur/2) — painted inside the padding box above the background. */
+  insetShadows?: { offsetX: number; offsetY: number; spread: number; color: string; blur?: number }[];
   /** CSS outline rendered outside the border box. */
   outline?: { width: number; color: string; style: string; offset: number } | null;
 }
@@ -152,6 +225,10 @@ export interface TextNode extends NodeBase {
   letterSpacing: number;
   wordSpacing: number;
   decoration?: string | null;
+  /** white-space: pre* — keep runs of spaces (emitted with xml:space=preserve). */
+  preserveSpace?: boolean;
+  /** Extra CSS font declarations that change glyph selection/shape (font-feature-settings, font-variation-settings, …). */
+  fontExtra?: string;
   decorationColor?: string;
   textAnchor?: 'start' | 'middle' | 'end';
   /** Gradient fill from background-clip:text pattern; overrides color when set. */
@@ -178,9 +255,17 @@ export interface RasterNode extends NodeBase {
   /** Filled in by the backend; references RasterTarget.id until then. */
   href?: string | null;
   reason: string;
+  /** Source element (tag.class) for diagnostics. */
+  desc?: string;
+  /** Set when an <img> could not be read in-page (CORS): the Node backend may fetch `src` itself and
+   *  turn this node back into an ImageNode (vector-first) instead of screenshotting it. */
+  imgFallback?: { src: string; rect: Rect; preserveAspectRatio?: string };
 }
 
 export interface CaptureOptions {
+  /** CSS text of cross-origin stylesheets the page cannot read (href → text), supplied by a backend that can
+   *  bypass CORS; lets @font-face rules in them be embedded. */
+  externalCss?: Record<string, string>;
   width: number;
   height?: number;
   deviceScaleFactor?: number;
