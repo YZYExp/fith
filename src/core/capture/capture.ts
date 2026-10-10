@@ -367,7 +367,7 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
     if (!TEXT_INPUT.test(inp.getAttribute('type') || '') && !TEXT_INPUT.test(inp.type)) return false;
     if (inp.list || inp.type === 'number') return false; // datalist arrow / spin buttons
     if (['inset', 'outset', 'groove', 'ridge'].includes(cs.borderTopStyle)) return false;
-    if (cs.textOverflow === 'ellipsis' || cs.direction === 'rtl') return false;
+    if (cs.direction === 'rtl') return false;
     return true;
   };
 
@@ -506,6 +506,17 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
     return { d: `M${f(c[0] - rx)},${f(c[1])}A${f(rx)},${f(ry)} 0 1 0 ${f(c[0] + rx)},${f(c[1])}A${f(rx)},${f(ry)} 0 1 0 ${f(c[0] - rx)},${f(c[1])}Z` };
   };
 
+  // A matrix3d is only a true 3D effect under perspective (its own perspective() term or a perspective
+  // ancestor). Without one it is an orthographic projection — z is dropped, the (a,b,c,d,e,f) part is exact.
+  const inPerspective = (el: Element, p: number[]): boolean => {
+    if (Math.abs(p[3]) > 1e-6 || Math.abs(p[7]) > 1e-6 || Math.abs(p[11]) > 1e-6) return true;
+    for (let a = el.parentElement; a; a = a.parentElement) {
+      const pp = getComputedStyle(a).perspective;
+      if (pp && pp !== 'none') return true;
+    }
+    return false;
+  };
+
   const needsSubtreeRaster = (el: Element, cs: CSSStyleDeclaration) => {
     const tag = el.tagName.toUpperCase();
     if (['CANVAS', 'VIDEO', 'IFRAME', 'OBJECT', 'EMBED'].includes(tag)) return 'media:' + tag;
@@ -532,7 +543,7 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
         const has3D =
           Math.abs(p[2]) > 1e-3 || Math.abs(p[6]) > 1e-3 ||
           Math.abs(p[8]) > 1e-3 || Math.abs(p[9]) > 1e-3 || Math.abs(p[14]) > 1e-3;
-        if (has3D) return 'transform-3d';
+        if (has3D && inPerspective(el, p)) return 'transform-3d';
       }
       const m = parseMatrix(tf);
       if (m && (Math.abs(m.b) > 1e-3 || Math.abs(m.c) > 1e-3)) return 'transform-rotate';
@@ -1467,7 +1478,19 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
     const ascent = (fm as any).fontBoundingBoxAscent || fontSize * 0.8;
     const descent = (fm as any).fontBoundingBoxDescent || fontSize * 0.2;
     const ls = cs.letterSpacing === 'normal' ? 0 : num(cs.letterSpacing) * sc;
-    const textW = mctx.measureText(raw).width + ls * raw.length;
+    let shown = raw;
+    let textW = mctx.measureText(raw).width + ls * raw.length;
+    if (textW > cw && cs.textOverflow === 'ellipsis') {
+      // same truncation as the browser: longest prefix that fits next to the ellipsis
+      const ell = '\u2026', ellW = mctx.measureText(ell).width;
+      let lo = 0, hi = raw.length;
+      while (lo < hi) {
+        const mid = Math.ceil((lo + hi) / 2);
+        if (mctx.measureText(raw.slice(0, mid)).width + ls * mid + ellW <= cw) lo = mid; else hi = mid - 1;
+      }
+      shown = raw.slice(0, lo) + ell;
+      textW = mctx.measureText(shown).width + ls * shown.length;
+    }
     const align = cs.textAlign;
     const x = align === 'center' ? cx + (cw - textW) / 2 : align === 'right' || align === 'end' ? cx + cw - textW : cx;
     const baseline = cy0 + (ch - (ascent + descent)) / 2 + ascent;
@@ -1479,7 +1502,7 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
       rect: { x, y: baseline - ascent, width: textW, height: ascent + descent },
       opacity: opacity * (isPh ? num(ps.opacity || '1') : 1),
       clip: intersect(clip, { x: cx, y: cy0, width: cw, height: ch, radii: [0, 0, 0, 0] }),
-      lines: [{ text: raw, x, baseline }],
+      lines: [{ text: shown, x, baseline }],
       fontFamily: cs.fontFamily,
       fontSize,
       fontWeight: cs.fontWeight,
@@ -2103,7 +2126,8 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
     const rotated = !!m && !/matrix3d/.test(tf) && (Math.abs(m.b) > 1e-3 || Math.abs(m.c) > 1e-3);
     const has3D = /matrix3d/.test(tf) && (() => {
       const p = tf.match(/matrix3d\(([^)]+)\)/)![1].split(',').map((x) => parseFloat(x));
-      return Math.abs(p[2]) > 1e-3 || Math.abs(p[6]) > 1e-3 || Math.abs(p[8]) > 1e-3 || Math.abs(p[9]) > 1e-3 || Math.abs(p[14]) > 1e-3;
+      const z = Math.abs(p[2]) > 1e-3 || Math.abs(p[6]) > 1e-3 || Math.abs(p[8]) > 1e-3 || Math.abs(p[9]) > 1e-3 || Math.abs(p[14]) > 1e-3;
+      return z && inPerspective(el, p);
     })();
     const hasRotateProps = [cs0.getPropertyValue('rotate'), cs0.getPropertyValue('scale'), cs0.getPropertyValue('translate')].some((v) => v && v !== 'none');
     const m3 = /matrix3d/.test(tf) ? parseMatrix(tf) : null;

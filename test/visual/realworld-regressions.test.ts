@@ -243,6 +243,17 @@ describe('real-world regressions', () => {
     expect(r.ratio).toBeLessThan(0.03);
   }, 60_000);
 
+  it('treats 3D transforms without perspective as orthographic 2D (translateZ no-op, rotateX foreshortening), still vector', async () => {
+    const r = await validate(
+      { url: pathToFileURL(resolve(FIXTURES, 'transform-3d-flat.html')).href },
+      { width: 260, height: 260, name: 'transform-3d-flat', outDir: OUT, fontMode: 'none' },
+    );
+    const svg = readFileSync(resolve(OUT, 'transform-3d-flat.svg'), 'utf8');
+    expect(svg).not.toContain('data:image/png');
+    for (const t of ['translateZ', 'translate3d', 'rotateX ortho']) expect(svg).toContain(`>${t}</text>`);
+    expect(r.ratio).toBeLessThan(0.02);
+  }, 60_000);
+
   describe('webfont in an external stylesheet', () => {
     let base: { url: string; close: () => Promise<void> } | null = null;
     afterAll(async () => base?.close());
