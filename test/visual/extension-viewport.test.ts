@@ -27,14 +27,14 @@ const OUT = resolve(__dirname, '__out__');
 const VW = 800;
 const VH = 600;
 
-// A tall page with two raster-fallback cards (CSS filter → not
+// A tall page with two raster-fallback cards (3D transform → not
 // vectorizable): one we'll scroll into view, one left far below the fold.
 const FIXTURE = `<!doctype html><html><head><meta charset="utf-8"><style>
   body { margin: 0; font-family: Arial, sans-serif; }
   .spacer { height: 900px; background: #fff; }
   .card {
     height: 300px; margin: 0 40px;
-    background: linear-gradient(135deg, #1d4ed8, #9333ea); filter: saturate(1.2); /* CSS filter: still needs raster */
+    background: linear-gradient(135deg, #1d4ed8, #9333ea); transform: perspective(400px) rotateX(6deg); /* 3D transform: still needs raster */
     color: #fff; border-radius: 16px; padding: 32px; box-sizing: border-box;
   }
   .card h2 { margin: 0 0 12px; font-size: 28px; }

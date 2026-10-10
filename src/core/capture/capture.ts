@@ -371,6 +371,48 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
     return true;
   };
 
+  // CSS `filter` function list → FilterOp[] (null when it holds anything SVG can't reproduce, e.g. url()).
+  const parseFilterList = (v: string | undefined) => {
+    const val = (v || '').trim();
+    if (!val || val === 'none') return null;
+    const toks: string[] = [];
+    let depth = 0, cur = '';
+    for (const ch of val) {
+      if (ch === '(') depth++;
+      else if (ch === ')') depth--;
+      if (/\s/.test(ch) && depth === 0) { if (cur) toks.push(cur); cur = ''; } else cur += ch;
+    }
+    if (cur) toks.push(cur);
+    const ops: any[] = [];
+    const amt = (t: string) => (/%$/.test(t) ? parseFloat(t) / 100 : parseFloat(t));
+    for (const t of toks) {
+      const m = t.match(/^([\w-]+)\(([\s\S]*)\)$/);
+      if (!m) return null;
+      const fn = m[1], arg = m[2].trim();
+      if (fn === 'blur') { if (!/px$/.test(arg)) return null; ops.push({ fn, px: parseFloat(arg) }); }
+      else if (['brightness', 'contrast', 'grayscale', 'invert', 'opacity', 'saturate', 'sepia'].includes(fn)) { const a = amt(arg || '1'); if (!isFinite(a)) return null; ops.push({ fn, amount: a }); }
+      else if (fn === 'hue-rotate') { const f = parseFloat(arg); if (!isFinite(f)) return null; ops.push({ fn, deg: /turn$/.test(arg) ? f * 360 : /rad$/.test(arg) ? (f * 180) / Math.PI : /grad$/.test(arg) ? f * 0.9 : f }); }
+      else if (fn === 'drop-shadow') {
+        const cm = arg.match(/(rgba?\([^)]*\)|#[0-9a-fA-F]+|[a-zA-Z]+(?![\w(]))/);
+        const color = cm ? normColor(cm[0]) : 'rgb(0, 0, 0)';
+        const lens = (cm ? arg.replace(cm[0], '') : arg).match(/-?[\d.]+px/g) || [];
+        if (lens.length < 2) return null;
+        ops.push({ fn, x: parseFloat(lens[0] as string), y: parseFloat(lens[1] as string), blur: lens[2] ? parseFloat(lens[2] as string) : 0, color });
+      } else return null;
+    }
+    return ops.length ? ops : null;
+  };
+  // how far a filter chain can paint beyond the element box
+  const filterOverflow = (ops: any[]) => {
+    let pad = 4;
+    for (const o of ops) {
+      if (o.fn === 'blur') pad += o.px * 3;
+      else if (o.fn === 'drop-shadow') pad += Math.abs(o.x) + Math.abs(o.y) + o.blur * 1.5 + 2;
+    }
+    return pad;
+  };
+  const groupedEls = new WeakSet<Element>();
+
   // `filter: blur(Npx)` alone (the "glow" decoration pattern) maps 1:1 to feGaussianBlur.
   const pureBlur = (filter: string | undefined): number | null => {
     const m = (filter || '').trim().match(/^blur\(\s*([\d.]+)px\s*\)$/);
@@ -468,11 +510,9 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
     const tag = el.tagName.toUpperCase();
     if (['CANVAS', 'VIDEO', 'IFRAME', 'OBJECT', 'EMBED'].includes(tag)) return 'media:' + tag;
     if (['INPUT', 'SELECT', 'TEXTAREA', 'PROGRESS', 'METER'].includes(tag) && !vectorTextInput(el, cs)) return 'form-control';
-    if (cs.filter && cs.filter !== 'none' && !(pureBlur(cs.filter) !== null && el.childNodes.length === 0))
-      return 'filter';
+    if (cs.filter && cs.filter !== 'none' && !parseFilterList(cs.filter)) return 'filter';
     // backdrop-filter (frosted nav bars) can't be reproduced in SVG, but rastering the element would
     // freeze its whole subtree (all text) into pixels — keep it vector, with its own translucent fill.
-    if (cs.mixBlendMode && cs.mixBlendMode !== 'normal') return 'blend-mode';
     if (
       (cs as any).maskImage &&
       (cs as any).maskImage !== 'none' &&
@@ -1690,7 +1730,7 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
         : null;
     const bgImg = general ? null : bgImg0;
     if (!fill && !gradient && !gradients && !general && !border && shadows.length === 0 && !outline && !bgImg && !(cs.boxShadow || '').includes('inset')) return;
-    const blur = el.childNodes.length === 0 ? pureBlur(cs.filter) : null;
+    const blur = el.childNodes.length === 0 && !groupedEls.has(el) ? pureBlur(cs.filter) : null;
     const insetShadows = parseInsetShadows(cs.boxShadow) || [];
     if (fill || gradient || gradients || general || border || shadows.length > 0 || outline || insetShadows.length > 0)
     nodes.push({
@@ -2030,11 +2070,35 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
   let transformDepth = 0;
   const noVectorTransform = new WeakSet<Element>();
 
+  // CSS filter / mix-blend-mode composite the whole subtree as one unit → tag its nodes with a group
+  const withGroup = async (el: Element, clip: Clip | null, inheritedOpacity: number, run: () => Promise<void>) => {
+    const gcs = getComputedStyle(el);
+    const live = gcs.display !== 'none' && gcs.display !== 'contents' && !rootAncestors.has(el);
+    const fl = live && gcs.filter && gcs.filter !== 'none' ? parseFilterList(gcs.filter) : null;
+    const bm = live && gcs.mixBlendMode && gcs.mixBlendMode !== 'normal' ? gcs.mixBlendMode : null;
+    if (!fl && !bm) return run();
+    const id = 'g' + groupSeq++;
+    const r = el.getBoundingClientRect();
+    const pad = fl ? filterOverflow(fl) : 0;
+    groups[id] = { filter: fl || undefined, blend: bm || undefined, region: fl ? { x: r.left - pad, y: r.top - pad, width: r.width + pad * 2, height: r.height + pad * 2 } : undefined };
+    groupedEls.add(el);
+    const start = nodes.length;
+    await run();
+    let any = false;
+    for (let i = start; i < nodes.length; i++) {
+      const nd = nodes[i];
+      if (nd.kind === 'raster') continue; // a screenshot already contains the filtered/blended pixels
+      (nd.groups ||= []).push(id);
+      any = true;
+    }
+    if (!any) delete groups[id];
+  };
+
   const walk = async (el: Element, clip: Clip | null, inheritedOpacity: number): Promise<void> => {
     const cs0 = getComputedStyle(el);
     const tf = cs0.transform;
     if (!tf || tf === 'none' || noVectorTransform.has(el) || cs0.display === 'none' || cs0.display === 'contents' || rootAncestors.has(el))
-      return walkInner(el, clip, inheritedOpacity);
+      return withGroup(el, clip, inheritedOpacity, () => walkInner(el, clip, inheritedOpacity));
     const m = parseMatrix(tf);
     const rotated = !!m && !/matrix3d/.test(tf) && (Math.abs(m.b) > 1e-3 || Math.abs(m.c) > 1e-3);
     const has3D = /matrix3d/.test(tf) && (() => {
@@ -2045,9 +2109,9 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
     const m3 = /matrix3d/.test(tf) ? parseMatrix(tf) : null;
     const mm = m3 && !has3D ? m3 : m;
     const rot = !!mm && !has3D && (Math.abs(mm.b) > 1e-3 || Math.abs(mm.c) > 1e-3);
-    if (!rot || has3D || hasRotateProps || !(el instanceof HTMLElement || el instanceof SVGElement)) return walkInner(el, clip, inheritedOpacity);
+    if (!rot || has3D || hasRotateProps || !(el instanceof HTMLElement || el instanceof SVGElement)) return withGroup(el, clip, inheritedOpacity, () => walkInner(el, clip, inheritedOpacity));
     // a running CSS animation/transition would re-interpolate the cleared transform: keep raster
-    try { if ((el as any).getAnimations && (el as any).getAnimations().length) return walkInner(el, clip, inheritedOpacity); } catch { /* ignore */ }
+    try { if ((el as any).getAnimations && (el as any).getAnimations().length) return withGroup(el, clip, inheritedOpacity, () => walkInner(el, clip, inheritedOpacity)); } catch { /* ignore */ }
     void rotated;
 
     const he = el as HTMLElement;
@@ -2071,7 +2135,7 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
         ] as [number, number, number, number, number, number],
         outerClip: clip,
       };
-      await walkInner(el, null, inheritedOpacity);
+      await withGroup(el, null, inheritedOpacity, () => walkInner(el, null, inheritedOpacity));
       for (let i = start; i < nodes.length; i++) (nodes[i].layers ||= []).push(layer);
     } catch (e) {
       if (!(e instanceof TransformBail)) throw e;
@@ -2085,9 +2149,12 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
       nodes.splice(start);
       rasterTargets.length = rStart;
       noVectorTransform.add(el); // re-walk with the old behaviour: raster the transformed element
-      return walkInner(el, clip, inheritedOpacity);
+      return withGroup(el, clip, inheritedOpacity, () => walkInner(el, clip, inheritedOpacity));
     }
   };
+
+  let groupSeq = 0;
+  const groups: Record<string, any> = {};
 
   type HoistItem = { k: Element; clip: Clip | null; opacity: number; z: number };
   let curHoist: { neg: HoistItem[]; pos: HoistItem[] } | null = null;
@@ -2410,6 +2477,7 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
     deviceScaleFactor: dpr,
     background,
     nodes,
+    groups: Object.keys(groups).length ? groups : undefined,
     rasterTargets,
     fonts,
   };
