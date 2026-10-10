@@ -186,6 +186,8 @@ export interface RasterNode extends NodeBase {
   /** Filled in by the backend; references RasterTarget.id until then. */
   href?: string | null;
   reason: string;
+  /** Source element (tag.class) for diagnostics. */
+  desc?: string;
 }
 
 export interface CaptureOptions {

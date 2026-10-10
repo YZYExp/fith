@@ -18,7 +18,7 @@ const BASELINE = resolve('bench/baseline.json');
 
 interface Row {
   id: string; status: 'ok' | 'regress' | 'skip' | 'error'; ratio?: number; contentRatio?: number; worstTile?: number; textCoverage?: number;
-  rasterAreaFrac?: number; raster?: number; nodes?: number; svgKB?: number; ms?: number; note?: string;
+  rasterAreaFrac?: number; raster?: number; nodes?: number; svgKB?: number; ms?: number; note?: string; top?: { reason: string; el?: string; area: number }[];
 }
 
 async function runOne(t: Target, base: string): Promise<Row> {
@@ -36,7 +36,7 @@ async function runOne(t: Target, base: string): Promise<Row> {
     if (t.minTextCoverage && cov < t.minTextCoverage) fails.push(`text coverage ${(cov * 100).toFixed(0)}% < ${(t.minTextCoverage * 100).toFixed(0)}%`);
     if (t.maxRasterArea !== undefined && rasterFrac > t.maxRasterArea) fails.push(`raster ${(rasterFrac * 100).toFixed(0)}% > ${(t.maxRasterArea * 100).toFixed(0)}%`);
     return { id: t.id, status: fails.length ? 'regress' : 'ok', ratio: r.ratio, contentRatio: r.contentRatio, worstTile: r.worstTile, textCoverage: cov, rasterAreaFrac: rasterFrac,
-      raster: r.stats.raster, nodes: r.stats.nodes, svgKB: Math.round(r.svgBytes / 1024), ms: r.captureMs, note: fails.join('; ') || JSON.stringify(r.stats.rasterReasons) };
+      raster: r.stats.raster, nodes: r.stats.nodes, svgKB: Math.round(r.svgBytes / 1024), ms: r.captureMs, note: fails.join('; ') || JSON.stringify(r.stats.rasterReasons), top: r.stats.topRasters };
   } catch (e: any) {
     const msg = String(e?.message || e).split('\n')[0].slice(0, 120);
     return { id: t.id, status: t.kind === 'live' && /net::|Timeout/.test(msg) ? 'skip' : 'error', note: msg };
@@ -55,6 +55,7 @@ async function main() {
     const b = base[t.id];
     if (b?.ratio !== undefined && row.ratio !== undefined && row.ratio > Math.max(b.ratio * 1.5, b.ratio + 0.002) && row.status === 'ok') { row.status = 'regress'; row.note = `vs baseline ${(b.ratio * 100).toFixed(2)}%`; }
     rows.push(row);
+    for (const t2 of (row.top || []).slice(0, 3)) console.error(`          raster ${t2.reason.padEnd(16)} ${String(t2.area).padStart(8)}px  ${t2.el ?? ''}`);
     console.error(`${row.status.padEnd(7)} ${t.id.padEnd(22)} ${row.ratio !== undefined ? (row.ratio * 100).toFixed(2) + '%' : '-'}  ${row.note ?? ''}`);
   }
   await server.close();

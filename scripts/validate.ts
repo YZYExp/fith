@@ -93,10 +93,12 @@ export interface SceneStats {
   /** Visible characters of DOM text nodes (rendered), for coverage checks. */
   domTextChars: number;
   rasterReasons: Record<string, number>;
+  /** Largest raster nodes (reason, element, area px) for triage. */
+  topRasters: { reason: string; el?: string; area: number }[];
 }
 
 export function sceneStats(scene: Scene, domTextChars: number): SceneStats {
-  const st: SceneStats = { nodes: scene.nodes.length, box: 0, text: 0, image: 0, inlineSvg: 0, raster: 0, rasterArea: 0, textChars: 0, domTextChars, rasterReasons: {} };
+  const st: SceneStats = { nodes: scene.nodes.length, box: 0, text: 0, image: 0, inlineSvg: 0, raster: 0, rasterArea: 0, textChars: 0, domTextChars, rasterReasons: {}, topRasters: [] };
   for (const n of scene.nodes) {
     if (n.kind === 'box') st.box++;
     else if (n.kind === 'text') { st.text++; for (const l of n.lines) st.textChars += l.text.replace(/\s/g, '').length; }
@@ -106,8 +108,10 @@ export function sceneStats(scene: Scene, domTextChars: number): SceneStats {
       // text inside transplanted <svg> (charts, diagrams) is still vector text
       for (const m of n.markup.matchAll(/<text\b[^>]*>([\s\S]*?)<\/text>/g)) st.textChars += m[1].replace(/<[^>]*>/g, '').replace(/&[a-z#0-9]+;/g, 'x').replace(/\s/g, '').length;
     }
-    else if (n.kind === 'raster') { st.raster++; st.rasterArea += n.rect.width * n.rect.height; st.rasterReasons[n.reason] = (st.rasterReasons[n.reason] || 0) + 1; }
+    else if (n.kind === 'raster') { st.raster++; st.rasterArea += n.rect.width * n.rect.height; st.rasterReasons[n.reason] = (st.rasterReasons[n.reason] || 0) + 1; st.topRasters.push({ reason: n.reason, el: n.desc, area: Math.round(n.rect.width * n.rect.height) }); }
   }
+  st.topRasters.sort((a, b) => b.area - a.area);
+  st.topRasters = st.topRasters.slice(0, 5);
   return st;
 }
 
@@ -143,7 +147,11 @@ export async function validate(
     });
     if (opts.initScript) await context.addInitScript(opts.initScript);
     const page = await context.newPage();
-    if ('url' in target) await page.goto(target.url, { waitUntil: 'networkidle' });
+    if ('url' in target) {
+      // real sites with analytics/ads rarely reach networkidle: settle on 'load' + a bounded idle wait
+      await page.goto(target.url, { waitUntil: 'load', timeout: 45_000 });
+      await page.waitForLoadState('networkidle', { timeout: 12_000 }).catch(() => {});
+    }
     else await page.setContent(target.html, { waitUntil: 'networkidle' });
     if (opts.settleMs) await page.waitForTimeout(opts.settleMs);
 
@@ -172,7 +180,7 @@ export async function validate(
       if (!g.__name) g.__name = (t: any) => t;
     });
     const t0 = Date.now();
-    const domTextChars = await page.evaluate(() => {
+    const domTextChars = await page.evaluate(([capW, capH]) => {
       let n = 0;
       const w = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
       for (let t = w.nextNode() as Text | null; t; t = w.nextNode() as Text | null) {
@@ -193,10 +201,11 @@ export async function validate(
         if (hidden) continue;
         const r = el.getBoundingClientRect();
         if (r.width <= 0 || r.height <= 0) continue;
+        if (r.top >= capH || r.bottom <= 0 || r.left >= capW || r.right <= 0) continue; // outside the captured region
         n += (t.data || '').replace(/\s/g, '').length;
       }
       return n;
-    });
+    }, [opts.width, height] as [number, number]);
     const scene: Scene = await page.evaluate(captureScene, {
       width: opts.width,
       height,

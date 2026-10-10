@@ -146,7 +146,9 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
   };
 
   const transparent = (c: string) =>
-    !c || c === 'transparent' || c === 'rgba(0, 0, 0, 0)' || /,\s*0\)\s*$/.test(c);
+    !c || c === 'transparent' || c === 'rgba(0, 0, 0, 0)' ||
+    // alpha-0 only: a bare `, 0)` suffix also matches opaque rgb(255, 153, 0) (blue channel 0)
+    /^(?:rgba|hsla)\([^)]*,\s*0(?:\.0+)?\)\s*$/.test(c) || /\/\s*0(?:\.0+)?%?\s*\)\s*$/.test(c);
 
   const parseMatrix = (tf: string) => {
     if (!tf || tf === 'none') return null;
@@ -266,12 +268,17 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
     return { type: 'linear-gradient' as const, angle, stops: finalStops };
   };
 
-  const radiiOf = (cs: CSSStyleDeclaration): CornerRadii => [
-    num(cs.borderTopLeftRadius),
-    num(cs.borderTopRightRadius),
-    num(cs.borderBottomRightRadius),
-    num(cs.borderBottomLeftRadius),
-  ];
+  // Corner radii in px. Computed `border-radius` keeps percentages ("50%"), which must be resolved
+  // against the box (horizontal % vs width, vertical % vs height; elliptical corners use the smaller
+  // radius since the IR is circular-only).
+  const radiiOf = (cs: CSSStyleDeclaration, w?: number, h?: number): CornerRadii => {
+    const one = (v: string): number => {
+      const parts = (v || '0').trim().split(/\s+/);
+      const res = parts.map((t, i) => (t.endsWith('%') ? (parseFloat(t) / 100) * (i === 0 ? w ?? 0 : h ?? w ?? 0) : num(t)));
+      return Math.min(...res);
+    };
+    return [one(cs.borderTopLeftRadius), one(cs.borderTopRightRadius), one(cs.borderBottomRightRadius), one(cs.borderBottomLeftRadius)];
+  };
 
   const intersect = (a: Clip | null, b: Clip): Clip => {
     if (!a) return b;
@@ -363,7 +370,8 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
     if (['INPUT', 'SELECT', 'TEXTAREA', 'PROGRESS', 'METER'].includes(tag) && !vectorTextInput(el, cs)) return 'form-control';
     if (cs.filter && cs.filter !== 'none' && !(pureBlur(cs.filter) !== null && el.childNodes.length === 0))
       return 'filter';
-    if ((cs as any).backdropFilter && (cs as any).backdropFilter !== 'none') return 'backdrop-filter';
+    // backdrop-filter (frosted nav bars) can't be reproduced in SVG, but rastering the element would
+    // freeze its whole subtree (all text) into pixels — keep it vector, with its own translucent fill.
     if (cs.mixBlendMode && cs.mixBlendMode !== 'normal') return 'blend-mode';
     if (
       (cs as any).maskImage &&
@@ -636,7 +644,7 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
     const placed = placeImageLayer(info, cs.backgroundSize, cs.backgroundPosition, cs.backgroundRepeat, area);
     if (!placed) return null;
     const clipBox = cs.backgroundClip === 'padding-box' ? pad : border;
-    return { href: info.href, rect: placed, clipBox, radii: radiiOf(cs) };
+    return { href: info.href, rect: placed, clipBox, radii: radiiOf(cs, border.width, border.height) };
   };
 
   // Box-level effects we can't vectorize. Safe to raster only on a LEAF element
@@ -710,7 +718,8 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
     const r = clampToCapture(rect);
     if (!r) return;
     const id = nid();
-    nodes.push({ kind: 'raster', id, rect: r, opacity, clip, reason });
+    const desc = el ? el.tagName.toLowerCase() + (typeof (el as any).className === 'string' && (el as any).className ? '.' + (el as any).className.trim().split(/\s+/).slice(0, 2).join('.') : '') : undefined;
+    nodes.push({ kind: 'raster', id, rect: r, opacity, clip, reason, desc: desc && desc.slice(0, 80) } as PaintNode);
     rasterTargets.push({ id, ...r });
     // in-page backends can re-render this element themselves when no screenshot is available
     if (el) opts.rasterElements?.set(id, el);
@@ -1111,7 +1120,10 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
   const emitBox = (el: Element, cs: CSSStyleDeclaration, clip: Clip | null, opacity: number) => {
     const r = el.getBoundingClientRect();
     const textClipped = cs.backgroundClip === 'text' || cs.backgroundClip === '-webkit-text';
-    const fill = textClipped || transparent(cs.backgroundColor) ? null : normColor(cs.backgroundColor);
+    // <body>'s background propagates to the canvas when <html> has none: it paints beneath everything
+    // (incl. negative z-index layers) and is already the scene background.
+    const canvasBg = !subtree && el === document.body && transparent(getComputedStyle(document.documentElement).backgroundColor);
+    const fill = textClipped || canvasBg || transparent(cs.backgroundColor) ? null : normColor(cs.backgroundColor);
     const { border } = buildBorder(cs);
     const shadows = parseShadows(cs.boxShadow);
     const gradient =
@@ -1136,7 +1148,7 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
       blur: blur || undefined,
       fill,
       gradient,
-      radii: radiiOf(cs),
+      radii: radiiOf(cs, r.width, r.height),
       border,
       shadows,
       insetShadows: insetShadows.length ? insetShadows : undefined,
@@ -1179,18 +1191,20 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
     // need real content rendering, which we can't place without flow geometry.
     if (!(content === '""' || content === "''" || content === 'normal' || content === ''))
       return { handled: false };
-    if (ps.position !== 'absolute') return { handled: false };
-    if (csEl.position === 'static') return { handled: false }; // host isn't the containing block
+    const fixedPos = ps.position === 'fixed';
+    if (ps.position !== 'absolute' && !fixedPos) return { handled: false };
+    if (!fixedPos && csEl.position === 'static') return { handled: false }; // host isn't the containing block
     for (const s of ['top', 'right', 'bottom', 'left'] as const) {
       const v = ps.getPropertyValue(s);
       if (!v || v === 'auto') return { handled: false }; // width-based positioning → skip
     }
     const r = el.getBoundingClientRect();
-    // Containing block for an absolute pseudo whose host is positioned = host padding box.
-    const cbX = r.left + num(csEl.borderLeftWidth);
-    const cbY = r.top + num(csEl.borderTopWidth);
-    const cbW = r.width - num(csEl.borderLeftWidth) - num(csEl.borderRightWidth);
-    const cbH = r.height - num(csEl.borderTopWidth) - num(csEl.borderBottomWidth);
+    // Containing block: the host padding box for absolute; the viewport for fixed (scroll is
+    // reset to 0 for the capture, so viewport px == page px).
+    const cbX = fixedPos ? 0 : r.left + num(csEl.borderLeftWidth);
+    const cbY = fixedPos ? 0 : r.top + num(csEl.borderTopWidth);
+    const cbW = fixedPos ? document.documentElement.clientWidth : r.width - num(csEl.borderLeftWidth) - num(csEl.borderRightWidth);
+    const cbH = fixedPos ? window.innerHeight : r.height - num(csEl.borderTopWidth) - num(csEl.borderBottomWidth);
     const x = cbX + num(ps.left) + num(ps.marginLeft);
     const y = cbY + num(ps.top) + num(ps.marginTop);
     const width = cbX + cbW - num(ps.right) - num(ps.marginRight) - x;
@@ -1216,7 +1230,7 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
     // Clip the pseudo to the host's rounded content box when the host clips overflow,
     // so an inset overlay follows the card's rounded corners.
     const pseudoClip = clipsContent(csEl)
-      ? intersect(clip, { x: r.left, y: r.top, width: r.width, height: r.height, radii: radiiOf(csEl) })
+      ? intersect(clip, { x: r.left, y: r.top, width: r.width, height: r.height, radii: radiiOf(csEl, r.width, r.height) })
       : clip;
     return {
       handled: true,
@@ -1229,7 +1243,7 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
         blur: blur || undefined,
         fill,
         gradient,
-        radii: radiiOf(ps),
+        radii: radiiOf(ps, width, height),
         border,
         shadows,
         outline: null,
@@ -1380,7 +1394,7 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
     // border-radius (avatars: .rounded-circle, thumbnails) — shrink radii by the border.
     const bl = num(cs.borderLeftWidth), br = num(cs.borderRightWidth), bt = num(cs.borderTopWidth), bb = num(cs.borderBottomWidth);
     const cl = bl + num(cs.paddingLeft), cr = br + num(cs.paddingRight), ct = bt + num(cs.paddingTop), cb = bb + num(cs.paddingBottom);
-    const rad = radiiOf(cs);
+    const rad = radiiOf(cs, r.width, r.height);
     let imgClip = clip;
     if (rad.some((v) => v > 0)) {
       const px = r.left + bl, py = r.top + bt, pw = r.width - bl - br, ph = r.height - bt - bb;
@@ -1441,6 +1455,28 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
       if (nd.kind === 'raster') continue;
       (nd.masks ||= []).push(mk);
     }
+  };
+
+  type HoistItem = { k: Element; clip: Clip | null; opacity: number; z: number };
+  let curHoist: { neg: HoistItem[]; pos: HoistItem[] } | null = null;
+  const createsStackingContext = (el: Element, cs: CSSStyleDeclaration): boolean => {
+    if (el === document.documentElement || el === rootEl) return true;
+    if (cs.position === 'fixed' || cs.position === 'sticky') return true;
+    if (cs.zIndex !== 'auto') {
+      if (cs.position !== 'static') return true;
+      const pd = el.parentElement ? getComputedStyle(el.parentElement).display : '';
+      if (/flex|grid/.test(pd)) return true;
+    }
+    if (num(cs.opacity || '1') < 1) return true;
+    if (cs.transform !== 'none' || cs.filter !== 'none' || cs.clipPath !== 'none') return true;
+    if ((cs as any).perspective && (cs as any).perspective !== 'none') return true;
+    if ((cs as any).maskImage && (cs as any).maskImage !== 'none') return true;
+    if (cs.mixBlendMode !== 'normal' || cs.isolation === 'isolate') return true;
+    if ((cs as any).backdropFilter && (cs as any).backdropFilter !== 'none') return true;
+    if (/transform|opacity|filter|perspective|clip-path|mask/.test((cs as any).willChange || '')) return true;
+    if (/layout|paint|strict|content/.test((cs as any).contain || '')) return true;
+    if ((cs as any).containerType && (cs as any).containerType !== 'normal') return true;
+    return false;
   };
 
   const walkNode = async (el: Element, clip: Clip | null, inheritedOpacity: number) => {
@@ -1528,7 +1564,7 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
         y: r.top,
         width: clipW,
         height: clipH,
-        radii: radiiOf(cs),
+        radii: radiiOf(cs, r.width, r.height),
       });
     }
 
@@ -1569,42 +1605,71 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
         captureListMarker(el, cs, childClip, opacity);
       }
     } else if (!boxReason && !skipRender && !visHidden) {
-      emitBox(el, cs, clip, opacity);
-      captureText(el, cs, childClip, opacity);
+        emitBox(el, cs, clip, opacity);
+        captureText(el, cs, childClip, opacity);
       captureListMarker(el, cs, childClip, opacity);
     }
 
     const kids = Array.from(el.children);
+    const parentIsFlexGrid = /flex|grid/.test(cs.display);
     const meta = kids.map((k) => {
       const kcs = getComputedStyle(k);
       const positioned = kcs.position !== 'static';
       const zRaw = kcs.zIndex;
       const z = zRaw === 'auto' ? 0 : parseInt(zRaw, 10) || 0;
-      return { k, positioned, z };
+      // z-index applies to positioned boxes and to flex/grid items
+      const layered = zRaw !== 'auto' && (positioned || parentIsFlexGrid);
+      return { k, positioned, z, layered };
     });
     // CSS paint order within a stacking context:
-    //   1. negative z-index positioned descendants (lowest first)
+    //   1. negative z-index descendants (lowest first)
     //   2. block/inline flow (non-positioned) in DOM order
     //   3. positioned with z-index:auto or z-index:0 in DOM order (above flow)
-    //   4. positive z-index positioned (lowest first)
-    const neg   = meta.filter((x) => x.positioned && x.z < 0).sort((a, b) => a.z - b.z);
-    const flow  = meta.filter((x) => !x.positioned);
-    const autoZ = meta.filter((x) => x.positioned && x.z === 0);
-    const pos   = meta.filter((x) => x.positioned && x.z > 0).sort((a, b) => a.z - b.z);
+    //   4. positive z-index descendants (lowest first)
+    // z-indexed descendants belong to the *nearest stacking context*, not to their parent: a
+    // `position:relative; z-index:2` box inside a plain wrapper still paints above a later
+    // z-index:auto sibling of that wrapper. So z≠0 layers are hoisted to the nearest ancestor
+    // that creates a stacking context and painted there (neg → flow → pos).
+    const outerHoist = curHoist;
+    const ownsContext = !outerHoist || createsStackingContext(el, cs);
+    const mine: { neg: HoistItem[]; pos: HoistItem[] } = ownsContext ? { neg: [], pos: [] } : outerHoist!;
+    curHoist = mine;
+    const flowStart = nodes.length;
+    try {
+      for (const m of meta.filter((x) => !(x.layered && x.z !== 0))) {
+        if (!m.positioned) await walk(m.k, childClip, opacity);
+      }
+      for (const m of meta.filter((x) => x.positioned && !(x.layered && x.z !== 0))) {
+        await walk(m.k, childClip, opacity);
+      }
+      for (const m of meta) {
+        if (m.layered && m.z !== 0) (m.z < 0 ? mine.neg : mine.pos).push({ k: m.k, clip: childClip, opacity, z: m.z });
+      }
 
-    for (const m of neg)   await walk(m.k, childClip, opacity);
-    for (const m of flow)  await walk(m.k, childClip, opacity);
-    for (const m of autoZ) await walk(m.k, childClip, opacity);
-    for (const m of pos)   await walk(m.k, childClip, opacity);
+      // Walk open shadow roots after light-DOM children. Shadow DOM content renders
+      // on top of the host's light-DOM background; placing it last preserves that
+      // order. Slotted light-DOM elements are captured by their light-DOM walk
+      // (range.getClientRects() returns their visual slot position), so no doubling.
+      const shadow = (el as HTMLElement).shadowRoot;
+      if (shadow) {
+        for (const child of Array.from(shadow.children)) {
+          await walk(child as Element, childClip, opacity);
+        }
+      }
+    } finally {
+      curHoist = outerHoist;
+    }
 
-    // Walk open shadow roots after light-DOM children. Shadow DOM content renders
-    // on top of the host's light-DOM background; placing it last preserves that
-    // order. Slotted light-DOM elements are captured by their light-DOM walk
-    // (range.getClientRects() returns their visual slot position), so no doubling.
-    const shadow = (el as HTMLElement).shadowRoot;
-    if (shadow) {
-      for (const child of Array.from(shadow.children)) {
-        await walk(child as Element, childClip, opacity);
+    if (ownsContext && (mine.neg.length > 0 || mine.pos.length > 0)) {
+      const flowNodes = nodes.splice(flowStart);
+      curHoist = mine;
+      try {
+        // hoisted layers are stacking contexts of their own (they never re-hoist into `mine`)
+        for (const it of mine.neg.sort((a, b) => a.z - b.z)) await walk(it.k, it.clip, it.opacity);
+        nodes.push(...flowNodes);
+        for (const it of mine.pos.sort((a, b) => a.z - b.z)) await walk(it.k, it.clip, it.opacity);
+      } finally {
+        curHoist = outerHoist;
       }
     }
 

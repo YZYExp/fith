@@ -1,0 +1,13 @@
+<!doctype html><html><head><meta charset="utf-8"><style>
+html,body{margin:0}body{background:#fff;font:700 28px sans-serif;height:360px}
+.glow{position:absolute;left:300px;top:20px;width:160px;height:160px;border-radius:50%;background:#f90;z-index:-1}
+.tile{position:relative;height:160px;overflow:clip;background:#111}
+.content{position:relative}                       /* no z-index: NOT a stacking context */
+.copy{position:relative;z-index:2;color:#fff;padding:20px}   /* hoisted into .tile's context */
+.art{position:absolute;inset:0;background:#2a7}   /* later positioned sibling, z-index:auto */
+.scrim::before{content:"";position:fixed;inset:0;background:rgba(0,0,255,.12);pointer-events:none}
+</style></head><body class="scrim">
+<div class="glow"></div>
+<div class="tile"><div class="content"><div class="copy">Headline above art</div></div><div class="art"></div></div>
+<div style="padding:20px;color:#333">After the tile</div>
+</body></html>

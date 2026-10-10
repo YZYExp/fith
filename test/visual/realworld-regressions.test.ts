@@ -63,6 +63,19 @@ describe('real-world regressions', () => {
     expect(r.ratio).toBeLessThan(0.01);
   }, 60_000);
 
+  it('paints z-indexed descendants in their nearest stacking context; body bg stays under negative z; fixed scrim is vector', async () => {
+    const r = await validate(
+      { url: pathToFileURL(resolve(FIXTURES, 'stacking-order.html')).href },
+      { width: 480, height: 300, name: 'stacking-order', outDir: OUT, fontMode: 'none' },
+    );
+    const svg = readFileSync(resolve(OUT, 'stacking-order.svg'), 'utf8');
+    // text must come after the green art box in paint order (z-index:2 beats the later z:auto sibling)
+    expect(svg.indexOf('Headline above art')).toBeGreaterThan(svg.indexOf('fill="rgb(34, 170, 119)"'));
+    expect(svg).toContain('rgb(255, 153, 0)'); // opaque colours ending in `, 0)` (blue=0) are not transparent
+    expect(svg).not.toContain('data:image/png');
+    expect(r.ratio).toBeLessThan(0.005);
+  }, 60_000);
+
   describe('webfont in an external stylesheet', () => {
     let base: { url: string; close: () => Promise<void> } | null = null;
     afterAll(async () => base?.close());
