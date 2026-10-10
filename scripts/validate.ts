@@ -223,6 +223,10 @@ export async function validate(
           }
         }
         if (hidden) continue;
+        // effectively invisible: any ancestor with opacity 0 (stacked-but-hidden slides, fade-in sections)
+        let faded = false;
+        for (let a: Element | null = el; a && !faded; a = a.parentElement) if (parseFloat(getComputedStyle(a).opacity) === 0) faded = true;
+        if (faded) continue;
         const r = el.getBoundingClientRect();
         if (r.width <= 0 || r.height <= 0) continue;
         if (r.top >= capH || r.bottom <= 0 || r.left >= capW || r.right <= 0) continue; // outside the captured region

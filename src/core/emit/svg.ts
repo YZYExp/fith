@@ -12,7 +12,7 @@ import type {
 } from '../ir/types.js';
 import type { Outliner } from './outline.js';
 import { n, esc, uniformRadii, noRadii, roundedRectPath } from './primitives.js';
-import { Defs, clipId, shapeClipId, conicWedges, blurFilterId, shadowFilterId, shadowMaskId, gradientId, maskGradientId } from './defs.js';
+import { Defs, clipId, filterChainId, shapeClipId, conicWedges, blurFilterId, shadowFilterId, shadowMaskId, gradientId, maskGradientId } from './defs.js';
 
 /** Sharp inset shadows: padding box minus the (offset, spread-shrunk) hole, clipped to the padding box. */
 function emitInsetShadows(node: BoxNode, defs: Defs): string {
@@ -320,7 +320,28 @@ export function emitSvg(scene: Scene, opts: EmitOptions = {}): string {
     iconCounts.set(key, (iconCounts.get(key) || 0) + 1);
   }
 
+  // Group stack: consecutive nodes sharing an outer group id are wrapped in ONE <g> (filter / blend apply
+  // to the composited subtree, not per node).
+  const open: string[] = [];
+  const closeTo = (keep: number) => {
+    while (open.length > keep) {
+      open.pop();
+      body.push('</g>');
+    }
+  };
   for (const node of scene.nodes) {
+    const chain = node.groups ? node.groups.slice().reverse() : []; // outermost first
+    let common = 0;
+    while (common < open.length && common < chain.length && open[common] === chain[common]) common++;
+    closeTo(common);
+    for (let gi = common; gi < chain.length; gi++) {
+      const g = scene.groups?.[chain[gi]];
+      let attrs = '';
+      if (g?.filter && g.filter.length && g.region) attrs += ` filter="url(#${filterChainId(defs, g.filter, g.region)})"`;
+      if (g?.blend) attrs += ` style="mix-blend-mode:${esc(g.blend)}"`;
+      body.push(`<g${attrs}>`);
+      open.push(chain[gi]);
+    }
     let inner = '';
     switch (node.kind) {
       case 'box':
@@ -343,6 +364,7 @@ export function emitSvg(scene: Scene, opts: EmitOptions = {}): string {
     }
     body.push(wrap(node, inner, defs));
   }
+  closeTo(0);
 
   const ox = scene.originX ?? 0;
   const oy = scene.originY ?? 0;

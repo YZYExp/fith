@@ -7,47 +7,79 @@ Metrics: **diff** = differing pixels / all pixels; **content diff** = differing 
 **text cov** = vector text chars ÷ rendered DOM text chars; **raster area** = area of raster-fallback nodes ÷ viewport.
 Live pages drift between runs (ads, rotating stories) — use `pnpm bench --repeat=3` for a median.
 
-## Live sites (19)
+## Live sites (51)
 | id | source | viewport | diff | content diff | text cov | raster area | nodes |
 |---|---|---|---|---|---|---|---|
-| `live-nodejs` | <https://nodejs.org/en> | 1280×1600 | 0.39% | 1.6% | 100% | 7% | 212 |
-| `live-wikipedia` | <https://en.wikipedia.org/wiki/Web_browser> | 1280×1800 | 0.29% | 2.3% | 100% | 12% | 354 |
+| `live-nodejs` | <https://nodejs.org/en> | 1280×1600 | 0.09% | 0.4% | 99% | 10% | 213 |
+| `live-wikipedia` | <https://en.wikipedia.org/wiki/Web_browser> | 1280×1800 | 0.49% | 3.8% | 100% | 2% | 355 |
 | `live-hackernews` | <https://news.ycombinator.com> | 1280×1200 | 0.00% | 0.0% | 100% | 0% | 461 |
-| `live-mdn` | <https://developer.mozilla.org/en-US/docs/Web/CSS/grid> | 1280×1600 | 2.04% | 8.8% | 128% | 21% | 454 |
-| `live-reactdev` | <https://react.dev> | 1280×1600 | 0.68% | 1.3% | 100% | 63% | 123 |
-| `live-bbc` | <https://www.bbc.com> | 1280×1600 | 0.27% | 0.3% | 100% | 20% | 83 |
-| `live-apple` | <https://www.apple.com> | 1280×1600 | 0.10% | 0.1% | 100% | 0% | 36 |
-| `live-tailwindcss` | <https://tailwindcss.com> | 1280×1600 | 1.27% | 4.7% | 100% | 26% | 194 |
-| `live-stripe` | <https://stripe.com> | 1280×1600 | 0.34% | 1.2% | 35% | 56% | 59 |
-| `live-vercel` | <https://vercel.com> | 1280×1600 | 0.06% | 0.8% | 51% | 39% | 37 |
+| `live-mdn` | <https://developer.mozilla.org/en-US/docs/Web/CSS/grid> | 1280×1600 | 2.96% | 3.1% | 99% | 6% | 422 |
+| `live-reactdev` | <https://react.dev> | 1280×1600 | 0.78% | 1.5% | 100% | 0% | 123 |
+| `live-bbc` | <https://www.bbc.com> | 1280×1600 | 0.22% | 0.2% | 100% | 20% | 81 |
+| `live-apple` | <https://www.apple.com> | 1280×1600 | 0.04% | 0.0% | 100% | 0% | 36 |
+| `live-tailwindcss` | <https://tailwindcss.com> | 1280×1600 | 0.12% | 0.4% | 100% | 12% | 205 |
+| `live-stripe` | <https://stripe.com> | 1280×1600 | 0.48% | 1.7% | 100% | 0% | 162 |
+| `live-vercel` | <https://vercel.com> | 1280×1600 | 0.03% | 0.3% | 100% | 0% | 36 |
 | `live-pydocs` | <https://docs.python.org/3/library/asyncio.html> | 1280×1600 | 0.14% | 0.3% | 101% | 0% | 194 |
-| `live-bootstrap` | <https://getbootstrap.com> | 1280×1600 | 0.12% | 0.2% | 100% | 3% | 54 |
-| `live-antdesign` | <https://ant.design> | 1280×1600 | 0.02% | 0.0% | 58% | 82% | 243 |
-| `live-mui` | <https://mui.com> | 1280×1600 | 0.30% | 0.3% | 97% | 2% | 273 |
-| `live-vuejs` | <https://vuejs.org> | 1280×1600 | 0.77% | 3.2% | 98% | 2% | 81 |
-| `live-guardian` | <https://www.theguardian.com/international> | 1280×1600 | 0.25% | 0.3% | 100% | 36% | 137 |
+| `live-bootstrap` | <https://getbootstrap.com> | 1280×1600 | 0.10% | 0.1% | 100% | 0% | 52 |
+| `live-antdesign` | <https://ant.design> | 1280×1600 | 0.35% | 0.7% | 103% | 39% | 289 |
+| `live-mui` | <https://mui.com> | 1280×1600 | 0.29% | 0.3% | 100% | 0% | 273 |
+| `live-vuejs` | <https://vuejs.org> | 1280×1600 | 0.74% | 3.1% | 98% | 2% | 82 |
+| `live-guardian` | <https://www.theguardian.com/international> | 1280×1600 | 0.17% | 0.2% | 103% | 18% | 124 |
 | `live-reddit` | <https://www.reddit.com> | 1280×1400 | 0.00% | 0.0% | 100% | 0% | 6 |
-| `live-amazon` | <https://www.amazon.com> | 1280×1600 | 0.03% | 0.6% | 100% | 3% | 13 |
-| `live-pypi` | <https://pypi.org> | 1280×1400 | 0.13% | 0.1% | 103% | 2% | 116 |
+| `live-amazon` | <https://www.amazon.com> | 1280×1600 | 0.04% | 0.8% | 100% | 3% | 13 |
+| `live-githubdocs` | <https://docs.github.com/en/get-started> | 1280×1600 | 0.20% | 1.4% | 101% | 0% | 158 |
+| `live-mslearn` | <https://learn.microsoft.com/en-us/azure/> | 1280×1600 | 0.33% | 0.3% | 100% | 0% | 162 |
+| `live-appledev` | <https://developer.apple.com> | 1280×1600 | – | – | – | – | – |
+| `live-k8s` | <https://kubernetes.io> | 1280×1600 | 0.18% | 0.2% | 101% | 0% | 42 |
+| `live-godev` | <https://go.dev> | 1280×1600 | 1.32% | 1.8% | 100% | 0% | 107 |
+| `live-rustlang` | <https://www.rust-lang.org> | 1280×1600 | 0.09% | 0.1% | 100% | 0% | 52 |
+| `live-svelte` | <https://svelte.dev> | 1280×1600 | – | – | – | – | – |
+| `live-nextjs` | <https://nextjs.org> | 1280×1600 | 0.14% | 1.1% | 100% | 0% | 198 |
+| `live-w3c` | <https://www.w3.org> | 1280×1400 | 0.47% | 0.7% | 100% | 0% | 76 |
+| `live-pythonorg` | <https://www.python.org> | 1280×1600 | 0.10% | 0.1% | 101% | 0% | 322 |
+| `live-mozilla` | <https://www.mozilla.org/en-US/> | 1280×1600 | 3.38% | 8.0% | 100% | 0% | 68 |
+| `live-gdev` | <https://developers.google.com> | 1280×1600 | 1.83% | 2.6% | 102% | 0% | 72 |
+| `live-figma` | <https://www.figma.com> | 1280×1600 | – | – | – | – | – |
+| `live-linear` | <https://linear.app> | 1280×1600 | 0.40% | 0.4% | 100% | 0% | 221 |
+| `live-notion` | <https://www.notion.so> | 1280×1600 | – | – | – | – | – |
+| `live-shopify` | <https://www.shopify.com> | 1280×1600 | – | – | – | – | – |
+| `live-cloudflare` | <https://www.cloudflare.com> | 1280×1600 | 1.11% | 1.4% | 100% | 47% | 48 |
+| `live-docker` | <https://www.docker.com> | 1280×1600 | 4.00% | 5.8% | 87% | 0% | 110 |
+| `live-airbnb` | <https://www.airbnb.com> | 1280×1400 | 0.60% | 0.6% | 102% | 1% | 134 |
+| `live-spotify` | <https://www.spotify.com> | 1280×1600 | 2.09% | 2.2% | 104% | 0% | 192 |
+| `live-cnn` | <https://edition.cnn.com> | 1280×1600 | 0.00% | 0.0% | 100% | 0% | 1 |
+| `live-bbcnews` | <https://www.bbc.co.uk/news> | 1280×1600 | 0.22% | 0.5% | 100% | 5% | 119 |
+| `live-ted` | <https://www.ted.com> | 1280×1600 | 0.19% | 0.2% | 100% | 15% | 124 |
+| `live-ikea` | <https://www.ikea.com> | 1280×1600 | – | – | – | – | – |
+| `live-nasa` | <https://www.nasa.gov> | 1280×1600 | – | – | – | – | – |
+| `live-arxiv` | <https://arxiv.org> | 1280×1200 | 0.01% | 0.0% | 100% | 1% | 480 |
+| `live-lobsters` | <https://lobste.rs> | 1280×1400 | 0.62% | 6.5% | 101% | 0% | 413 |
+| `live-devto` | <https://dev.to> | 1280×1600 | 0.61% | 1.3% | 101% | 0% | 209 |
+| `live-zhihu` | <https://www.zhihu.com> | 1280×1400 | 0.00% | 0.0% | 100% | 0% | 1 |
+| `live-36kr` | <https://36kr.com> | 1280×1600 | 0.00% | 0.0% | 100% | 0% | 1 |
+| `live-sspai` | <https://sspai.com> | 1280×1600 | 9.86% | 18.2% | 104% | 0% | 121 |
+| `live-baidu` | <https://www.baidu.com> | 1280×900 | 0.03% | 0.3% | 100% | 2% | 63 |
+| `live-pypi` | <https://pypi.org> | 1280×1400 | 0.24% | 0.3% | 104% | 0% | 116 |
 
 ## Real UI libraries from npm (16)
 Pinned in `bench/fetch.ts`; pages in `bench/pages/`.
 
 | id | source | viewport | diff | content diff | text cov | raster area | nodes |
 |---|---|---|---|---|---|---|---|
-| `lib-bootstrap-dashboard` | bench/pages/bootstrap-dashboard.html | 1280×1000 | 0.45% | 0.5% | 103% | 9% | 150 |
-| `lib-tailwind-landing` | bench/pages/tailwind-landing.html | 1280×1100 | 0.03% | 0.0% | 86% | 5% | 38 |
-| `lib-bulma-landing` | bench/pages/bulma-landing.html | 1280×800 | 0.13% | 0.1% | 100% | 2% | 65 |
-| `lib-daisyui-components` | bench/pages/daisyui-components.html | 1280×1300 | 0.02% | 0.1% | 90% | 2% | 54 |
+| `lib-bootstrap-dashboard` | bench/pages/bootstrap-dashboard.html | 1280×1000 | 0.37% | 0.4% | 108% | 1% | 154 |
+| `lib-tailwind-landing` | bench/pages/tailwind-landing.html | 1280×1100 | 0.09% | 0.1% | 100% | 0% | 43 |
+| `lib-bulma-landing` | bench/pages/bulma-landing.html | 1280×800 | 0.13% | 0.1% | 106% | 1% | 66 |
+| `lib-daisyui-components` | bench/pages/daisyui-components.html | 1280×1300 | 0.23% | 1.0% | 91% | 2% | 56 |
 | `lib-github-readme` | bench/pages/github-readme.html | 1100×1500 | 0.15% | 0.9% | 102% | 0% | 142 |
-| `lib-swagger-ui` | bench/pages/swagger-ui.html | 1280×1400 | 0.22% | 1.0% | 100% | 0% | 69 |
+| `lib-swagger-ui` | bench/pages/swagger-ui.html | 1280×1400 | 0.21% | 1.0% | 100% | 0% | 69 |
 | `lib-katex-math` | bench/pages/katex-math.html | 900×800 | 0.19% | 9.9% | 89% | 0% | 126 |
 | `lib-mermaid-diagrams` | bench/pages/mermaid-diagrams.html | 1000×1500 | 0.05% | 0.4% | 63% | 0% | 3 |
-| `lib-echarts-dashboard` | bench/pages/echarts-dashboard.html | 1280×1000 | 0.00% | 0.0% | 100% | 28% | 12 |
-| `lib-chartjs-canvas` | bench/pages/chartjs-canvas.html | 1280×900 | 0.00% | 0.0% | 100% | 55% | 3 |
+| `lib-echarts-dashboard` | bench/pages/echarts-dashboard.html | 1280×1000 | 0.00% | 0.0% | 100% | 0% | 12 |
+| `lib-chartjs-canvas` | bench/pages/chartjs-canvas.html | 1280×900 | 0.00% | 0.0% | 100% | 0% | 3 |
 | `lib-ag-grid` | bench/pages/ag-grid.html | 1280×800 | 0.15% | 0.4% | 104% | 0% | 247 |
 | `lib-fullcalendar` | bench/pages/fullcalendar.html | 1280×900 | 0.32% | 4.5% | 101% | 0% | 125 |
 | `lib-leaflet-map` | bench/pages/leaflet-map.html | 1000×640 | 0.00% | 0.0% | 100% | 0% | 21 |
-| `lib-reveal-slides` | bench/pages/reveal-slides.html | 1280×720 | 0.13% | 4.5% | 37% | 0% | 10 |
+| `lib-reveal-slides` | bench/pages/reveal-slides.html | 1280×720 | 0.13% | 4.5% | 100% | 0% | 10 |
 | `lib-quill-editor` | bench/pages/quill-editor.html | 900×600 | 0.01% | 0.2% | 108% | 0% | 34 |
-| `lib-antd-showcase` | bench/pages/antd-showcase.html | 1280×1300 | 0.08% | 0.2% | 100% | 1% | 114 |
+| `lib-antd-showcase` | bench/pages/antd-showcase.html | 1280×1300 | 0.03% | 0.1% | 103% | 0% | 115 |

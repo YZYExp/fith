@@ -18,6 +18,8 @@ export interface Scene {
   deviceScaleFactor: number;
   background: string;
   nodes: PaintNode[];
+  /** Group definitions referenced by `NodeBase.groups`. */
+  groups?: Record<string, GroupStyle>;
   /** Regions the emitter renders as <image>; filled in by the backend screenshotter. */
   rasterTargets: RasterTarget[];
   /** @font-face fonts used by text nodes, inlined as base64 in `embed` mode. */
@@ -28,6 +30,25 @@ export interface Scene {
    * means no base layer (default, backward-compatible behaviour).
    */
   baseLayer?: string | null;
+}
+
+/** One CSS filter function (the subset SVG can reproduce exactly). */
+export type FilterOp =
+  | { fn: 'blur'; px: number }
+  | { fn: 'brightness' | 'contrast' | 'grayscale' | 'invert' | 'opacity' | 'saturate' | 'sepia'; amount: number }
+  | { fn: 'hue-rotate'; deg: number }
+  | { fn: 'drop-shadow'; x: number; y: number; blur: number; color: string };
+
+/**
+ * A subtree composited as ONE unit (CSS `filter`, `mix-blend-mode`): the emitter wraps all member nodes in a
+ * single `<g>`. Nodes list their groups in `NodeBase.groups` (innermost first).
+ */
+export interface GroupStyle {
+  filter?: FilterOp[];
+  /** CSS mix-blend-mode keyword (anything but `normal`). */
+  blend?: string;
+  /** Region the filter may paint in (absolute px); includes blur / shadow overflow. */
+  region?: Rect;
 }
 
 export interface FontFace {
@@ -97,6 +118,8 @@ export interface NodeBase {
    * *untransformed* local space of the transformed element; each layer is emitted as
    * `<g transform=matrix>` and `outerClip` (the clip in force outside that element) wraps it.
    */
+  /** Ids of `Scene.groups` this node belongs to, innermost first. */
+  groups?: string[];
   layers?: { matrix: [number, number, number, number, number, number]; outerClip?: Clip | null }[];
 }
 

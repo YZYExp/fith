@@ -3,7 +3,7 @@
  * filters/masks, gradients). Each builder registers its markup with a Defs
  * instance and returns the generated id, deduplicating identical definitions.
  */
-import type { Clip, CornerRadii, LinearGradientFill, RadialGradientFill, ConicGradientFill } from '../ir/types.js';
+import type { FilterOp, Clip, CornerRadii, LinearGradientFill, RadialGradientFill, ConicGradientFill } from '../ir/types.js';
 import { n, esc, noRadii, roundedRectPath } from './primitives.js';
 
 /** Content-addressed store of <defs> children; identical content shares one id. */
@@ -196,4 +196,55 @@ export function conicWedges(g: ConicGradientFill, rect: { x: number; y: number; 
 /** clip-path basic shape → <clipPath> id. */
 export function shapeClipId(defs: Defs, sh: { d: string; evenodd?: boolean }): string {
   return defs.add(`<clipPath id="{ID}"><path d="${sh.d}"${sh.evenodd ? ' clip-rule="evenodd"' : ''}/></clipPath>`);
+}
+
+/** CSS filter function list → one SVG <filter> (chained primitives, sRGB like CSS). */
+export function filterChainId(defs: Defs, ops: FilterOp[], region: { x: number; y: number; width: number; height: number }): string {
+  const mat = (m: number[]) => `<feColorMatrix type="matrix" values="${m.slice(0, 3).join(' ').replace(/^/, '')}"/>`;
+  void mat;
+  const cm = (r: number[]) => `<feColorMatrix type="matrix" values="${r[0]} ${r[1]} ${r[2]} 0 0 ${r[3]} ${r[4]} ${r[5]} 0 0 ${r[6]} ${r[7]} ${r[8]} 0 0 0 0 0 1 0"/>`;
+  const prim = ops
+    .map((op) => {
+      switch (op.fn) {
+        case 'blur':
+          return `<feGaussianBlur stdDeviation="${n(op.px)}"/>`;
+        case 'grayscale': {
+          const a = 1 - Math.min(1, op.amount);
+          return cm([0.2126 + 0.7874 * a, 0.7152 - 0.7152 * a, 0.0722 - 0.0722 * a, 0.2126 - 0.2126 * a, 0.7152 + 0.2848 * a, 0.0722 - 0.0722 * a, 0.2126 - 0.2126 * a, 0.7152 - 0.7152 * a, 0.0722 + 0.9278 * a]);
+        }
+        case 'sepia': {
+          const a = 1 - Math.min(1, op.amount);
+          return cm([0.393 + 0.607 * a, 0.769 - 0.769 * a, 0.189 - 0.189 * a, 0.349 - 0.349 * a, 0.686 + 0.314 * a, 0.168 - 0.168 * a, 0.272 - 0.272 * a, 0.534 - 0.534 * a, 0.131 + 0.869 * a]);
+        }
+        case 'saturate': {
+          const v = op.amount;
+          return cm([0.213 + 0.787 * v, 0.715 - 0.715 * v, 0.072 - 0.072 * v, 0.213 - 0.213 * v, 0.715 + 0.285 * v, 0.072 - 0.072 * v, 0.213 - 0.213 * v, 0.715 - 0.715 * v, 0.072 + 0.928 * v]);
+        }
+        case 'hue-rotate':
+          return `<feColorMatrix type="hueRotate" values="${n(op.deg)}"/>`;
+        case 'invert': {
+          const a = Math.min(1, op.amount);
+          const t = `type="table" tableValues="${n(a)} ${n(1 - a)}"`;
+          return `<feComponentTransfer><feFuncR ${t}/><feFuncG ${t}/><feFuncB ${t}/></feComponentTransfer>`;
+        }
+        case 'opacity':
+          return `<feComponentTransfer><feFuncA type="linear" slope="${n(Math.min(1, op.amount))}"/></feComponentTransfer>`;
+        case 'brightness': {
+          const t = `type="linear" slope="${n(op.amount)}"`;
+          return `<feComponentTransfer><feFuncR ${t}/><feFuncG ${t}/><feFuncB ${t}/></feComponentTransfer>`;
+        }
+        case 'contrast': {
+          const t = `type="linear" slope="${n(op.amount)}" intercept="${n(-0.5 * op.amount + 0.5)}"`;
+          return `<feComponentTransfer><feFuncR ${t}/><feFuncG ${t}/><feFuncB ${t}/></feComponentTransfer>`;
+        }
+        case 'drop-shadow': {
+          const { color, opacity } = splitColor(op.color);
+          return `<feDropShadow dx="${n(op.x)}" dy="${n(op.y)}" stdDeviation="${n(op.blur / 2)}" flood-color="${esc(color)}" flood-opacity="${opacity}"/>`;
+        }
+      }
+    })
+    .join('');
+  return defs.add(
+    `<filter id="{ID}" filterUnits="userSpaceOnUse" x="${n(region.x)}" y="${n(region.y)}" width="${n(region.width)}" height="${n(region.height)}" color-interpolation-filters="sRGB">${prim}</filter>`,
+  );
 }

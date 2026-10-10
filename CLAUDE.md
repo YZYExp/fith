@@ -83,6 +83,32 @@ area against `bench/baseline.json`. See `bench/README.md`. When a target regress
 `bench/out/<id>.expected|actual.png`, trace the hotspot with `pnpm inspect <url|file> <x> <y>`, fix, then pin the
 behaviour with a fixture + test in `test/visual/realworld-regressions.test.ts` and update the baseline.
 
+
+### Capture rules learned from the real-world bench (each one was a real regression)
+
+- **`transparent()` must test alpha, not a `, 0)` suffix** — `rgb(255, 153, 0)` (blue = 0) once vanished.
+- **Radii**: resolve `%` against the box, keep vertical radii (`radiiY`) for ellipses, and let `roundedRectPath` scale
+  *all* radii like CSS. Never emit `<rect rx>` with a huge radius unclamped (a 9999px pill becomes a lens).
+- **Transform matrices keep 6 decimals** (`rotate(-1deg)` rounded to 2 decimals is 1.15°).
+- **2D rotate/skew** = clear the transform, measure the untransformed subtree, wrap in `<g transform>`; anything that
+  needs a screenshot inside throws `TransformBail` and the element falls back to the old raster. Always restore the
+  inline `style` attribute in a `finally`.
+- **Stacking contexts**: z-indexed descendants belong to the nearest stacking context, not their parent. `<body>`'s
+  background propagates to the canvas when `<html>` has none.
+- **Groups** (`Scene.groups`) are for effects that composite a *subtree as a unit* (`filter`, `mix-blend-mode`). Per-node
+  tagging (`masks`, `clipShapes`, `layers`) is fine only for effects that distribute over children. Never re-filter a
+  raster node (its screenshot already contains the effect).
+- **Fonts**: `@font-face` `url()` resolves against the *stylesheet*, not the page; walk `@media/@supports/@layer/@import`;
+  CDN sheets are opaque to `cssRules` — the Node backend supplies their text (`externalCss`). Carry
+  `font-feature-settings` / `font-variation-settings` / `font-stretch` on `<text>`.
+- **Backgrounds**: the gradient fast path is only valid for default origin/clip/attachment; everything else goes through
+  the layer engine (`<pattern>` tiles). `image, color` shorthands produce a `none` layer.
+- **Screenshots as "ground truth" hide raster use**: always read *raster area* and *text coverage* next to the diff.
+- **Harness**: use the backend defaults (`captureScrollableContent` false); freeze animations, scroll for lazy loading,
+  bound every `img.decode()`; measure page `drift` and don't gate `unstable` targets; never pause CDP virtual time
+  (Playwright screenshots deadlock); tests must not use `filter`/radial gradients/canvas as their "needs raster"
+  example any more — use 3D transforms or `mask-composite: exclude`.
+
 ## Test Layout
 
 ```
