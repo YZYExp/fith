@@ -2540,7 +2540,7 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
       }
       walk(rules, sheet.href || document.baseURI, 0);
     }
-    for (const href of Array.from(new Set(opaque)).slice(0, 12)) {
+    for (const href of Array.from(new Set(opaque)).slice(0, 120)) {
       try {
         let text = (opts as any).externalCss?.[href] as string | undefined;
         if (text === undefined) {

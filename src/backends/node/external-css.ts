@@ -27,13 +27,24 @@ export async function collectExternalCss(page: Page): Promise<Record<string, str
     return Array.from(out);
   });
   const map: Record<string, string> = {};
-  for (const href of hrefs.slice(0, 16)) {
-    try {
-      const res = await page.context().request.get(href, { headers: { referer: page.url() }, timeout: 15_000 });
-      if (res.ok()) map[href] = await res.text();
-    } catch {
-      /* unreachable: fonts in this sheet stay referenced by name */
+  // sites like linear.app ship 50+ opaque sheets, @font-face can be in any of them: fetch them all, 8 at a time
+  const list = hrefs.slice(0, 120);
+  let next = 0;
+  const worker = async () => {
+    while (next < list.length) {
+      const href = list[next++];
+      try {
+        const res = await page.context().request.get(href, { headers: { referer: page.url() }, timeout: 15_000 });
+        if (res.ok()) {
+          const text = await res.text();
+          // sheets without @font-face/@import can't matter for fonts: record them empty so the page doesn't re-fetch
+          map[href] = /@font-face|@import/.test(text) ? text : '';
+        }
+      } catch {
+        /* unreachable: fonts in this sheet stay referenced by name */
+      }
     }
-  }
+  };
+  await Promise.all(Array.from({ length: 8 }, worker));
   return map;
 }
