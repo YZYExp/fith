@@ -1,6 +1,7 @@
 import { Header, Footer } from "./components/Layout";
 import { ProjectHero, ProjectPrinciple } from "./components/ProjectHero";
 import { Features } from "./components/Features";
+import { RealWorld } from "./components/RealWorld";
 import { Usage } from "./components/Usage";
 import { ProjectQuestions, Documentation } from "./components/ProjectQuestions";
 
@@ -18,6 +19,7 @@ export default function App() {
           <ProjectHero />
           <ProjectPrinciple />
           <Features />
+          <RealWorld />
         </div>
         <Usage />
         <div className="wrap">

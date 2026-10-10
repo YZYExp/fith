@@ -15,6 +15,7 @@ export function Header() {
       </a>
       <nav className="nav" aria-label="主导航">
         <a href="#features">转换能力</a>
+        <a href="#cases">真实案例</a>
         <a href="#usage">开始使用</a>
         <a href="#docs">项目文档</a>
       </nav>

@@ -8,7 +8,7 @@ export function ProjectQuestions() {
       aria-labelledby="questions-title"
     >
       <div>
-        <div className="eyebrow">03 / 输出与边界</div>
+        <div className="eyebrow">04 / 输出与边界</div>
         <h2 id="questions-title">
           了解输出，
           <br />

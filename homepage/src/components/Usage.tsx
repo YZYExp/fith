@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { KeyboardEvent } from "react";
 import { readmeUrl, setupCommand, usageExamples } from "../content";
 
@@ -6,6 +6,12 @@ function CodeBlock({ code, filename }: { code: string; filename: string }) {
   const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">(
     "idle",
   );
+
+  useEffect(() => {
+    if (copyState === "idle") return;
+    const timer = window.setTimeout(() => setCopyState("idle"), 2000);
+    return () => window.clearTimeout(timer);
+  }, [copyState]);
 
   async function copyCode() {
     try {
@@ -64,7 +70,7 @@ export function Usage() {
       <div className="wrap">
         <div className="section-heading">
           <div>
-            <div className="eyebrow">02 / 开始使用</div>
+            <div className="eyebrow">03 / 开始使用</div>
             <h2 id="usage-title">四种入口，同一个捕获核心。</h2>
           </div>
           <p>从自动化脚本到浏览器操作，选择适合你的使用方式。</p>

@@ -1,12 +1,9 @@
-import { useState } from "react";
 import { repositoryUrl } from "../content";
+import { CompareViewer } from "./CompareViewer";
 
 const exampleDirectory = `${import.meta.env.BASE_URL}examples/`;
 
 export function ProjectHero() {
-  const [format, setFormat] = useState<"svg" | "png">("svg");
-  const [zoom, setZoom] = useState(1);
-
   return (
     <section className="hero" aria-labelledby="hero-title">
       <div className="hero-copy">
@@ -24,71 +21,30 @@ export function ProjectHero() {
           <a className="button" href="#usage">
             开始使用
           </a>
+          <a className="text-link" href="#cases">
+            看真实案例
+          </a>
           <a className="text-link" href={repositoryUrl}>
-            查看 GitHub 项目
+            GitHub 项目
           </a>
         </div>
         <p className="hero-meta">Node API / CLI / 页内库 / Chrome 扩展</p>
       </div>
       <div className="export-preview" aria-label="fith 的真实转换示例">
-        <div className="preview-toolbar">
-          <span className="file-label">
-            {format === "svg" ? "card.svg" : "card.png"}
-          </span>
-          <div className="segmented" role="group" aria-label="选择示例格式">
-            <button
-              type="button"
-              aria-pressed={format === "png"}
-              onClick={() => setFormat("png")}
-            >
-              网页截图
-            </button>
-            <button
-              type="button"
-              aria-pressed={format === "svg"}
-              onClick={() => setFormat("svg")}
-            >
-              SVG 输出
-            </button>
-          </div>
-        </div>
-        <div className="render-stage">
-          <img
-            src={`${exampleDirectory}card.${format}`}
-            alt={
-              format === "svg"
-                ? "由 fith 转换生成的示例 SVG"
-                : "同一示例 HTML 的浏览器截图"
-            }
-            width="520"
-            height="360"
-            style={{ transform: `scale(${zoom})` }}
-          />
-        </div>
-        <div className="preview-bottom">
-          <span>真实转换 · 字体转路径</span>
-          <div className="segmented" role="group" aria-label="示例缩放比例">
-            {[1, 3].map((value) => (
-              <button
-                type="button"
-                key={value}
-                aria-pressed={zoom === value}
-                onClick={() => setZoom(value)}
-              >
-                {value}×
-              </button>
-            ))}
-          </div>
-        </div>
-        <div className="preview-caption">
-          <p>用项目的 htmlToSvg API 生成，切换格式或放大查看。</p>
-          <a
-            href={`${exampleDirectory}card.svg`}
-            download="fith-card.svg"
-          >
+        <div className="preview-head">
+          <span className="file-label">card.html → card.svg</span>
+          <a href={`${exampleDirectory}card.svg`} download="fith-card.svg">
             下载 SVG
           </a>
         </div>
+        <CompareViewer
+          before={`${exampleDirectory}card.png`}
+          after={`${exampleDirectory}card.svg`}
+          width={520}
+          height={360}
+          focus={[0.72, 0.4]}
+          label="示例卡片"
+        />
       </div>
     </section>
   );

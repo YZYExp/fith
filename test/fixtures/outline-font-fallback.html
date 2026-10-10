@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <style>
+      body { margin: 0; background: #fff; color: #111; }
+      /* The first family is never installed: fontconfig still "matches" it with a
+         substitute, which outline mode must reject like Chromium does. */
+      .serif { font: 400 44px 'FithMissingFont', 'Noto Serif CJK SC', Georgia, serif; margin: 18px 24px; }
+      .sans { font: 18px 'FithMissingFont', 'PingFang SC', sans-serif; margin: 18px 24px; }
+      .alias { font: 18px Arial; margin: 18px 24px; }
+      .cjk { font: 22px 'FithMissingFont', Georgia, serif; margin: 18px 24px; }
+    </style>
+  </head>
+  <body>
+    <h1 class="serif">Keep the HTML detail</h1>
+    <p class="sans">Mixed stacks resolve per glyph — WWW iiii 12345</p>
+    <p class="alias">Arial renders with its metric-compatible alias</p>
+    <p class="cjk" id="cjk">把 HTML，变成 SVG。中文字形逐字回退</p>
+  </body>
+</html>
