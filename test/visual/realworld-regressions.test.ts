@@ -164,6 +164,17 @@ describe('real-world regressions', () => {
     expect(r.ratio).toBeLessThan(0.02);
   }, 60_000);
 
+  it('vectorizes empty-content flow pseudo-elements (caret borders, dots, bars, clearfix) instead of rastering the host', async () => {
+    const r = await validate(
+      { url: pathToFileURL(resolve(FIXTURES, 'pseudo-flow.html')).href },
+      { width: 420, height: 380, name: 'pseudo-flow', outDir: OUT, fontMode: 'none' },
+    );
+    const svg = readFileSync(resolve(OUT, 'pseudo-flow.svg'), 'utf8');
+    expect(svg).not.toContain('data:image/png');
+    for (const t of ['Dropdown', 'Status online', 'Underlined title', 'Arrow tag label']) expect(svg).toContain(t);
+    expect(r.ratio).toBeLessThan(0.01);
+  }, 60_000);
+
   describe('webfont in an external stylesheet', () => {
     let base: { url: string; close: () => Promise<void> } | null = null;
     afterAll(async () => base?.close());

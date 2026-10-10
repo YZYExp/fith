@@ -1613,13 +1613,18 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
     opacity: number,
   ): PaintNode[] | null => {
     const ps = getComputedStyle(el, sel);
+    // content: "text" | "" (decorative box: carets, dots, bars, clearfix) | attr(name)
     const m = ps.content.match(/^(["'])([\s\S]*)\1$/);
-    if (!m) return null; // url()/counter()/attr()/quotes: not plain text
-    if ((ps.backgroundImage && ps.backgroundImage !== 'none') || (ps.boxShadow || '').includes('inset')) return null;
-    const text = m[2]
-      .replace(/\\([0-9a-fA-F]{1,6})\s?/g, (_m, h) => String.fromCodePoint(parseInt(h, 16)))
-      .replace(/\\([\s\S])/g, '$1');
-    if (!text) return null;
+    const am = ps.content.match(/^attr\(\s*([\w-]+)\s*\)$/);
+    if (!m && !am) return null; // url()/counter()/quotes: not plain text
+    // url() backgrounds need an async image fetch (not available here); gradients, borders, shadows are fine
+    if ((ps.backgroundImage || '').includes('url(')) return null;
+    const text = am
+      ? el.getAttribute(am[1]) || ''
+      : m![2]
+          .replace(/\\([0-9a-fA-F]{1,6})\s?/g, (_m, h) => String.fromCodePoint(parseInt(h, 16)))
+          .replace(/\\([\s\S])/g, '$1');
+    if (!text && ps.display === 'inline') return null; // empty inline pseudo paints nothing
     const span = document.createElement('span');
     for (let i = 0; i < ps.length; i++) span.style.setProperty(ps[i], ps.getPropertyValue(ps[i]));
     span.style.setProperty('animation', 'none');

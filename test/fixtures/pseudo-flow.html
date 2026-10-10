@@ -1,0 +1,22 @@
+<!doctype html><html><head><meta charset="utf-8"><style>
+body{margin:0;padding:20px;background:#fff;font:16px sans-serif}
+.dd::after{content:"";display:inline-block;margin-left:.4em;vertical-align:.25em;border-top:.35em solid;border-right:.35em solid transparent;border-left:.35em solid transparent;border-bottom:0}
+.dot::before{content:"";display:inline-block;width:10px;height:10px;border-radius:50%;background:#2a7;margin-right:8px}
+.bar::after{content:"";display:block;width:60px;height:4px;background:linear-gradient(90deg,#f90,#c0c);margin-top:4px}
+.tag::before{content:"";display:inline-block;width:0;height:0;border-style:solid;border-width:8px 12px 8px 0;border-color:transparent #e8553d transparent transparent;vertical-align:middle;margin-right:4px}
+.cf::after{content:"";display:table;clear:both}
+.rule{position:relative;padding-left:20px}.rule::before{content:"";position:absolute;left:0;top:2px;bottom:2px;width:4px;background:#4f8cff;border-radius:2px}
+.q::before{content:"\201C";font:700 28px serif;color:#c33;margin-right:2px}
+</style></head><body>
+<p><a class="dd" href="#">Dropdown</a></p>
+<p class="dot">Status online</p>
+<p class="bar">Underlined title</p>
+<p class="tag">Arrow tag label</p>
+<div class="cf"><span style="float:left">floated</span></div>
+<p class="rule">Left rule via absolute pseudo</p>
+<p class="q">Quote mark text pseudo</p>
+<div style="display:flex;gap:16px;margin-top:10px">
+<div style="width:90px;height:44px;border:6px solid;border-color:#e33 #3a3 #33e #fa0;border-radius:12px"></div>
+<div style="width:90px;height:44px;border-top:5px solid #e8553d;background:#f4f4f4;border-radius:0 0 8px 8px"></div>
+<div style="width:90px;height:44px;border-style:solid;border-width:2px 8px 12px 4px;border-color:#333 #c33 #333 #c33"></div></div>
+</body></html>

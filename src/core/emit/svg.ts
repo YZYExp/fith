@@ -81,7 +81,7 @@ function emitBox(node: BoxNode, defs: Defs): string {
 
   if (node.insetShadows && node.insetShadows.length > 0) out += emitInsetShadows(node, defs);
 
-  if (node.border) out += emitBorder(node.border, rect, radii);
+  if (node.border) out += emitBorder(node.border, rect, radii, defs);
 
   if (node.outline) {
     const o = node.outline;
@@ -128,7 +128,7 @@ function dash(style: string, w: number): string {
   return '';
 }
 
-function emitBorder(b: BorderEdges, rect: { x: number; y: number; width: number; height: number }, radii: CornerRadii): string {
+function emitBorder(b: BorderEdges, rect: { x: number; y: number; width: number; height: number }, radii: CornerRadii, defs: Defs): string {
   const sameW = b.top.width === b.right.width && b.right.width === b.bottom.width && b.bottom.width === b.left.width;
   const sameC = b.top.color === b.right.color && b.right.color === b.bottom.color && b.bottom.color === b.left.color;
   const allSolid = [b.top, b.right, b.bottom, b.left].every((e) => e.style === 'solid' || e.width === 0);
@@ -152,23 +152,27 @@ function emitBorder(b: BorderEdges, rect: { x: number; y: number; width: number;
     )}" stroke-width="${n(w)}"${d}/>`;
   }
 
-  // per-side approximation: filled rectangles along each edge
-  let out = '';
+  // Per-side borders: each edge is a mitered trapezoid (corner to corner, like the browser draws mixed
+  // widths/colours — e.g. a zero-size box with three transparent edges is a CSS triangle). Transparent
+  // edges are skipped; with radii the polygons are clipped to the rounded border ring.
   const { x, y, width: w, height: h } = rect;
-  if (b.top.width > 0)
-    out += `<rect x="${n(x)}" y="${n(y)}" width="${n(w)}" height="${n(b.top.width)}" fill="${esc(b.top.color)}"/>`;
-  if (b.bottom.width > 0)
-    out += `<rect x="${n(x)}" y="${n(y + h - b.bottom.width)}" width="${n(w)}" height="${n(
-      b.bottom.width,
-    )}" fill="${esc(b.bottom.color)}"/>`;
-  if (b.left.width > 0)
-    out += `<rect x="${n(x)}" y="${n(y)}" width="${n(b.left.width)}" height="${n(h)}" fill="${esc(
-      b.left.color,
-    )}"/>`;
-  if (b.right.width > 0)
-    out += `<rect x="${n(x + w - b.right.width)}" y="${n(y)}" width="${n(b.right.width)}" height="${n(
-      h,
-    )}" fill="${esc(b.right.color)}"/>`;
+  const t = b.top.width, r = b.right.width, bt = b.bottom.width, l = b.left.width;
+  const visible = (e: { width: number; color: string }) => e.width > 0 && !/^(transparent|rgba\([^)]*,\s*0(\.0+)?\))$/.test(e.color.trim());
+  const poly = (pts: number[][], color: string) =>
+    `<path d="M${pts.map((p) => `${n(p[0])},${n(p[1])}`).join('L')}Z" fill="${esc(color)}"/>`;
+  let out = '';
+  if (visible(b.top)) out += poly([[x, y], [x + w, y], [x + w - r, y + t], [x + l, y + t]], b.top.color);
+  if (visible(b.right)) out += poly([[x + w, y], [x + w, y + h], [x + w - r, y + h - bt], [x + w - r, y + t]], b.right.color);
+  if (visible(b.bottom)) out += poly([[x + w, y + h], [x, y + h], [x + l, y + h - bt], [x + w - r, y + h - bt]], b.bottom.color);
+  if (visible(b.left)) out += poly([[x, y + h], [x, y], [x + l, y + t], [x + l, y + h - bt]], b.left.color);
+  if (out && !noRadii(radii)) {
+    const inner = [
+      Math.max(0, radii[0] - Math.max(l, t)), Math.max(0, radii[1] - Math.max(r, t)),
+      Math.max(0, radii[2] - Math.max(r, bt)), Math.max(0, radii[3] - Math.max(l, bt)),
+    ] as CornerRadii;
+    const ring = `${roundedRectPath(x, y, w, h, radii)} ${roundedRectPath(x + l, y + t, Math.max(0, w - l - r), Math.max(0, h - t - bt), inner)}`;
+    out = `<g clip-path="url(#${defs.add(`<clipPath id="{ID}"><path clip-rule="evenodd" d="${ring}"/></clipPath>`)})">${out}</g>`;
+  }
   return out;
 }
 
