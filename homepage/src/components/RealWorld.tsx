@@ -2,6 +2,7 @@ import { useRef, useState } from "react";
 import type { KeyboardEvent } from "react";
 import cases from "../cases.json";
 import { benchCorpusUrl } from "../content";
+import { useLocale } from "../i18n";
 import { CompareViewer } from "./CompareViewer";
 
 const caseDirectory = `${import.meta.env.BASE_URL}cases/`;
@@ -10,6 +11,7 @@ const percent = (value: number, digits = 1) =>
   `${(value * 100).toFixed(digits)}%`;
 
 export function RealWorld() {
+  const { locale, t } = useLocale();
   const [activeIndex, setActiveIndex] = useState(0);
   const tabRefs = useRef<(HTMLButtonElement | null)[]>([]);
   const active = cases.cases[activeIndex];
@@ -37,17 +39,14 @@ export function RealWorld() {
     <section className="section cases" id="cases" aria-labelledby="cases-title">
       <div className="section-heading">
         <div>
-          <div className="eyebrow">02 / 真实案例</div>
-          <h2 id="cases-title">真实的组件库，真实的输出。</h2>
+          <div className="eyebrow">{t.cases.eyebrow}</div>
+          <h2 id="cases-title">{t.cases.title}</h2>
         </div>
-        <p>
-          以下页面用 npm 上的真实 UI 库搭建，由基准测试直接生成：左边是 Chromium
-          截图，右边是 fith 输出的 SVG。
-        </p>
+        <p>{t.cases.intro}</p>
       </div>
 
       <div className="cases-layout">
-        <div className="case-list" role="tablist" aria-label="真实案例">
+        <div className="case-list" role="tablist" aria-label={t.cases.tablist}>
           {cases.cases.map((item, index) => (
             <button
               key={item.id}
@@ -63,7 +62,7 @@ export function RealWorld() {
               onClick={() => setActiveIndex(index)}
               onKeyDown={(event) => navigateTabs(event, index)}
             >
-              <strong>{item.label}</strong>
+              <strong>{item.label[locale]}</strong>
               <span>{item.stack}</span>
             </button>
           ))}
@@ -77,19 +76,19 @@ export function RealWorld() {
         >
           <dl className="case-metrics">
             <div>
-              <dt>像素差异</dt>
+              <dt>{t.cases.diff}</dt>
               <dd>{percent(active.metrics.diff, 2)}</dd>
             </div>
             <div>
-              <dt>矢量文字</dt>
+              <dt>{t.cases.text}</dt>
               <dd>{percent(active.metrics.textCoverage, 0)}</dd>
             </div>
             <div>
-              <dt>栅格面积</dt>
+              <dt>{t.cases.raster}</dt>
               <dd>{percent(active.metrics.rasterArea, 1)}</dd>
             </div>
             <div>
-              <dt>SVG 大小</dt>
+              <dt>{t.cases.size}</dt>
               <dd>{active.metrics.svgKB} KB</dd>
             </div>
           </dl>
@@ -99,18 +98,18 @@ export function RealWorld() {
             width={active.width}
             height={active.height}
             focus={active.focus as [number, number]}
-            label={active.label}
+            label={active.label[locale]}
           />
           <div className="case-links">
             <span>
-              {active.width}×{active.height} · 字体内嵌（embed）
+              {active.width}×{active.height} · {t.cases.embed}
             </span>
             <a
               href={`${caseDirectory}${active.id}.svg`}
               target="_blank"
               rel="noopener"
             >
-              单独打开 SVG
+              {t.cases.openSvg}
             </a>
           </div>
         </div>
@@ -118,33 +117,30 @@ export function RealWorld() {
 
       <div className="live-sites">
         <div className="live-summary">
-          <h3>也跑在线上网站</h3>
-          <p>
-            基准测试同样转换 {live.count} 个线上站点。像素差异中位数{" "}
-            <strong>{percent(live.medianDiff, 2)}</strong>，其中{" "}
-            <strong>{live.underOnePercent}</strong> 个低于 1%；矢量文字覆盖中位数{" "}
-            <strong>{percent(live.medianTextCoverage, 0)}</strong>。
-          </p>
-          <p className="live-note">
-            线上页面随时间变化，数据取自最近一次基准记录；被拦截或返回空壳的站点不计入。
-          </p>
-          <a href={benchCorpusUrl}>查看完整基准结果</a>
+          <h3>{t.cases.liveTitle}</h3>
+          <p>{t.cases.liveSummary(live)}</p>
+          <p className="live-note">{t.cases.liveNote}</p>
+          <a href={benchCorpusUrl}>{t.cases.liveLink}</a>
         </div>
-        <div className="table-scroll" tabIndex={0} aria-label="线上站点基准数据">
+        <div className="table-scroll" tabIndex={0} aria-label={t.cases.tableLabel}>
           <table>
             <thead>
               <tr>
-                <th scope="col">站点</th>
-                <th scope="col">像素差异</th>
-                <th scope="col">矢量文字</th>
-                <th scope="col">栅格面积</th>
+                <th scope="col">{t.cases.site}</th>
+                <th scope="col">{t.cases.diff}</th>
+                <th scope="col">{t.cases.text}</th>
+                <th scope="col">{t.cases.raster}</th>
               </tr>
             </thead>
             <tbody>
               {live.sites.map((site) => (
                 <tr key={site.id}>
                   <th scope="row">
-                    {site.url ? <a href={site.url}>{site.label}</a> : site.label}
+                    {site.url ? (
+                      <a href={site.url}>{site.label[locale]}</a>
+                    ) : (
+                      site.label[locale]
+                    )}
                   </th>
                   <td>{percent(site.diff, 2)}</td>
                   <td>{percent(site.textCoverage, 0)}</td>

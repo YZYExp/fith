@@ -99,6 +99,20 @@ p {
 .nav a {
   text-decoration: none;
 }
+.masthead-end {
+  display: flex;
+  align-items: center;
+  gap: 30px;
+}
+.lang-switch {
+  padding: 4px 11px;
+  border: 1px solid var(--line);
+  background: transparent;
+  font-size: 0.8125rem;
+}
+.lang-switch:hover {
+  border-color: var(--green);
+}
 .nav a:hover {
   text-decoration: underline;
 }
@@ -766,8 +780,19 @@ noscript p {
     font-size: 1.3rem;
   }
   .nav {
-    gap: 25px;
+    gap: 18px 22px;
     font-size: 0.8125rem;
+  }
+  .masthead {
+    position: relative;
+  }
+  .masthead-end {
+    align-self: stretch;
+  }
+  .lang-switch {
+    position: absolute;
+    top: 16px;
+    right: 0;
   }
   .hero {
     grid-template-columns: 1fr;
@@ -887,6 +912,7 @@ noscript p {
 }
 @media print {
   .nav,
+  .lang-switch,
   .segmented,
   .compare-handle,
   .compare-hint,
@@ -914,4 +940,11 @@ noscript p {
   pre {
     white-space: pre-wrap;
   }
+}
+/* CJK-tuned negative tracking crowds Latin headings. */
+:lang(en) h1,
+:lang(en) h2,
+:lang(en) h3,
+:lang(en) summary {
+  letter-spacing: -0.02em;
 }

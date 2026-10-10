@@ -4,12 +4,14 @@ import { Features } from "./components/Features";
 import { RealWorld } from "./components/RealWorld";
 import { Usage } from "./components/Usage";
 import { ProjectQuestions, Documentation } from "./components/ProjectQuestions";
+import { useLocale } from "./i18n";
 
 export default function App() {
+  const { t } = useLocale();
   return (
     <>
       <a className="skip" href="#main">
-        跳到正文
+        {t.skip}
       </a>
       <div className="wrap">
         <Header />

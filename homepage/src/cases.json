@@ -2,7 +2,10 @@
   "cases": [
     {
       "id": "lib-github-readme",
-      "label": "GitHub README",
+      "label": {
+        "zh": "GitHub README",
+        "en": "GitHub README"
+      },
       "stack": "github-markdown-css + highlight.js",
       "width": 1100,
       "height": 1500,
@@ -20,7 +23,10 @@
     },
     {
       "id": "lib-swagger-ui",
-      "label": "Swagger UI",
+      "label": {
+        "zh": "Swagger UI",
+        "en": "Swagger UI"
+      },
       "stack": "swagger-ui-dist",
       "width": 1280,
       "height": 1400,
@@ -38,7 +44,10 @@
     },
     {
       "id": "lib-ag-grid",
-      "label": "AG Grid",
+      "label": {
+        "zh": "AG Grid",
+        "en": "AG Grid"
+      },
       "stack": "ag-grid-community",
       "width": 1280,
       "height": 800,
@@ -56,7 +65,10 @@
     },
     {
       "id": "lib-antd-showcase",
-      "label": "Ant Design",
+      "label": {
+        "zh": "Ant Design",
+        "en": "Ant Design"
+      },
       "stack": "antd (React)",
       "width": 1280,
       "height": 1300,
@@ -74,7 +86,10 @@
     },
     {
       "id": "lib-fullcalendar",
-      "label": "FullCalendar",
+      "label": {
+        "zh": "FullCalendar",
+        "en": "FullCalendar"
+      },
       "stack": "@fullcalendar/core",
       "width": 1280,
       "height": 900,
@@ -92,7 +107,10 @@
     },
     {
       "id": "lib-bootstrap-dashboard",
-      "label": "Bootstrap 仪表盘",
+      "label": {
+        "zh": "Bootstrap 仪表盘",
+        "en": "Bootstrap dashboard"
+      },
       "stack": "bootstrap",
       "width": 1280,
       "height": 1000,
@@ -117,7 +135,10 @@
     "sites": [
       {
         "id": "live-wikipedia",
-        "label": "Wikipedia",
+        "label": {
+          "zh": "Wikipedia",
+          "en": "Wikipedia"
+        },
         "url": "https://en.wikipedia.org/wiki/Web_browser",
         "diff": 0.004874565972222222,
         "textCoverage": 1,
@@ -127,7 +148,10 @@
       },
       {
         "id": "live-hackernews",
-        "label": "Hacker News",
+        "label": {
+          "zh": "Hacker News",
+          "en": "Hacker News"
+        },
         "url": "https://news.ycombinator.com",
         "diff": 4.9479166666666665e-05,
         "textCoverage": 1,
@@ -137,7 +161,10 @@
       },
       {
         "id": "live-mdn",
-        "label": "MDN",
+        "label": {
+          "zh": "MDN",
+          "en": "MDN"
+        },
         "url": "https://developer.mozilla.org/en-US/docs/Web/CSS/grid",
         "diff": 0.0296337890625,
         "textCoverage": 0.9915305505142166,
@@ -147,7 +174,10 @@
       },
       {
         "id": "live-reactdev",
-        "label": "react.dev",
+        "label": {
+          "zh": "react.dev",
+          "en": "react.dev"
+        },
         "url": "https://react.dev",
         "diff": 0.0078388671875,
         "textCoverage": 1,
@@ -157,7 +187,10 @@
       },
       {
         "id": "live-stripe",
-        "label": "Stripe",
+        "label": {
+          "zh": "Stripe",
+          "en": "Stripe"
+        },
         "url": "https://stripe.com",
         "diff": 0.00476416015625,
         "textCoverage": 0.9976976208749041,
@@ -167,7 +200,10 @@
       },
       {
         "id": "live-githubdocs",
-        "label": "GitHub Docs",
+        "label": {
+          "zh": "GitHub Docs",
+          "en": "GitHub Docs"
+        },
         "url": "https://docs.github.com/en/get-started",
         "diff": 0.00195654296875,
         "textCoverage": 1,
@@ -177,7 +213,10 @@
       },
       {
         "id": "live-pydocs",
-        "label": "Python Docs",
+        "label": {
+          "zh": "Python Docs",
+          "en": "Python Docs"
+        },
         "url": "https://docs.python.org/3/library/asyncio.html",
         "diff": 0.00136181640625,
         "textCoverage": 1,
@@ -187,7 +226,10 @@
       },
       {
         "id": "live-linear",
-        "label": "Linear",
+        "label": {
+          "zh": "Linear",
+          "en": "Linear"
+        },
         "url": "https://linear.app",
         "diff": 0.00400439453125,
         "textCoverage": 1,
@@ -197,7 +239,10 @@
       },
       {
         "id": "live-arxiv",
-        "label": "arXiv",
+        "label": {
+          "zh": "arXiv",
+          "en": "arXiv"
+        },
         "url": "https://arxiv.org",
         "diff": 0.00013151041666666666,
         "textCoverage": 1,
@@ -207,7 +252,10 @@
       },
       {
         "id": "live-baidu",
-        "label": "百度",
+        "label": {
+          "zh": "百度",
+          "en": "Baidu"
+        },
         "url": "https://www.baidu.com",
         "diff": 0.0002855902777777778,
         "textCoverage": 1,

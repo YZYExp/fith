@@ -18,14 +18,15 @@ const publicDir = fileURLToPath(new URL("../public/cases/", import.meta.url));
 const dataFile = fileURLToPath(new URL("../src/cases.json", import.meta.url));
 
 const libraryCases = [
-  { id: "lib-github-readme", label: "GitHub README", stack: "github-markdown-css + highlight.js", width: 1100, height: 1500, focus: [0.08, 0.33] },
-  { id: "lib-swagger-ui", label: "Swagger UI", stack: "swagger-ui-dist", width: 1280, height: 1400, focus: [0.1, 0.12] },
-  { id: "lib-ag-grid", label: "AG Grid", stack: "ag-grid-community", width: 1280, height: 800, focus: [0.05, 0.1] },
-  { id: "lib-antd-showcase", label: "Ant Design", stack: "antd (React)", width: 1280, height: 1300, focus: [0.05, 0.1] },
-  { id: "lib-fullcalendar", label: "FullCalendar", stack: "@fullcalendar/core", width: 1280, height: 900, focus: [0.1, 0.1] },
-  { id: "lib-bootstrap-dashboard", label: "Bootstrap 仪表盘", stack: "bootstrap", width: 1280, height: 1000, focus: [0.2, 0.1] },
+  { id: "lib-github-readme", label: { zh: "GitHub README", en: "GitHub README" }, stack: "github-markdown-css + highlight.js", width: 1100, height: 1500, focus: [0.08, 0.33] },
+  { id: "lib-swagger-ui", label: { zh: "Swagger UI", en: "Swagger UI" }, stack: "swagger-ui-dist", width: 1280, height: 1400, focus: [0.1, 0.12] },
+  { id: "lib-ag-grid", label: { zh: "AG Grid", en: "AG Grid" }, stack: "ag-grid-community", width: 1280, height: 800, focus: [0.05, 0.1] },
+  { id: "lib-antd-showcase", label: { zh: "Ant Design", en: "Ant Design" }, stack: "antd (React)", width: 1280, height: 1300, focus: [0.05, 0.1] },
+  { id: "lib-fullcalendar", label: { zh: "FullCalendar", en: "FullCalendar" }, stack: "@fullcalendar/core", width: 1280, height: 900, focus: [0.1, 0.1] },
+  { id: "lib-bootstrap-dashboard", label: { zh: "Bootstrap 仪表盘", en: "Bootstrap dashboard" }, stack: "bootstrap", width: 1280, height: 1000, focus: [0.2, 0.1] },
 ];
 
+// [id, label]; a string label is the same in both languages
 const liveSites = [
   ["live-wikipedia", "Wikipedia"],
   ["live-hackernews", "Hacker News"],
@@ -36,7 +37,7 @@ const liveSites = [
   ["live-pydocs", "Python Docs"],
   ["live-linear", "Linear"],
   ["live-arxiv", "arXiv"],
-  ["live-baidu", "百度"],
+  ["live-baidu", { zh: "百度", en: "Baidu" }],
 ];
 
 const report = JSON.parse(await readFile(`${benchOut}report.json`, "utf8"));
@@ -84,7 +85,12 @@ const data = {
     sites: liveSites.map(([id, label]) => {
       const row = baseline[id];
       if (!row || row.ratio === undefined) throw new Error(`${id}: missing in baseline`);
-      return { id, label, url: null, ...metrics(row) };
+      return {
+        id,
+        label: typeof label === "string" ? { zh: label, en: label } : label,
+        url: null,
+        ...metrics(row),
+      };
     }),
   },
 };

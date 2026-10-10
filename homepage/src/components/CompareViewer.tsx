@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { KeyboardEvent, MouseEvent, PointerEvent } from "react";
+import { useLocale } from "../i18n";
 
 export interface CompareViewerProps {
   /** Browser screenshot (ground truth). */
@@ -28,6 +29,7 @@ export function CompareViewer({
   zoomLevel = 4,
   label,
 }: CompareViewerProps) {
+  const { t } = useLocale();
   const scrollRef = useRef<HTMLDivElement>(null);
   const [split, setSplit] = useState(0.5);
   const [zoom, setZoom] = useState(1);
@@ -172,23 +174,23 @@ export function CompareViewer({
     <div className="compare">
       <div className="compare-toolbar">
         <div className="compare-legend" aria-hidden="true">
-          <span>← 浏览器截图</span>
-          <span>fith SVG →</span>
+          <span>{t.compare.before}</span>
+          <span>{t.compare.after}</span>
         </div>
-        <div className="segmented" role="group" aria-label={`${label}缩放`}>
+        <div className="segmented" role="group" aria-label={t.compare.zoomGroup(label)}>
           <button
             type="button"
             aria-pressed={zoom === 1}
             onClick={() => zoomTo(1, visibleCenter())}
           >
-            适应
+            {t.compare.fit}
           </button>
           <button
             type="button"
             aria-pressed={zoom > 1}
             onClick={() => zoomTo(zoomLevel, [focus[0], focus[1]])}
           >
-            放大 {zoomLevel}×
+            {t.compare.zoomIn(zoomLevel)}
           </button>
         </div>
       </div>
@@ -216,7 +218,7 @@ export function CompareViewer({
           >
             <img
               src={before}
-              alt={`${label}：浏览器截图`}
+              alt={t.compare.altBefore(label)}
               width={width}
               height={height}
               draggable={false}
@@ -225,7 +227,7 @@ export function CompareViewer({
             />
             <img
               src={after}
-              alt={`${label}：fith 生成的 SVG`}
+              alt={t.compare.altAfter(label)}
               width={width}
               height={height}
               draggable={false}
@@ -244,11 +246,11 @@ export function CompareViewer({
           className="compare-handle"
           role="slider"
           tabIndex={0}
-          aria-label="分割线位置：左侧截图，右侧 SVG"
+          aria-label={t.compare.slider}
           aria-valuemin={0}
           aria-valuemax={100}
           aria-valuenow={percent}
-          aria-valuetext={`截图 ${percent}%，SVG ${100 - percent}%`}
+          aria-valuetext={t.compare.sliderValue(percent)}
           style={{ left: `${split * 100}%` }}
           onKeyDown={onHandleKey}
           onPointerDown={(event) => {
@@ -270,8 +272,8 @@ export function CompareViewer({
       </div>
       <p className="compare-hint">
         {zoom > 1
-          ? "拖动画面平移，双击回到全图。截图在放大后变糊，SVG 保持清晰。"
-          : "拖动分割线对比两侧，双击任意位置放大。"}
+          ? t.compare.hintZoomed
+          : t.compare.hintFit}
       </p>
     </div>
   );

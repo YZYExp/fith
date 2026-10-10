@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import type { KeyboardEvent } from "react";
-import { readmeUrl, setupCommand, usageExamples } from "../content";
+import { setupCommand } from "../content";
+import { useLocale } from "../i18n";
 
 function CodeBlock({ code, filename }: { code: string; filename: string }) {
+  const { t } = useLocale();
   const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">(
     "idle",
   );
@@ -26,8 +28,8 @@ function CodeBlock({ code, filename }: { code: string; filename: string }) {
     <div className="code-block">
       <div className="code-toolbar">
         <span>{filename}</span>
-        <button type="button" onClick={copyCode} aria-label="复制当前示例代码">
-          {copyState === "copied" ? "已复制" : "复制代码"}
+        <button type="button" onClick={copyCode} aria-label={t.usage.copyAria}>
+          {copyState === "copied" ? t.usage.copied : t.usage.copy}
         </button>
       </div>
       <pre>
@@ -35,9 +37,9 @@ function CodeBlock({ code, filename }: { code: string; filename: string }) {
       </pre>
       <span className="copy-status" role="status">
         {copyState === "copied"
-          ? "代码已复制到剪贴板。"
+          ? t.usage.copiedStatus
           : copyState === "failed"
-            ? "复制失败，请手动选择代码。"
+            ? t.usage.copyFailed
             : ""}
       </span>
     </div>
@@ -45,6 +47,8 @@ function CodeBlock({ code, filename }: { code: string; filename: string }) {
 }
 
 export function Usage() {
+  const { t } = useLocale();
+  const usageExamples = t.usage.examples;
   const [activeIndex, setActiveIndex] = useState(0);
   const tabRefs = useRef<(HTMLButtonElement | null)[]>([]);
 
@@ -70,15 +74,15 @@ export function Usage() {
       <div className="wrap">
         <div className="section-heading">
           <div>
-            <div className="eyebrow">03 / 开始使用</div>
-            <h2 id="usage-title">四种入口，同一个捕获核心。</h2>
+            <div className="eyebrow">{t.usage.eyebrow}</div>
+            <h2 id="usage-title">{t.usage.title}</h2>
           </div>
-          <p>从自动化脚本到浏览器操作，选择适合你的使用方式。</p>
+          <p>{t.usage.intro}</p>
         </div>
         <div
           className="usage-tabs"
           role="tablist"
-          aria-label="fith 使用方式"
+          aria-label={t.usage.tablist}
         >
           {usageExamples.map((item, index) => (
             <button
@@ -118,12 +122,12 @@ export function Usage() {
             ))}
           </div>
           <aside className="setup">
-            <h3>从仓库开始</h3>
-            <p>项目要求 Node.js ≥ 18。先安装依赖与浏览器，再构建库。</p>
+            <h3>{t.usage.setupTitle}</h3>
+            <p>{t.usage.setupText}</p>
             <pre>
               <code>{setupCommand}</code>
             </pre>
-            <a href={readmeUrl}>查看完整安装与使用说明</a>
+            <a href={t.readmeUrl}>{t.usage.setupLink}</a>
           </aside>
         </div>
       </div>
