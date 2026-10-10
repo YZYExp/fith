@@ -8,6 +8,7 @@ import type {
   RasterNode,
   CornerRadii,
   BorderEdges,
+  BgLayer,
 } from '../ir/types.js';
 import type { Outliner } from './outline.js';
 import { n, esc, uniformRadii, noRadii, roundedRectPath } from './primitives.js';
@@ -40,6 +41,32 @@ function emitInsetShadows(node: BoxNode, defs: Defs): string {
     out += `<g clip-path="url(#${clip})"><path fill-rule="evenodd" d="${d}" fill="${esc(sh.color)}"${filt}/></g>`;
   }
   return out;
+}
+
+/** One general background layer: a <pattern> tile painted over its clip box (a single tile when not repeating). */
+function emitBgLayer(L: BgLayer, defs: Defs): string {
+  const { tile, clip } = L;
+  if (tile.width <= 0 || tile.height <= 0 || clip.width <= 0 || clip.height <= 0) return '';
+  let content = '';
+  if (L.gradient) {
+    const g = L.gradient;
+    if (g.type === 'conic-gradient') content = conicWedges(g, { x: 0, y: 0, width: tile.width, height: tile.height });
+    else content = `<rect width="${n(tile.width)}" height="${n(tile.height)}" fill="url(#${gradientId(defs, g, { x: 0, y: 0, width: tile.width, height: tile.height })})"/>`;
+  } else if (L.href) {
+    content = `<image width="${n(tile.width)}" height="${n(tile.height)}" preserveAspectRatio="none" href="${L.href}"/>`;
+  } else return '';
+  const pat = defs.add(
+    `<pattern id="{ID}" patternUnits="userSpaceOnUse" x="${n(tile.x)}" y="${n(tile.y)}" width="${n(tile.width)}" height="${n(tile.height)}"` +
+      `${L.gradient?.type === 'conic-gradient' ? ' overflow="hidden"' : ''}>${content}</pattern>`,
+  );
+  // paint only where tiles exist: the whole clip box when repeating on an axis, else the single tile span
+  const x0 = L.repeatX ? clip.x : Math.max(clip.x, tile.x);
+  const x1 = L.repeatX ? clip.x + clip.width : Math.min(clip.x + clip.width, tile.x + tile.width);
+  const y0 = L.repeatY ? clip.y : Math.max(clip.y, tile.y);
+  const y1 = L.repeatY ? clip.y + clip.height : Math.min(clip.y + clip.height, tile.y + tile.height);
+  if (x1 <= x0 || y1 <= y0) return '';
+  const cid = clipId(defs, { ...clip, radii: L.clipRadii });
+  return `<g clip-path="url(#${cid})"><rect x="${n(x0)}" y="${n(y0)}" width="${n(x1 - x0)}" height="${n(y1 - y0)}" fill="url(#${pat})"/></g>`;
 }
 
 function emitBox(node: BoxNode, defs: Defs): string {
@@ -76,6 +103,7 @@ function emitBox(node: BoxNode, defs: Defs): string {
     const cid = clipId(defs, { ...rect, radii });
     return `<g clip-path="url(#${cid})">${conicWedges(g, rect)}</g>`;
   };
+  if (node.bgLayers) for (const L of node.bgLayers) out += emitBgLayer(L, defs);
   if (node.gradient) out += paintGradient(node.gradient);
   for (const g of node.gradients ?? []) out += paintGradient(g);
 

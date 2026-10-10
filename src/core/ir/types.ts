@@ -146,12 +146,32 @@ export interface LinearGradientFill {
   stops: GradientStop[];
 }
 
+/**
+ * One CSS background layer with its own size/position/repeat/clip (general engine, used when the simple
+ * "gradient fills the box" fast path does not apply). Painted via an SVG <pattern> tile.
+ */
+export interface BgLayer {
+  /** Tile rect in absolute px (one repetition of the image/gradient). */
+  tile: Rect;
+  repeatX: boolean;
+  repeatY: boolean;
+  /** Area the layer is clipped to (border/padding/content box) and its radii. */
+  clip: Rect;
+  clipRadii: CornerRadii;
+  /** Gradient fill expressed in tile-local coordinates (box = {0,0,tile.w,tile.h}). */
+  gradient?: LinearGradientFill | RadialGradientFill | ConicGradientFill;
+  /** base64 image data URI. */
+  href?: string;
+}
+
 export interface BoxNode extends NodeBase {
   kind: 'box';
   /** Solid background color, or null/absent for none. */
   fill?: string | null;
   /** Background gradient painted over `fill`. */
   gradient?: LinearGradientFill | RadialGradientFill | ConicGradientFill | null;
+  /** General background layers (sized/tiled/mixed url+gradient), painted bottom → top above `fill`. */
+  bgLayers?: BgLayer[];
   /** Extra background layers (multi-layer `background-image`), painted bottom → top above `gradient`. */
   gradients?: (LinearGradientFill | RadialGradientFill | ConicGradientFill)[];
   radii: CornerRadii;

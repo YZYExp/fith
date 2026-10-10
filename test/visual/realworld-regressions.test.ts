@@ -205,6 +205,17 @@ describe('real-world regressions', () => {
     expect(r.ratio).toBeLessThan(0.01);
   }, 60_000);
 
+  it('renders sized / tiled / mixed url+gradient background layers as <pattern> tiles (no raster)', async () => {
+    const r = await validate(
+      { url: pathToFileURL(resolve(FIXTURES, 'bg-layers.html')).href },
+      { width: 620, height: 260, name: 'bg-layers', outDir: OUT, fontMode: 'none' },
+    );
+    const svg = readFileSync(resolve(OUT, 'bg-layers.svg'), 'utf8');
+    expect(svg).not.toContain('data:image/png');
+    expect(svg.match(/<pattern /g)?.length).toBeGreaterThanOrEqual(5);
+    expect(r.ratio).toBeLessThan(0.03);
+  }, 60_000);
+
   describe('webfont in an external stylesheet', () => {
     let base: { url: string; close: () => Promise<void> } | null = null;
     afterAll(async () => base?.close());

@@ -1,4 +1,4 @@
-import type { Scene, PaintNode, Clip, CornerRadii, CaptureOptions } from '../ir/types.js';
+import type { Scene, PaintNode, Clip, CornerRadii, CaptureOptions, BgLayer } from '../ir/types.js';
 
 /**
  * Captures the current page into a Scene IR. Runs INSIDE the page context, so it
@@ -735,6 +735,10 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
     const value = cs.backgroundImage;
     if (!value || value === 'none') return null;
     if (cs.backgroundBlendMode && cs.backgroundBlendMode.split(',').some((m) => m.trim() !== 'normal')) return null;
+    // the fast path paints each gradient over the whole box: only valid for the default origin/clip/attachment
+    if (splitTopLevel(cs.backgroundClip || 'border-box').some((q) => q.trim() !== 'border-box')) return null;
+    if (splitTopLevel(cs.backgroundOrigin || 'padding-box').some((q) => q.trim() !== 'padding-box')) return null;
+    if (splitTopLevel(cs.backgroundAttachment || 'scroll').some((q) => q.trim() === 'fixed')) return null;
     const layers = splitTopLevel(value);
     const sizes = splitTopLevel(cs.backgroundSize || 'auto');
     const out: NonNullable<ReturnType<typeof parseGradientLayer>>[] = [];
@@ -800,7 +804,15 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
     const m = value.trim().match(/^url\((["']?)([\s\S]*)\1\)$/);
     return m ? m[2].replace(/\\(["'])/g, '$1') : null;
   };
+  // url of one background layer: `url(..)` or the first candidate of `image-set(url(..) 1x, …)`
+  const layerUrl = (layer: string): string | null => {
+    const t = layer.trim();
+    const m = t.match(/^url\((["']?)([\s\S]*)\1\)$/) || t.match(/^(?:-webkit-)?image-set\(\s*url\((["']?)([\s\S]*?)\1\)/);
+    return m ? m[2].replace(/\\(["'])/g, '$1') : null;
+  };
   const prepareImageLayers = async (cs: CSSStyleDeclaration) => {
+    const bgv = cs.backgroundImage;
+    if (bgv && bgv !== 'none') for (const layer of splitTopLevel(bgv)) { const u = layerUrl(layer); if (u) await loadImgInfo(u); }
     const a = singleUrl(cs.backgroundImage);
     if (a) await loadImgInfo(a);
     const b = singleUrl((cs as any).maskImage);
@@ -1010,6 +1022,108 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
 
   // background-image:url() as an embedded <image>: single layer, positioned and
   // sized exactly. Anything else (multi-layer, tiling, odd origin/clip) stays raster.
+  // General background engine: any mix of gradient and url()/image-set() layers with their own
+  // background-size / -position / -repeat / -origin / -clip (CSS order top → bottom; returned bottom → top).
+  // null when something can't be reproduced (fixed attachment, space/round, blend modes, unloaded image…).
+  const splitTopLevelWs = (v: string): string[] => {
+    const out: string[] = [];
+    let depth = 0, cur = '';
+    for (const ch of v) {
+      if (ch === '(') depth++;
+      else if (ch === ')') depth--;
+      if (/\s/.test(ch) && depth === 0) { if (cur) out.push(cur); cur = ''; } else cur += ch;
+    }
+    if (cur) out.push(cur);
+    return out;
+  };
+  const tileOf = (
+    info: { w: number; h: number },
+    sizeV: string, posV: string,
+    area: { x: number; y: number; width: number; height: number },
+  ) => {
+    const ratio = info.w > 0 && info.h > 0 ? info.w / info.h : 0;
+    let w = info.w > 0 ? info.w : area.width;
+    let h = info.h > 0 ? info.h : area.height;
+    const sv = (sizeV || 'auto').trim();
+    if (sv === 'contain' || sv === 'cover') {
+      const r = ratio || area.width / Math.max(1, area.height);
+      const fitW = area.width / Math.max(1e-6, area.height) <= r;
+      const useW = sv === 'contain' ? fitW : !fitW;
+      if (useW) { w = area.width; h = w / r; } else { h = area.height; w = h * r; }
+    } else {
+      const [sw = 'auto', sh = 'auto'] = sv.split(/\s+/);
+      const rs = (t: string, base: number) => (t === 'auto' ? null : /%$/.test(t) ? (parseFloat(t) / 100) * base : /px$/.test(t) ? parseFloat(t) : NaN);
+      const rw = rs(sw, area.width), rh = rs(sh, area.height);
+      if ((rw !== null && Number.isNaN(rw)) || (rh !== null && Number.isNaN(rh))) return null;
+      if (rw !== null && rh !== null) { w = rw; h = rh; }
+      else if (rw !== null) { w = rw; h = ratio ? rw / ratio : h; }
+      else if (rh !== null) { h = rh; w = ratio ? rh * ratio : w; }
+    }
+    if (!(w > 0) || !(h > 0)) return null;
+    const [px = '0%', py = '0%'] = (posV || '0% 0%').trim().split(/\s+/);
+    const rp = (t: string, free: number) => {
+      const cm = t.match(/^calc\(\s*(-?[\d.]+)%\s*([+-])\s*([\d.]+)px\s*\)$/); // `right 10px` → calc(100% - 10px)
+      if (cm) return (parseFloat(cm[1]) / 100) * free + (cm[2] === '-' ? -1 : 1) * parseFloat(cm[3]);
+      return /%$/.test(t) ? (parseFloat(t) / 100) * free : /px$/.test(t) ? parseFloat(t) : t === 'left' || t === 'top' ? 0 : t === 'center' ? free / 2 : t === 'right' || t === 'bottom' ? free : NaN;
+    };
+    // positions may contain spaces inside calc(): re-split on top-level whitespace
+    const ptoks = splitTopLevelWs((posV || '0% 0%').trim());
+    const [px2 = '0%', py2 = '0%'] = ptoks;
+    const ox = rp(px2, area.width - w), oy = rp(py2, area.height - h);
+    if (Number.isNaN(ox) || Number.isNaN(oy)) return null;
+    return { x: area.x + ox, y: area.y + oy, width: w, height: h };
+  };
+
+  const parseBackgroundLayers = (el: Element, cs: CSSStyleDeclaration) => {
+    const value = cs.backgroundImage;
+    if (!value || value === 'none') return null;
+    if (cs.backgroundClip === 'text' || (cs as any).webkitBackgroundClip === 'text') return null;
+    if (cs.backgroundBlendMode && cs.backgroundBlendMode.split(',').some((m) => m.trim() !== 'normal')) return null;
+    const r = el.getBoundingClientRect();
+    if (r.width <= 0 || r.height <= 0) return null;
+    const bl = num(cs.borderLeftWidth), bt = num(cs.borderTopWidth), br = num(cs.borderRightWidth), bb = num(cs.borderBottomWidth);
+    const pl = num(cs.paddingLeft), pt = num(cs.paddingTop), pr = num(cs.paddingRight), pb = num(cs.paddingBottom);
+    const boxes: Record<string, { x: number; y: number; width: number; height: number }> = {
+      'border-box': { x: r.left, y: r.top, width: r.width, height: r.height },
+      'padding-box': { x: r.left + bl, y: r.top + bt, width: r.width - bl - br, height: r.height - bt - bb },
+      'content-box': { x: r.left + bl + pl, y: r.top + bt + pt, width: r.width - bl - br - pl - pr, height: r.height - bt - bb - pt - pb },
+    };
+    const inset: Record<string, number> = { 'border-box': 0, 'padding-box': Math.max(bl, br, bt, bb), 'content-box': Math.max(bl + pl, br + pr, bt + pt, bb + pb) };
+    const baseRadii = radiiOf(cs, r.width, r.height);
+    const layers = splitTopLevel(value);
+    const L = (v: string | undefined, d: string) => splitTopLevel(v || d).map((q) => q.trim());
+    const sizes = L(cs.backgroundSize, 'auto'), poss = L(cs.backgroundPosition, '0% 0%'), reps = L(cs.backgroundRepeat, 'repeat');
+    const orgs = L(cs.backgroundOrigin, 'padding-box'), clips = L(cs.backgroundClip, 'border-box'), atts = L(cs.backgroundAttachment, 'scroll');
+    const out: BgLayer[] = [];
+    for (let k = 0; k < layers.length; k++) {
+      const lay = layers[k].trim();
+      if (lay === 'none') continue;
+      if (atts[k % atts.length] === 'fixed') return null;
+      const area = boxes[orgs[k % orgs.length]], clipName = clips[k % clips.length];
+      const clipBox = boxes[clipName];
+      if (!area || !clipBox || area.width <= 0 || area.height <= 0) return null;
+      const rt = reps[k % reps.length].split(/\s+/);
+      const rmap = (t: string): [boolean, boolean] | null => (t === 'repeat' ? [true, true] : t === 'no-repeat' ? [false, false] : t === 'repeat-x' ? [true, false] : t === 'repeat-y' ? [false, true] : null);
+      let rx: boolean, ry: boolean;
+      if (rt.length === 2) { if (rt.includes('space') || rt.includes('round')) return null; rx = rt[0] === 'repeat'; ry = rt[1] === 'repeat'; }
+      else { const m = rmap(rt[0]); if (!m) return null; [rx, ry] = m; }
+      const url = layerUrl(lay);
+      const info = url ? imgInfo.get(url) : { w: 0, h: 0 };
+      if (!info) return null;
+      const tile = tileOf(info, sizes[k % sizes.length], poss[k % poss.length], area);
+      if (!tile) return null;
+      const ins = inset[clipName] ?? 0;
+      const clipRadii = baseRadii.map((v) => Math.max(0, v - ins)) as CornerRadii;
+      if (url) out.push({ tile, repeatX: rx, repeatY: ry, clip: clipBox, clipRadii, href: (info as any).href });
+      else {
+        const g = parseGradientLayer(lay, { x: 0, y: 0, width: tile.width, height: tile.height });
+        if (!g) return null;
+        out.push({ tile, repeatX: rx, repeatY: ry, clip: clipBox, clipRadii, gradient: g as any });
+      }
+    }
+    return out.length ? out.reverse() : null;
+  };
+
   const bgImageLayer = (el: Element, cs: CSSStyleDeclaration) => {
     const url = singleUrl(cs.backgroundImage);
     const info = url ? imgInfo.get(url) : null;
@@ -1042,7 +1156,8 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
       cs.backgroundImage !== 'none' &&
       !parseBgLayers(cs, paddingBoxOf(el, cs)) &&
       !parseFirstLinearGradient(cs.backgroundImage) &&
-      !bgImageLayer(el, cs)
+      !bgImageLayer(el, cs) &&
+      !parseBackgroundLayers(el, cs)
     )
       return 'background-image';
     // blur-free inset layers (table-row tints `inset 0 0 0 9999px`, rings) are vector; blurred ones raster
@@ -1551,8 +1666,12 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
     const { border } = buildBorder(cs);
     const shadows = parseShadows(cs.boxShadow);
     const bgLayers = !textClipped && cs.backgroundImage && cs.backgroundImage !== 'none' ? parseBgLayers(cs, paddingBoxOf(el, cs)) : null;
+    const bgImg0 = textClipped ? null : bgImageLayer(el, cs);
+    // general engine only when neither the gradient fast path nor the single-image path applies
+    const general = !bgLayers && !bgImg0 && !textClipped && cs.backgroundImage && cs.backgroundImage !== 'none' ? parseBackgroundLayers(el, cs) : null;
     const gradient: any = bgLayers
       ? bgLayers.length === 1 ? bgLayers[0] : null
+      : general ? null
       : !textClipped && cs.backgroundImage && cs.backgroundImage !== 'none' ? parseFirstLinearGradient(cs.backgroundImage) : null;
     const gradients = bgLayers && bgLayers.length > 1 ? bgLayers.slice().reverse() : undefined;
     const outlineW = num(cs.outlineWidth);
@@ -1561,11 +1680,11 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
       outlineW > 0 && outlineStyle !== 'none' && !transparent(cs.outlineColor)
         ? { width: outlineW, color: normColor(cs.outlineColor), style: outlineStyle, offset: num(cs.outlineOffset) }
         : null;
-    const bgImg = textClipped ? null : bgImageLayer(el, cs);
-    if (!fill && !gradient && !gradients && !border && shadows.length === 0 && !outline && !bgImg && !(cs.boxShadow || '').includes('inset')) return;
+    const bgImg = general ? null : bgImg0;
+    if (!fill && !gradient && !gradients && !general && !border && shadows.length === 0 && !outline && !bgImg && !(cs.boxShadow || '').includes('inset')) return;
     const blur = el.childNodes.length === 0 ? pureBlur(cs.filter) : null;
     const insetShadows = parseInsetShadows(cs.boxShadow) || [];
-    if (fill || gradient || gradients || border || shadows.length > 0 || outline || insetShadows.length > 0)
+    if (fill || gradient || gradients || general || border || shadows.length > 0 || outline || insetShadows.length > 0)
     nodes.push({
       kind: 'box',
       id: nid(),
@@ -1576,6 +1695,7 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
       fill,
       gradient,
       gradients,
+      bgLayers: general || undefined,
       radii: radiiOf(cs, r.width, r.height),
       radiiY: radiiYOf(cs, r.width, r.height),
       border,
