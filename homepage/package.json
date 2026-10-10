@@ -12,7 +12,8 @@
     "typecheck": "tsc --noEmit",
     "build": "pnpm typecheck && vite build",
     "preview": "vite preview",
-    "generate:example": "node scripts/generate-example.mjs"
+    "generate:example": "node scripts/generate-example.mjs",
+    "generate:cases": "node scripts/generate-cases.mjs"
   },
   "dependencies": {
     "react": "^19.2.0",

@@ -10,7 +10,7 @@ import { captureScene } from '../../core/capture/capture.js';
 import { captureSourceHtml } from '../../core/capture/source-html.js';
 import { emitSvg, type EmitOptions } from '../../core/emit/svg.js';
 import { createOutliner } from '../../core/emit/outline.js';
-import { systemFontLoader } from './fonts.js';
+import { systemFallbackLoader, systemFontLoader } from './fonts.js';
 import { findDiffRegions } from './diff-patch.js';
 import type { Scene } from '../../core/ir/types.js';
 
@@ -197,7 +197,7 @@ async function captureAndEmit(page: Page, opts: RenderOptions): Promise<RenderRe
   // Build emit options (outline mode converts text to glyph paths).
   const emitOpts: EmitOptions = {};
   if (opts.fontMode === 'outline') {
-    emitOpts.outline = createOutliner(scene.fonts, systemFontLoader());
+    emitOpts.outline = createOutliner(scene.fonts, systemFontLoader(), systemFallbackLoader());
     scene.fonts = []; // glyphs become paths; no @font-face <style> needed
   }
 

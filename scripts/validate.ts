@@ -16,7 +16,7 @@ import { emitSvg } from '../src/core/emit/svg.js';
 import { collectExternalCss } from '../src/backends/node/external-css.js';
 import { resolveCorsImages } from '../src/backends/node/cors-images.js';
 import { createOutliner } from '../src/core/emit/outline.js';
-import { systemFontLoader } from '../src/backends/node/fonts.js';
+import { systemFallbackLoader, systemFontLoader } from '../src/backends/node/fonts.js';
 import type { Scene } from '../src/core/ir/types.js';
 
 const ARGS = ['--no-sandbox', '--disable-setuid-sandbox', '--disable-gpu', '--single-process'];
@@ -263,7 +263,7 @@ export async function validate(
     }
     let svg: string;
     if (opts.fontMode === 'outline') {
-      const outline = createOutliner(scene.fonts, systemFontLoader());
+      const outline = createOutliner(scene.fonts, systemFontLoader(), systemFallbackLoader());
       scene.fonts = [];
       svg = emitSvg(scene, { outline });
     } else {

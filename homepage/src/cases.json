@@ -1,0 +1,268 @@
+{
+  "cases": [
+    {
+      "id": "lib-github-readme",
+      "label": {
+        "zh": "GitHub README",
+        "en": "GitHub README"
+      },
+      "stack": "github-markdown-css + highlight.js",
+      "width": 1100,
+      "height": 1500,
+      "focus": [
+        0.08,
+        0.33
+      ],
+      "metrics": {
+        "diff": 0.001021818181818182,
+        "textCoverage": 1,
+        "rasterArea": 0.0002206060606060606,
+        "svgKB": 35,
+        "nodes": 142
+      }
+    },
+    {
+      "id": "lib-swagger-ui",
+      "label": {
+        "zh": "Swagger UI",
+        "en": "Swagger UI"
+      },
+      "stack": "swagger-ui-dist",
+      "width": 1280,
+      "height": 1400,
+      "focus": [
+        0.1,
+        0.12
+      ],
+      "metrics": {
+        "diff": 0.002072544642857143,
+        "textCoverage": 1,
+        "rasterArea": 0.004376674107142857,
+        "svgKB": 20,
+        "nodes": 69
+      }
+    },
+    {
+      "id": "lib-ag-grid",
+      "label": {
+        "zh": "AG Grid",
+        "en": "AG Grid"
+      },
+      "stack": "ag-grid-community",
+      "width": 1280,
+      "height": 800,
+      "focus": [
+        0.05,
+        0.1
+      ],
+      "metrics": {
+        "diff": 0.0015029296875,
+        "textCoverage": 1,
+        "rasterArea": 0,
+        "svgKB": 56,
+        "nodes": 247
+      }
+    },
+    {
+      "id": "lib-antd-showcase",
+      "label": {
+        "zh": "Ant Design",
+        "en": "Ant Design"
+      },
+      "stack": "antd (React)",
+      "width": 1280,
+      "height": 1300,
+      "focus": [
+        0.05,
+        0.1
+      ],
+      "metrics": {
+        "diff": 0.0003365384615384615,
+        "textCoverage": 1,
+        "rasterArea": 0,
+        "svgKB": 46,
+        "nodes": 115
+      }
+    },
+    {
+      "id": "lib-fullcalendar",
+      "label": {
+        "zh": "FullCalendar",
+        "en": "FullCalendar"
+      },
+      "stack": "@fullcalendar/core",
+      "width": 1280,
+      "height": 900,
+      "focus": [
+        0.1,
+        0.1
+      ],
+      "metrics": {
+        "diff": 0.0032222222222222222,
+        "textCoverage": 1,
+        "rasterArea": 0,
+        "svgKB": 22,
+        "nodes": 125
+      }
+    },
+    {
+      "id": "lib-bootstrap-dashboard",
+      "label": {
+        "zh": "Bootstrap 仪表盘",
+        "en": "Bootstrap dashboard"
+      },
+      "stack": "bootstrap",
+      "width": 1280,
+      "height": 1000,
+      "focus": [
+        0.2,
+        0.1
+      ],
+      "metrics": {
+        "diff": 0.00369453125,
+        "textCoverage": 1,
+        "rasterArea": 0.0091390625,
+        "svgKB": 219,
+        "nodes": 154
+      }
+    }
+  ],
+  "live": {
+    "count": 39,
+    "medianDiff": 0.002857421875,
+    "underOnePercent": 31,
+    "medianTextCoverage": 1,
+    "sites": [
+      {
+        "id": "live-wikipedia",
+        "label": {
+          "zh": "Wikipedia",
+          "en": "Wikipedia"
+        },
+        "url": "https://en.wikipedia.org/wiki/Web_browser",
+        "diff": 0.004874565972222222,
+        "textCoverage": 1,
+        "rasterArea": 0.017361111111111112,
+        "svgKB": 185,
+        "nodes": 355
+      },
+      {
+        "id": "live-hackernews",
+        "label": {
+          "zh": "Hacker News",
+          "en": "Hacker News"
+        },
+        "url": "https://news.ycombinator.com",
+        "diff": 4.9479166666666665e-05,
+        "textCoverage": 1,
+        "rasterArea": 0.004267578125,
+        "svgKB": 72,
+        "nodes": 461
+      },
+      {
+        "id": "live-mdn",
+        "label": {
+          "zh": "MDN",
+          "en": "MDN"
+        },
+        "url": "https://developer.mozilla.org/en-US/docs/Web/CSS/grid",
+        "diff": 0.0296337890625,
+        "textCoverage": 0.9915305505142166,
+        "rasterArea": 0.05887109375,
+        "svgKB": 1216,
+        "nodes": 422
+      },
+      {
+        "id": "live-reactdev",
+        "label": {
+          "zh": "react.dev",
+          "en": "react.dev"
+        },
+        "url": "https://react.dev",
+        "diff": 0.0078388671875,
+        "textCoverage": 1,
+        "rasterArea": 0,
+        "svgKB": 2004,
+        "nodes": 123
+      },
+      {
+        "id": "live-stripe",
+        "label": {
+          "zh": "Stripe",
+          "en": "Stripe"
+        },
+        "url": "https://stripe.com",
+        "diff": 0.00476416015625,
+        "textCoverage": 0.9976976208749041,
+        "rasterArea": 0,
+        "svgKB": 319,
+        "nodes": 162
+      },
+      {
+        "id": "live-githubdocs",
+        "label": {
+          "zh": "GitHub Docs",
+          "en": "GitHub Docs"
+        },
+        "url": "https://docs.github.com/en/get-started",
+        "diff": 0.00195654296875,
+        "textCoverage": 1,
+        "rasterArea": 0,
+        "svgKB": 609,
+        "nodes": 158
+      },
+      {
+        "id": "live-pydocs",
+        "label": {
+          "zh": "Python Docs",
+          "en": "Python Docs"
+        },
+        "url": "https://docs.python.org/3/library/asyncio.html",
+        "diff": 0.00136181640625,
+        "textCoverage": 1,
+        "rasterArea": 0.00427734375,
+        "svgKB": 56,
+        "nodes": 194
+      },
+      {
+        "id": "live-linear",
+        "label": {
+          "zh": "Linear",
+          "en": "Linear"
+        },
+        "url": "https://linear.app",
+        "diff": 0.00400439453125,
+        "textCoverage": 1,
+        "rasterArea": 0,
+        "svgKB": 3418,
+        "nodes": 221
+      },
+      {
+        "id": "live-arxiv",
+        "label": {
+          "zh": "arXiv",
+          "en": "arXiv"
+        },
+        "url": "https://arxiv.org",
+        "diff": 0.00013151041666666666,
+        "textCoverage": 1,
+        "rasterArea": 0.006881510416666667,
+        "svgKB": 355,
+        "nodes": 480
+      },
+      {
+        "id": "live-baidu",
+        "label": {
+          "zh": "百度",
+          "en": "Baidu"
+        },
+        "url": "https://www.baidu.com",
+        "diff": 0.0002855902777777778,
+        "textCoverage": 1,
+        "rasterArea": 0.018739583333333334,
+        "svgKB": 86,
+        "nodes": 63
+      }
+    ]
+  }
+}

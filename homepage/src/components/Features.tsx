@@ -1,6 +1,7 @@
-import { features } from "../content";
+import type { FeatureId } from "../content";
+import { useLocale } from "../i18n";
 
-function FeatureIcon({ kind }: { kind: (typeof features)[number]["id"] }) {
+function FeatureIcon({ kind }: { kind: FeatureId }) {
   return (
     <svg viewBox="0 0 180 120" fill="none" aria-hidden="true">
       {kind === "layout" && (
@@ -40,23 +41,24 @@ function FeatureIcon({ kind }: { kind: (typeof features)[number]["id"] }) {
 }
 
 export function Features() {
+  const { t } = useLocale();
   return (
     <section className="section" id="features" aria-labelledby="features-title">
       <div className="section-heading">
         <div>
-          <div className="eyebrow">01 / 转换能力</div>
-          <h2 id="features-title">为页面，保留表达力。</h2>
+          <div className="eyebrow">{t.features.eyebrow}</div>
+          <h2 id="features-title">{t.features.title}</h2>
         </div>
-        <p>从页面里的 DOM 与 CSS，到一份可以独立查看和交付的 SVG。</p>
+        <p>{t.features.intro}</p>
       </div>
       <div className="cards">
-        {features.map((feature) => (
+        {t.features.items.map((feature, index) => (
           <article className="card" key={feature.id}>
             <div className="card-art">
               <FeatureIcon kind={feature.id} />
             </div>
             <div className="eyebrow">
-              {feature.number} / {feature.label}
+              {String(index + 1).padStart(2, "0")} / {feature.label}
             </div>
             <h3>{feature.title}</h3>
             <p>{feature.description}</p>

@@ -18,7 +18,8 @@ Open the Local URL printed by Vite. For the production preview:
   pnpm preview
 
 Rendered full-page snapshots are in preview/desktop.png and
-preview/mobile.png. These are review images, not deployed
+preview/mobile.png (Chinese) and preview/desktop-en.png and
+preview/mobile-en.png (English). These are review images, not deployed
 assets; regenerate them when the layout changes.
 
 pnpm build checks TypeScript and produces static files in homepage/dist/.
@@ -27,9 +28,14 @@ Opening the source index.html directly does not run the React application.
 MAINTAIN
   src/App.tsx                    Page composition
   src/components/                Header, hero, artwork, and page sections
-  src/components/ProjectHero.tsx Real HTML/SVG example and format/zoom controls
+  src/components/ProjectHero.tsx Real HTML/SVG example in the compare viewer
+  src/components/CompareViewer.tsx Screenshot vs SVG: draggable divider,
+                                 zoom, drag to pan
+  src/components/RealWorld.tsx   Real-world cases + live-site benchmark table
+  src/cases.json                 Generated case list and metrics (do not edit)
   src/components/Usage.tsx       Code examples, accessible tabs, and copy button
-  src/content.ts                 Project capabilities, usage code, and questions
+  src/content.tsx                All copy, one dictionary per language
+  src/i18n.tsx                   Locale detection, switch, <html lang>/title
   src/site.css                   Theme, layouts, and responsive styles
   index.html                     Document title, metadata, and favicon
   public/                        Files copied unchanged to dist/
@@ -52,7 +58,12 @@ Vite's relative base ('./') also supports publishing dist at
 Never deploy the unbuilt React/TypeScript source as branch-based Pages.
 
 CONTENT
-This is the fith project homepage, written in Chinese. Capability
+This is the fith project homepage in Chinese and English. The language
+comes from ?lang=zh|en, then the visitor's last choice (localStorage),
+then the browser language; the header button switches it and updates
+?lang, <html lang>, the title and the meta description. All copy lives in
+src/content.tsx (one dictionary per language, typed against the Chinese
+one, so a missing English string fails the type check). Capability
 descriptions and usage examples come from the root README and implementation
 in src/index.ts, src/backends/node/cli.ts, src/backends/browser/index.ts,
 and src/backends/extension/. Product links point to this repository.
@@ -68,6 +79,18 @@ the root package and Chromium:
   pnpm --dir homepage generate:example
 
 CHROMIUM_PATH can select an existing Chromium executable for generation.
+
+REAL-WORLD CASES
+public/cases/ holds real fith output from the benchmark (bench/): pages
+built from pinned npm UI libraries (bench/pages), each as the Chromium
+screenshot (.png) and the fith SVG (.svg). src/cases.json carries their
+measured pixel diff, vector-text coverage, raster area and SVG size, plus a
+numbers-only summary of the live-site benchmark (bench/baseline.json; no
+third-party page imagery is shipped). Everything is generated ahead of
+time; the page does no conversion at runtime. To refresh, from the
+repository root:
+  pnpm build && pnpm bench:fetch && pnpm bench --local
+  pnpm --dir homepage generate:cases
 No live conversion API or backend service is required by the homepage.
 
 JavaScript is required for the React page. A noscript message links readers
