@@ -537,7 +537,8 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
     for (const seg of parts) {
       const cm = seg.trim().match(STOP_COLOR);
       if (!cm) return null; // transition hint / calc() / unknown
-      const color = normColor(cm[0]);
+      let color = normColor(cm[0]);
+      if (color === 'transparent') color = 'rgba(0, 0, 0, 0)'; // CSS `transparent` is alpha-0 black
       const rest = seg.trim().slice(cm[0].length).trim();
       const positions = rest ? rest.split(/\s+/) : [];
       if (positions.length === 0) raw.push({ offset: null, color });
@@ -681,7 +682,7 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
         if (t === 'circle' || t === 'ellipse') shape = t;
         else if (/^(closest|farthest)-(side|corner)$/.test(t)) sizeKw = t;
         else {
-          const px = lenToPx(t, t.endsWith('%') ? w : 0);
+          const px = lenToPx(t, t.endsWith('%') ? (lens.length === 0 ? w : h) : 0);
           if (px === null) return null;
           lens.push(px);
         }
@@ -708,7 +709,6 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
     let rx: number, ry: number;
     if (lens.length) {
       rx = lens[0]; ry = lens.length > 1 ? lens[1] : lens[0];
-      if (lens.length > 1 && lens[1] !== undefined) ry = lenToPx(String(lens[1]) + 'px', h) ?? ry;
     } else if (sizeKw === 'closest-side') {
       rx = Math.min(dxL, dxR); ry = Math.min(dyT, dyB);
       if (shape === 'circle') rx = ry = Math.min(rx, ry);
@@ -849,9 +849,56 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
     return { x: area.x + ox, y: area.y + oy, width: w, height: h };
   };
 
-  const parseElementMask = (el: Element, cs: CSSStyleDeclaration) => {
+  // mask-image made only of gradient layers (linear/radial, %/px stops, alpha) → one or more alpha masks.
+  // add (default) layers are unioned in one <mask>; intersect layers become nested masks (multiplied).
+  // Unsupported: exclude/subtract composites, sized/positioned/clipped layers, url() mixed in.
+  const parseMaskLayers = (el: Element, cs: CSSStyleDeclaration) => {
+    const c: any = cs;
+    const value = (c.maskImage as string) || '';
+    if (!/gradient\(/.test(value)) return null;
+    const allBorderBox = (v: string | undefined) => !v || splitTopLevel(v).every((q) => q.trim() === 'border-box');
+    if (!allBorderBox(c.maskOrigin) || !allBorderBox(c.maskClip)) return null;
+    const mode = c.maskMode;
+    if (mode && !/^(match-source|alpha)(,\s*(match-source|alpha))*$/.test(mode)) return null;
+    const r = el.getBoundingClientRect();
+    if (r.width <= 0 || r.height <= 0) return null;
+    const box = { x: r.left, y: r.top, width: r.width, height: r.height };
+    const layers = splitTopLevel(value);
+    const sizes = splitTopLevel(c.maskSize || 'auto');
+    const poss = splitTopLevel(c.maskPosition || '0% 0%');
+    // standard keywords, plus the legacy -webkit-mask-composite spellings Chrome may report
+    const compMap: Record<string, string> = { add: 'add', 'source-over': 'add', intersect: 'intersect', 'source-in': 'intersect' };
+    const comps = splitTopLevel(c.maskComposite || 'add').map((q) => compMap[q.trim()] ?? 'unsupported');
+    const gs: any[] = [];
+    for (let k = 0; k < layers.length; k++) {
+      if (layers[k].trim() === 'none') return null;
+      const size = (sizes[k % sizes.length] || 'auto').trim();
+      const pos = (poss[k % poss.length] || '0% 0%').trim();
+      if (!['auto', 'auto auto', '100%', '100% 100%'].includes(size)) return null;
+      if (!['0% 0%', '0%', '0px 0px', 'left top'].includes(pos)) return null;
+      const g: any = parseGradientLayer(layers[k], box);
+      if (!g) return null;
+      // a mask only uses alpha: recolour every stop white, keep its alpha
+      g.stops = g.stops.map((st: any) => {
+        const col = rgbaOf(st.color);
+        return { offset: st.offset, color: col ? `rgba(255, 255, 255, ${col[3]})` : 'rgba(255, 255, 255, 1)' };
+      });
+      gs.push(g);
+    }
+    const ops = comps.length ? comps : ['add'];
+    const op = (k: number) => ops[k % ops.length];
+    const all = (name: string) => gs.every((_, k) => k === gs.length - 1 || op(k) === name);
+    if (gs.length === 1) return [{ rect: box, gradient: gs[0] }];
+    if (all('add')) return [{ rect: box, gradients: gs }];
+    if (all('intersect')) return gs.map((g) => ({ rect: box, gradient: g }));
+    return null;
+  };
+
+  const parseElementMask = (el: Element, cs: CSSStyleDeclaration): any => {
     const value = ((cs as any).maskImage as string) || '';
     if (!value || value === 'none') return null;
+    const gl = parseMaskLayers(el, cs);
+    if (gl) return gl;
     const maskUrl = singleUrl(value);
     if (maskUrl) {
       const info = imgInfo.get(maskUrl);
@@ -1822,7 +1869,7 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
     for (let i = start; i < nodes.length; i++) {
       const nd = nodes[i];
       if (nd.kind === 'raster') continue;
-      if (mk) (nd.masks ||= []).push(mk);
+      if (mk) for (const one of Array.isArray(mk) ? mk : [mk]) (nd.masks ||= []).push(one);
       if (cp) (nd.clipShapes ||= []).push(cp);
     }
   };

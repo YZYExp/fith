@@ -75,7 +75,9 @@ export interface Clip {
  */
 export interface MaskGradient {
   rect: Rect;
-  gradient?: LinearGradientFill;
+  gradient?: LinearGradientFill | RadialGradientFill;
+  /** several gradient layers, unioned (mask-composite: add), painted bottom → top as listed last → first */
+  gradients?: (LinearGradientFill | RadialGradientFill)[];
   image?: { href: string; x: number; y: number; width: number; height: number };
 }
 

@@ -183,6 +183,18 @@ describe('real-world regressions', () => {
     expect(r.ratio).toBeLessThan(0.006);
   }, 60_000);
 
+  it('vectorizes radial and multi-layer (add / intersect) mask-image as SVG masks, no raster', async () => {
+    const r = await validate(
+      { url: pathToFileURL(resolve(FIXTURES, 'mask-layers.html')).href },
+      { width: 780, height: 150, name: 'mask-layers', outDir: OUT, fontMode: 'none' },
+    );
+    const svg = readFileSync(resolve(OUT, 'mask-layers.svg'), 'utf8');
+    expect(svg).not.toContain('data:image/png');
+    expect(svg.match(/<mask /g)?.length).toBeGreaterThanOrEqual(4);
+    expect(svg.match(/<radialGradient/g)?.length).toBeGreaterThanOrEqual(3);
+    expect(r.ratio).toBeLessThan(0.02);
+  }, 60_000);
+
   describe('webfont in an external stylesheet', () => {
     let base: { url: string; close: () => Promise<void> } | null = null;
     afterAll(async () => base?.close());

@@ -130,7 +130,8 @@ export function maskGradientId(
   defs: Defs,
   m: {
     rect: { x: number; y: number; width: number; height: number };
-    gradient?: LinearGradientFill;
+    gradient?: LinearGradientFill | RadialGradientFill;
+    gradients?: (LinearGradientFill | RadialGradientFill)[];
     image?: { href: string; x: number; y: number; width: number; height: number };
   },
 ): string {
@@ -139,9 +140,13 @@ export function maskGradientId(
   if (m.image) {
     const im = m.image;
     content = `<image x="${n(im.x)}" y="${n(im.y)}" width="${n(im.width)}" height="${n(im.height)}" preserveAspectRatio="none" href="${im.href}"/>`;
-  } else if (m.gradient) {
-    const gid = gradientId(defs, m.gradient, m.rect);
-    content = `<rect x="${n(x)}" y="${n(y)}" width="${n(width)}" height="${n(height)}" fill="url(#${gid})"/>`;
+  } else {
+    // CSS lists the top layer first; SVG paints in document order, so emit bottom → top
+    const list = (m.gradients ?? (m.gradient ? [m.gradient] : [])).slice().reverse();
+    for (const g of list) {
+      const gid = gradientId(defs, g, m.rect);
+      content += `<rect x="${n(x)}" y="${n(y)}" width="${n(width)}" height="${n(height)}" fill="url(#${gid})"/>`;
+    }
   }
   return defs.add(
     `<mask id="{ID}" maskUnits="userSpaceOnUse" mask-type="alpha" style="mask-type:alpha" x="${n(x)}" y="${n(y)}" width="${n(width)}" height="${n(height)}">${content}</mask>`,
