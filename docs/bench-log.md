@@ -69,6 +69,14 @@ Numbers are `diff` (whole page) unless stated. "→" = before → after.
 - **Gradient vectorization changed an existing test** (`extension-viewport` used a radial gradient as its "must
   raster" example); switched it to `conic-gradient`, which is still raster — an intended improvement, not a regression.
 
+## Effects lab (SVG technique research)
+`pnpm bench:effects` renders CSS vs candidate-SVG for 14 effects and diffs them; results and the full CSS→SVG catalog are in
+[svg-effects.md](svg-effects.md). First run: filter functions via `feColorMatrix`/`feComponentTransfer` **0.00 %**, `mix-blend-mode`
+in SVG **0.00 %**, 2D `skew` **0.00 %**, blurred inset shadow **0.00 %**, `backdrop-filter` emulated by a blurred clipped re-emit of the
+content below **0.21 %**, `rotate` group 0.77 %. These are proven techniques not yet wired into capture; the largest real-site wins
+are expected from (1) 2D transforms as `<g transform>`, (2) `filter`/blend on subtrees, (3) backdrop blur emulation, (4) blurred inset shadows.
+Items SVG truly cannot match are recorded at the end of that file.
+
 ## Open problems (ranked by raster area / impact on the corpus)
 | problem | seen on | notes |
 |---|---|---|

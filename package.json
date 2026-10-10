@@ -32,7 +32,8 @@
     "bench": "tsx bench/run.ts",
     "bench:fetch": "tsx bench/fetch.ts",
     "inspect": "tsx scripts/inspect.ts",
-    "bench:docs": "tsx bench/docs.ts"
+    "bench:docs": "tsx bench/docs.ts",
+    "bench:effects": "tsx bench/effects/lab.ts"
   },
   "keywords": [
     "html",
