@@ -1,0 +1,899 @@
+{
+ "label": "gradients-layers",
+ "commit": "1dc3cb2",
+ "date": "2026-10-10T02:30:39.992Z",
+ "repeat": 3,
+ "rows": [
+  {
+   "id": "live-nodejs",
+   "status": "regress",
+   "ratio": 0.0039150390625,
+   "contentRatio": 0.01586036234736528,
+   "worstTile": 0.169189453125,
+   "textCoverage": 1,
+   "rasterAreaFrac": 0.0719677734375,
+   "raster": 14,
+   "nodes": 212,
+   "svgKB": 341,
+   "ms": 589,
+   "note": "vs baseline 0.11%",
+   "top": [
+    {
+     "reason": "pseudo",
+     "el": "span.line",
+     "area": 11220
+    },
+    {
+     "reason": "pseudo",
+     "el": "span.line",
+     "area": 10710
+    },
+    {
+     "reason": "pseudo",
+     "el": "span.line",
+     "area": 10710
+    }
+   ]
+  },
+  {
+   "id": "live-wikipedia",
+   "status": "ok",
+   "ratio": 0.002864583333333333,
+   "contentRatio": 0.02268415408727213,
+   "worstTile": 0.270751953125,
+   "textCoverage": 1.0036109773712085,
+   "rasterAreaFrac": 0.11673090277777778,
+   "raster": 6,
+   "nodes": 354,
+   "svgKB": 236,
+   "ms": 654,
+   "note": "{\"pseudo\":5,\"media:VIDEO\":1}",
+   "top": [
+    {
+     "reason": "pseudo",
+     "el": "div.vector-sticky-pinned-container",
+     "area": 93492
+    },
+    {
+     "reason": "pseudo",
+     "el": "div.vector-sticky-pinned-container",
+     "area": 85280
+    },
+    {
+     "reason": "pseudo",
+     "el": "a.mw-file-description",
+     "area": 44376
+    }
+   ]
+  },
+  {
+   "id": "live-hackernews",
+   "status": "ok",
+   "ratio": 0.000049479166666666665,
+   "contentRatio": 0.00005938873364465533,
+   "worstTile": 0.0185546875,
+   "textCoverage": 1,
+   "rasterAreaFrac": 0.004267578125,
+   "raster": 31,
+   "nodes": 461,
+   "svgKB": 72,
+   "ms": 1236,
+   "note": "{\"background-image\":30,\"form-control\":1}",
+   "top": [
+    {
+     "reason": "form-control",
+     "el": "input",
+     "area": 3255
+    },
+    {
+     "reason": "background-image",
+     "el": "div.votearrow url(\"https://news.ycombinator.com/triangle.svg\"), linear-gradient(rgba(0, 0, 0, 0), rgba(0",
+     "area": 110
+    },
+    {
+     "reason": "background-image",
+     "el": "div.votearrow url(\"https://news.ycombinator.com/triangle.svg\"), linear-gradient(rgba(0, 0, 0, 0), rgba(0",
+     "area": 110
+    }
+   ]
+  },
+  {
+   "id": "live-mdn",
+   "status": "ok",
+   "ratio": 0.02037548828125,
+   "contentRatio": 0.0875631348899087,
+   "worstTile": 0.18408203125,
+   "textCoverage": 1.281306715063521,
+   "rasterAreaFrac": 0.21187109375,
+   "raster": 55,
+   "nodes": 454,
+   "svgKB": 1251,
+   "ms": 3585,
+   "note": "{\"pseudo\":52,\"media:IFRAME\":1,\"background-image\":1,\"clip-path\":1}",
+   "top": [
+    {
+     "reason": "media:IFRAME",
+     "el": "iframe",
+     "area": 103544
+    },
+    {
+     "reason": "pseudo",
+     "el": "li.choice.selected",
+     "area": 27468
+    },
+    {
+     "reason": "background-image",
+     "el": "div.left-sidebar__header linear-gradient(rgb(255, 255, 255) 0px, rgb(255, 255, 255) calc(100% - 32px), rgba(0, 0, 0",
+     "area": 17024
+    }
+   ]
+  },
+  {
+   "id": "live-reactdev",
+   "status": "ok",
+   "ratio": 0.00677392578125,
+   "contentRatio": 0.01297487888367221,
+   "worstTile": 0.081787109375,
+   "textCoverage": 1,
+   "rasterAreaFrac": 0.627041015625,
+   "raster": 3,
+   "nodes": 123,
+   "svgKB": 2426,
+   "ms": 4600,
+   "note": "{\"background-image\":2,\"filter\":1}",
+   "top": [
+    {
+     "reason": "background-image",
+     "el": "div.mx-auto.flex conic-gradient(from 90deg at -10% 100%, rgb(188, 193, 205) 0deg, rgb(188, 193, 205) 90deg,",
+     "area": 1271040
+    },
+    {
+     "reason": "background-image",
+     "el": "a.outline-link.dark:outline-link conic-gradient(at 100% 0%, rgb(199, 106, 21), rgb(8, 126, 164), rgb(43, 52, 145))",
+     "area": 11808
+    },
+    {
+     "reason": "filter",
+     "el": "svg",
+     "area": 1332
+    }
+   ]
+  },
+  {
+   "id": "live-bbc",
+   "status": "ok",
+   "ratio": 0.00270361328125,
+   "contentRatio": 0.003014516172059894,
+   "worstTile": 0.076416015625,
+   "textCoverage": 1,
+   "rasterAreaFrac": 0.1983740234375,
+   "raster": 3,
+   "nodes": 83,
+   "svgKB": 2346,
+   "ms": 2206,
+   "note": "{\"media:IFRAME\":3}",
+   "top": [
+    {
+     "reason": "media:IFRAME",
+     "el": "iframe",
+     "area": 243470
+    },
+    {
+     "reason": "media:IFRAME",
+     "el": "iframe",
+     "area": 97280
+    },
+    {
+     "reason": "media:IFRAME",
+     "el": "iframe",
+     "area": 65520
+    }
+   ]
+  },
+  {
+   "id": "live-apple",
+   "status": "ok",
+   "ratio": 0.000978515625,
+   "contentRatio": 0.001004694087194813,
+   "worstTile": 0.0771484375,
+   "textCoverage": 1,
+   "rasterAreaFrac": 0,
+   "raster": 0,
+   "nodes": 36,
+   "svgKB": 7702,
+   "ms": 5441,
+   "note": "{}",
+   "top": []
+  },
+  {
+   "id": "live-tailwindcss",
+   "status": "ok",
+   "ratio": 0.0127099609375,
+   "contentRatio": 0.04723572131105893,
+   "worstTile": 0.31640625,
+   "textCoverage": 1,
+   "rasterAreaFrac": 0.2585390625,
+   "raster": 17,
+   "nodes": 194,
+   "svgKB": 1857,
+   "ms": 777,
+   "note": "{\"background-image\":3,\"pseudo\":14}",
+   "top": [
+    {
+     "reason": "background-image",
+     "el": "div.relative.border-(--pattern-fg) repeating-linear-gradient(315deg, oklab(0 0 0 / 0.05) 0px, oklab(0 0 0 / 0.05) 1px, rgba(0",
+     "area": 164800
+    },
+    {
+     "reason": "background-image",
+     "el": "div.col-start-1.row-span-full repeating-linear-gradient(315deg, oklab(0 0 0 / 0.05) 0px, oklab(0 0 0 / 0.05) 1px, rgba(0",
+     "area": 61720
+    },
+    {
+     "reason": "background-image",
+     "el": "div.row-span-full.row-start-1 repeating-linear-gradient(315deg, oklab(0 0 0 / 0.05) 0px, oklab(0 0 0 / 0.05) 1px, rgba(0",
+     "area": 61720
+    }
+   ]
+  },
+  {
+   "id": "live-stripe",
+   "status": "ok",
+   "ratio": 0.003404296875,
+   "contentRatio": 0.012201439251813065,
+   "worstTile": 0.1318359375,
+   "textCoverage": 0.35222052067381315,
+   "rasterAreaFrac": 0.55749365234375,
+   "raster": 9,
+   "nodes": 59,
+   "svgKB": 514,
+   "ms": 3102,
+   "note": "{\"blend-mode\":4,\"clip-path\":4,\"pseudo\":1}",
+   "top": [
+    {
+     "reason": "clip-path",
+     "el": "div.modular-solutions-bento-card__border inset(4px 4.78137px round 6px)",
+     "area": 297110
+    },
+    {
+     "reason": "clip-path",
+     "el": "div.modular-solutions-bento-card__inner inset(4px 4.78137px round 5px)",
+     "area": 295568
+    },
+    {
+     "reason": "blend-mode",
+     "el": "h1.hds-heading.hero-section__title",
+     "area": 223210
+    }
+   ]
+  },
+  {
+   "id": "live-vercel",
+   "status": "ok",
+   "ratio": 0.00063916015625,
+   "contentRatio": 0.008061089386334945,
+   "worstTile": 0.05615234375,
+   "textCoverage": 0.5115740740740741,
+   "rasterAreaFrac": 0.3860556640625,
+   "raster": 3,
+   "nodes": 37,
+   "svgKB": 189,
+   "ms": 280,
+   "note": "{\"img-cors\":1,\"media:CANVAS\":1,\"clip-path\":1}",
+   "top": [
+    {
+     "reason": "media:CANVAS",
+     "el": "canvas.absolute.inset-0",
+     "area": 777600
+    },
+    {
+     "reason": "img-cors",
+     "area": 13040
+    },
+    {
+     "reason": "clip-path",
+     "el": "span.sr-only inset(50%)",
+     "area": 2
+    }
+   ]
+  },
+  {
+   "id": "live-pydocs",
+   "status": "ok",
+   "ratio": 0.00136181640625,
+   "contentRatio": 0.0032679470519930494,
+   "worstTile": 0.033935546875,
+   "textCoverage": 1.010194624652456,
+   "rasterAreaFrac": 0.00427734375,
+   "raster": 4,
+   "nodes": 194,
+   "svgKB": 56,
+   "ms": 242,
+   "note": "{\"form-control\":4}",
+   "top": [
+    {
+     "reason": "form-control",
+     "el": "select.language-select",
+     "area": 5360
+    },
+    {
+     "reason": "form-control",
+     "el": "select.version-select",
+     "area": 1600
+    },
+    {
+     "reason": "form-control",
+     "el": "select.theme-selector",
+     "area": 1000
+    }
+   ]
+  },
+  {
+   "id": "live-bootstrap",
+   "status": "ok",
+   "ratio": 0.00119970703125,
+   "contentRatio": 0.001597781704131407,
+   "worstTile": 0.070068359375,
+   "textCoverage": 1,
+   "rasterAreaFrac": 0.031890625,
+   "raster": 3,
+   "nodes": 54,
+   "svgKB": 279,
+   "ms": 1325,
+   "note": "{\"pseudo\":1,\"img-cors\":2}",
+   "top": [
+    {
+     "reason": "pseudo",
+     "el": "div.carbon-responsive-wrap.carbon-responsive-wrap-",
+     "area": 52932
+    },
+    {
+     "reason": "img-cors",
+     "area": 10100
+    },
+    {
+     "reason": "img-cors",
+     "area": 2280
+    }
+   ]
+  },
+  {
+   "id": "live-antdesign",
+   "status": "ok",
+   "ratio": 0.00017138671875,
+   "contentRatio": 0.0002970918013666223,
+   "worstTile": 0.01953125,
+   "textCoverage": 0.5824255628177197,
+   "rasterAreaFrac": 0.8176357421875,
+   "raster": 9,
+   "nodes": 243,
+   "svgKB": 1579,
+   "ms": 2670,
+   "note": "{\"form-control\":2,\"background-image\":1,\"transform-rotate\":1,\"media:CANVAS\":1,\"img-cors\":1,\"mask\":1,\"filter\":1,\"transform-3d\":1}",
+   "top": [
+    {
+     "reason": "transform-3d",
+     "el": "div.acss-1p7fr62",
+     "area": 819200
+    },
+    {
+     "reason": "mask",
+     "el": "div.ant-border-beam.css-oc1rc0",
+     "area": 803840
+    },
+    {
+     "reason": "filter",
+     "el": "div.css-oc1rc0.ant-popover",
+     "area": 21725
+    }
+   ]
+  },
+  {
+   "id": "live-mui",
+   "status": "ok",
+   "ratio": 0.0029541015625,
+   "contentRatio": 0.002954104447367624,
+   "worstTile": 0.31103515625,
+   "textCoverage": 0.9714618520675598,
+   "rasterAreaFrac": 0.01981787109375,
+   "raster": 16,
+   "nodes": 273,
+   "svgKB": 4265,
+   "ms": 2969,
+   "note": "{\"form-control\":8,\"clip-path\":7,\"inset-shadow\":1}",
+   "top": [
+    {
+     "reason": "inset-shadow",
+     "el": "span.MuiButtonBase-root.css-ncgs1r",
+     "area": 40000
+    },
+    {
+     "reason": "form-control",
+     "el": "input",
+     "area": 289
+    },
+    {
+     "reason": "form-control",
+     "el": "input",
+     "area": 272
+    }
+   ]
+  },
+  {
+   "id": "live-vuejs",
+   "status": "ok",
+   "ratio": 0.00766259765625,
+   "contentRatio": 0.03170860333028229,
+   "worstTile": 0.156982421875,
+   "textCoverage": 0.9810344827586207,
+   "rasterAreaFrac": 0.0199638671875,
+   "raster": 2,
+   "nodes": 81,
+   "svgKB": 2016,
+   "ms": 3657,
+   "note": "{\"background-image\":1,\"pseudo\":1}",
+   "top": [
+    {
+     "reason": "background-image",
+     "el": "span.accent -webkit-linear-gradient(315deg, rgb(66, 211, 146) 25%, rgb(100, 126, 255))",
+     "area": 39836
+    },
+    {
+     "reason": "pseudo",
+     "el": "div.vt-locales-btn-icon-container",
+     "area": 1050
+    }
+   ]
+  },
+  {
+   "id": "live-guardian",
+   "status": "ok",
+   "ratio": 0.0025146484375,
+   "contentRatio": 0.0026062423299300363,
+   "worstTile": 0.2001953125,
+   "textCoverage": 0.9959514170040485,
+   "rasterAreaFrac": 0.36072705078125,
+   "raster": 12,
+   "nodes": 137,
+   "svgKB": 745,
+   "ms": 2673,
+   "note": "{\"pseudo\":11,\"media:IFRAME\":1}",
+   "top": [
+    {
+     "reason": "media:IFRAME",
+     "el": "iframe",
+     "area": 373760
+    },
+    {
+     "reason": "pseudo",
+     "el": "ul.dcr-brmwc8",
+     "area": 177600
+    },
+    {
+     "reason": "pseudo",
+     "el": "ul.dcr-brmwc8",
+     "area": 129600
+    }
+   ]
+  },
+  {
+   "id": "live-reddit",
+   "status": "ok",
+   "ratio": 0,
+   "contentRatio": 0,
+   "worstTile": 0,
+   "textCoverage": 1,
+   "rasterAreaFrac": 0,
+   "raster": 0,
+   "nodes": 6,
+   "svgKB": 100,
+   "ms": 28,
+   "note": "{}",
+   "top": []
+  },
+  {
+   "id": "live-amazon",
+   "status": "ok",
+   "ratio": 0.0003017578125,
+   "contentRatio": 0.00570658196055256,
+   "worstTile": 0.0361328125,
+   "textCoverage": 1,
+   "rasterAreaFrac": 0.032431640625,
+   "raster": 2,
+   "nodes": 13,
+   "svgKB": 57,
+   "ms": 99,
+   "note": "{\"background-image\":2}",
+   "top": [
+    {
+     "reason": "background-image",
+     "el": "div.a-divider-inner -webkit-linear-gradient(top, rgba(0, 0, 0, 0.14), rgba(0, 0, 0, 0.03) 3px, rgba(0, 0, 0, 0",
+     "area": 57600
+    },
+    {
+     "reason": "background-image",
+     "el": "span.a-button-inner -webkit-linear-gradient(top, rgb(247, 223, 165), rgb(240, 193, 75))",
+     "area": 8820
+    }
+   ]
+  },
+  {
+   "id": "live-pypi",
+   "status": "ok",
+   "ratio": 0.0013186383928571429,
+   "contentRatio": 0.0014026444269666257,
+   "worstTile": 0.041015625,
+   "textCoverage": 1.0261865793780687,
+   "rasterAreaFrac": 0.017190848214285716,
+   "raster": 13,
+   "nodes": 116,
+   "svgKB": 933,
+   "ms": 5953,
+   "note": "{\"clip-path\":2,\"img-cors\":11}",
+   "top": [
+    {
+     "reason": "img-cors",
+     "area": 2800
+    },
+    {
+     "reason": "img-cors",
+     "area": 2800
+    },
+    {
+     "reason": "img-cors",
+     "area": 2800
+    }
+   ]
+  },
+  {
+   "id": "lib-bootstrap-dashboard",
+   "status": "ok",
+   "ratio": 0.00450234375,
+   "contentRatio": 0.004741438178655877,
+   "worstTile": 0.060791015625,
+   "textCoverage": 1.025462962962963,
+   "rasterAreaFrac": 0.0911234375,
+   "raster": 4,
+   "nodes": 150,
+   "svgKB": 220,
+   "ms": 268,
+   "note": "{\"form-control\":2,\"pseudo\":2}",
+   "top": [
+    {
+     "reason": "pseudo",
+     "el": "button.accordion-button",
+     "area": 52470
+    },
+    {
+     "reason": "pseudo",
+     "el": "button.accordion-button.collapsed",
+     "area": 52470
+    },
+    {
+     "reason": "form-control",
+     "el": "select.form-select",
+     "area": 11154
+    }
+   ]
+  },
+  {
+   "id": "lib-tailwind-landing",
+   "status": "ok",
+   "ratio": 0.00025923295454545453,
+   "contentRatio": 0.00025938383193064717,
+   "worstTile": 0.020263671875,
+   "textCoverage": 0.8627450980392157,
+   "rasterAreaFrac": 0.054,
+   "raster": 1,
+   "nodes": 38,
+   "svgKB": 31,
+   "ms": 99,
+   "note": "{\"transform-rotate\":1}",
+   "top": [
+    {
+     "reason": "transform-rotate",
+     "el": "div.bg-white.rounded-2xl",
+     "area": 76032
+    }
+   ]
+  },
+  {
+   "id": "lib-bulma-landing",
+   "status": "ok",
+   "ratio": 0.0012744140625,
+   "contentRatio": 0.0013891372659223871,
+   "worstTile": 0.03125,
+   "textCoverage": 1,
+   "rasterAreaFrac": 0.0179375,
+   "raster": 2,
+   "nodes": 65,
+   "svgKB": 409,
+   "ms": 158,
+   "note": "{\"inset-shadow\":1,\"form-control\":1}",
+   "top": [
+    {
+     "reason": "inset-shadow",
+     "el": "input.input.is-success",
+     "area": 13120
+    },
+    {
+     "reason": "form-control",
+     "el": "progress.progress.is-primary",
+     "area": 5248
+    }
+   ]
+  },
+  {
+   "id": "lib-daisyui-components",
+   "status": "ok",
+   "ratio": 0.0002325721153846154,
+   "contentRatio": 0.001054010550999676,
+   "worstTile": 0.0439453125,
+   "textCoverage": 0.9007633587786259,
+   "rasterAreaFrac": 0.019346153846153846,
+   "raster": 7,
+   "nodes": 54,
+   "svgKB": 39,
+   "ms": 353,
+   "note": "{\"pseudo\":4,\"form-control\":3}",
+   "top": [
+    {
+     "reason": "pseudo",
+     "el": "div.radial-progress.text-primary",
+     "area": 6400
+    },
+    {
+     "reason": "pseudo",
+     "el": "li.step.step-primary",
+     "area": 6080
+    },
+    {
+     "reason": "pseudo",
+     "el": "li.step.step-primary",
+     "area": 6080
+    }
+   ]
+  },
+  {
+   "id": "lib-github-readme",
+   "status": "ok",
+   "ratio": 0.0014545454545454545,
+   "contentRatio": 0.0086803985749679,
+   "worstTile": 0.043701171875,
+   "textCoverage": 1.022189349112426,
+   "rasterAreaFrac": 0.0002206060606060606,
+   "raster": 2,
+   "nodes": 142,
+   "svgKB": 35,
+   "ms": 131,
+   "note": "{\"form-control\":2}",
+   "top": [
+    {
+     "reason": "form-control",
+     "el": "input",
+     "area": 182
+    },
+    {
+     "reason": "form-control",
+     "el": "input",
+     "area": 182
+    }
+   ]
+  },
+  {
+   "id": "lib-swagger-ui",
+   "status": "ok",
+   "ratio": 0.002150669642857143,
+   "contentRatio": 0.009953898007412478,
+   "worstTile": 0.046875,
+   "textCoverage": 1,
+   "rasterAreaFrac": 0.004611049107142857,
+   "raster": 2,
+   "nodes": 69,
+   "svgKB": 20,
+   "ms": 105,
+   "note": "{\"form-control\":1,\"pseudo\":1}",
+   "top": [
+    {
+     "reason": "form-control",
+     "el": "select",
+     "area": 7843
+    },
+    {
+     "reason": "pseudo",
+     "el": "span.model-toggle.collapsed",
+     "area": 420
+    }
+   ]
+  },
+  {
+   "id": "lib-katex-math",
+   "status": "ok",
+   "ratio": 0.0019319444444444445,
+   "contentRatio": 0.09891203868306904,
+   "worstTile": 0.030029296875,
+   "textCoverage": 0.8861386138613861,
+   "rasterAreaFrac": 0,
+   "raster": 0,
+   "nodes": 126,
+   "svgKB": 194,
+   "ms": 111,
+   "note": "{}",
+   "top": []
+  },
+  {
+   "id": "lib-mermaid-diagrams",
+   "status": "ok",
+   "ratio": 0.00046666666666666666,
+   "contentRatio": 0.0036016938251532005,
+   "worstTile": 0.026123046875,
+   "textCoverage": 0.6329113924050633,
+   "rasterAreaFrac": 0,
+   "raster": 0,
+   "nodes": 3,
+   "svgKB": 111,
+   "ms": 19,
+   "note": "{}",
+   "top": []
+  },
+  {
+   "id": "lib-echarts-dashboard",
+   "status": "ok",
+   "ratio": 0,
+   "contentRatio": 0,
+   "worstTile": 0,
+   "textCoverage": 1,
+   "rasterAreaFrac": 0.28125,
+   "raster": 2,
+   "nodes": 12,
+   "svgKB": 75,
+   "ms": 75,
+   "note": "{\"media:CANVAS\":2}",
+   "top": [
+    {
+     "reason": "media:CANVAS",
+     "el": "canvas",
+     "area": 180000
+    },
+    {
+     "reason": "media:CANVAS",
+     "el": "canvas",
+     "area": 180000
+    }
+   ]
+  },
+  {
+   "id": "lib-chartjs-canvas",
+   "status": "ok",
+   "ratio": 0,
+   "contentRatio": 0,
+   "worstTile": 0,
+   "textCoverage": 1,
+   "rasterAreaFrac": 0.5473611111111111,
+   "raster": 3,
+   "nodes": 3,
+   "svgKB": 54,
+   "ms": 102,
+   "note": "{\"media:CANVAS\":3}",
+   "top": [
+    {
+     "reason": "media:CANVAS",
+     "el": "canvas",
+     "area": 313600
+    },
+    {
+     "reason": "media:CANVAS",
+     "el": "canvas",
+     "area": 160160
+    },
+    {
+     "reason": "media:CANVAS",
+     "el": "canvas",
+     "area": 156800
+    }
+   ]
+  },
+  {
+   "id": "lib-ag-grid",
+   "status": "ok",
+   "ratio": 0.0015029296875,
+   "contentRatio": 0.0036652020147894117,
+   "worstTile": 0.0322265625,
+   "textCoverage": 1.0434782608695652,
+   "rasterAreaFrac": 0,
+   "raster": 0,
+   "nodes": 247,
+   "svgKB": 56,
+   "ms": 216,
+   "note": "{}",
+   "top": []
+  },
+  {
+   "id": "lib-fullcalendar",
+   "status": "ok",
+   "ratio": 0.0032222222222222222,
+   "contentRatio": 0.04493565920563632,
+   "worstTile": 0.024169921875,
+   "textCoverage": 1.013157894736842,
+   "rasterAreaFrac": 0,
+   "raster": 0,
+   "nodes": 125,
+   "svgKB": 22,
+   "ms": 82,
+   "note": "{}",
+   "top": []
+  },
+  {
+   "id": "lib-leaflet-map",
+   "status": "ok",
+   "ratio": 0.0000046875,
+   "contentRatio": 0.000053708577259788386,
+   "worstTile": 0.00048828125,
+   "textCoverage": 1,
+   "rasterAreaFrac": 0.0011390625,
+   "raster": 1,
+   "nodes": 21,
+   "svgKB": 14,
+   "ms": 46,
+   "note": "{\"transform-rotate\":1}",
+   "top": [
+    {
+     "reason": "transform-rotate",
+     "el": "div.leaflet-popup-tip",
+     "area": 729
+    }
+   ]
+  },
+  {
+   "id": "lib-reveal-slides",
+   "status": "ok",
+   "ratio": 0.001296657986111111,
+   "contentRatio": 0.04496199864549628,
+   "worstTile": 0.05126953125,
+   "textCoverage": 0.36607142857142855,
+   "rasterAreaFrac": 0,
+   "raster": 0,
+   "nodes": 10,
+   "svgKB": 198,
+   "ms": 836,
+   "note": "{}",
+   "top": []
+  },
+  {
+   "id": "lib-quill-editor",
+   "status": "ok",
+   "ratio": 0.00012962962962962963,
+   "contentRatio": 0.0018410878198890086,
+   "worstTile": 0.01025390625,
+   "textCoverage": 1.0824742268041236,
+   "rasterAreaFrac": 0,
+   "raster": 0,
+   "nodes": 34,
+   "svgKB": 59,
+   "ms": 40,
+   "note": "{}",
+   "top": []
+  },
+  {
+   "id": "lib-antd-showcase",
+   "status": "ok",
+   "ratio": 0.0008425480769230769,
+   "contentRatio": 0.0022497440555086638,
+   "worstTile": 0.02197265625,
+   "textCoverage": 1,
+   "rasterAreaFrac": 0.010748798076923078,
+   "raster": 1,
+   "nodes": 114,
+   "svgKB": 47,
+   "ms": 99,
+   "note": "{\"form-control\":1}",
+   "top": [
+    {
+     "reason": "form-control",
+     "el": "input.ant-input.css-1okl62o",
+     "area": 17886
+    }
+   ]
+  }
+ ]
+}
