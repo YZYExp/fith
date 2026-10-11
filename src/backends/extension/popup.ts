@@ -1,5 +1,5 @@
 /** Popup UI: explain capture options and report progress and recoverable errors. */
-import { DEFAULT_PREFS, PREF_KEYS } from './messages.js';
+import { DEFAULT_PREFS, PREF_KEYS, queryActiveTab } from './messages.js';
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const scopeSel = $<HTMLSelectElement>('scope');
@@ -60,7 +60,7 @@ async function initialize() {
   updateControls();
   const [prefs, tabs] = await Promise.allSettled([
     chrome.storage.local.get([...PREF_KEYS]),
-    chrome.tabs.query({ active: true, currentWindow: true }),
+    queryActiveTab(),
   ]);
   if (prefs.status === 'fulfilled') {
     for (const [key, select] of [['fhScope', scopeSel], ['fhOutput', outputSel], ['fhFont', fontSel]] as const) {
@@ -68,9 +68,9 @@ async function initialize() {
       select.value = typeof value === 'string' && Array.from(select.options).some((option) => !option.disabled && option.value === value)
         ? value : DEFAULT_PREFS[key];
     }
+    sourceChk.checked = prefs.value.fhSource === true;
   }
-  if (prefs.status === 'fulfilled') sourceChk.checked = prefs.value.fhSource === true;
-  const tab = tabs.status === 'fulfilled' ? tabs.value[0] : undefined;
+  const tab = tabs.status === 'fulfilled' ? tabs.value : undefined;
   available = supportedTab(tab);
   const name = tab?.title || tab?.url || 'Current tab';
   $('tab-name').textContent = name;
@@ -107,7 +107,7 @@ async function trigger(type: 'fh:capture' | 'fh:pick' | 'fh:pickHtml') {
       showStatus('Checking access for full-page capture…', 'busy');
       await chrome.permissions.request({ permissions: ['debugger'] }).catch(() => false);
     }
-    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    const tab = await queryActiveTab();
     if (!supportedTab(tab)) {
       available = false;
       throw new Error('Open a webpage to capture it. This page is unavailable.');

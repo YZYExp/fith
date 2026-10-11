@@ -26,3 +26,6 @@ export const DEFAULT_PREFS = {
  * ~ 4000 × 10000 device px.
  */
 export const MAX_REGION_DEVICE_PX = 40_000_000;
+
+/** The active tab of the current window (undefined when there is none). */
+export const queryActiveTab = async () => (await chrome.tabs.query({ active: true, currentWindow: true }))[0];

@@ -7,7 +7,7 @@
  * reaches below the fold in a single shot without scrolling.
  */
 import { createShotScheduler } from './shot-scheduler.js';
-import { MAX_REGION_DEVICE_PX, DEFAULT_PREFS, PREF_KEYS } from './messages.js';
+import { MAX_REGION_DEVICE_PX, DEFAULT_PREFS, PREF_KEYS, queryActiveTab } from './messages.js';
 
 // The toolbar action opens the popup (default_popup in the manifest), so there's
 // no action.onClicked here. Context menus and the keyboard command still work and
@@ -44,7 +44,7 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
 
 chrome.commands.onCommand.addListener(async (command) => {
   if (command !== 'pick-element') return;
-  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  const tab = await queryActiveTab();
   if (tab?.id != null) send(tab.id, 'fh:pick');
 });
 
