@@ -88,7 +88,8 @@ Status legend: ✅ shipped · 🔧 technique proven in the lab, not wired into c
 | CSS/HTML | SVG technique | status |
 |---|---|---|
 | text `<input>` | rect + `<text>` | ✅ |
-| `checkbox/radio/range/progress/meter/select` | drawn primitives matching Chrome's native look (themeable by `accent-color`) | 🧭 (raster today) |
+| `checkbox/radio` (+`accent-color`, checked/indeterminate/disabled), single `select` (selected text + chevron), `textarea` (wrapped value/placeholder, resize grip) | drawn primitives matching Chrome's native look; textarea text laid out in a temporary mirror `<div>` | ✅ lab/fixture `native-controls` 0.11 % |
+| `range/progress/meter`, `select[multiple]`, `<input type=number/date/color/file>` | same approach | 🧭 (raster today) |
 | `<canvas>` (2D) | `toDataURL` → `<image>` | ✅ (tainted / blank WebGL ⇒ raster) |
 | `<video>` / `<iframe>` | current frame / recursive capture (same-origin iframes) | ⛔ / 🧭 |
 | inline `<svg>`, `<img src=svg>` | transplanted markup with inlined styles | ✅ |

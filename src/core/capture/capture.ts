@@ -371,6 +371,15 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
     return true;
   };
 
+  // Native controls drawn as vector primitives: 'check' (checkbox/radio), 'select' (single), 'textarea'.
+  const nativeControl = (el: Element): 'check' | 'select' | 'textarea' | null => {
+    const tag = el.tagName;
+    if (tag === 'TEXTAREA') return 'textarea';
+    if (tag === 'SELECT') { const s = el as HTMLSelectElement; return !s.multiple && !(s.size > 1) ? 'select' : null; }
+    if (tag === 'INPUT') { const t = (el as HTMLInputElement).type; return t === 'checkbox' || t === 'radio' ? 'check' : null; }
+    return null;
+  };
+
   // CSS `filter` function list → FilterOp[] (null when it holds anything SVG can't reproduce, e.g. url()).
   const parseFilterList = (v: string | undefined) => {
     const val = (v || '').trim();
@@ -520,7 +529,7 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
   const needsSubtreeRaster = (el: Element, cs: CSSStyleDeclaration) => {
     const tag = el.tagName.toUpperCase();
     if (['CANVAS', 'VIDEO', 'IFRAME', 'OBJECT', 'EMBED'].includes(tag)) return 'media:' + tag;
-    if (['INPUT', 'SELECT', 'TEXTAREA', 'PROGRESS', 'METER'].includes(tag) && !vectorTextInput(el, cs)) return 'form-control';
+    if (['INPUT', 'SELECT', 'TEXTAREA', 'PROGRESS', 'METER'].includes(tag) && !vectorTextInput(el, cs) && !nativeControl(el)) return 'form-control';
     if (cs.filter && cs.filter !== 'none' && !parseFilterList(cs.filter)) return 'filter';
     // backdrop-filter (frosted nav bars) can't be reproduced in SVG, but rastering the element would
     // freeze its whole subtree (all text) into pixels — keep it vector, with its own translucent fill.
@@ -1529,7 +1538,108 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
     return d.join(';');
   };
 
+  // checkbox / radio / select / textarea: the box comes from emitBox (computed bg/border); here we add what
+  // Chrome paints natively — check glyphs, the select's selected text + chevron, textarea wrapped lines.
+  const captureNative = (kind: 'check' | 'select' | 'textarea', el: Element, cs: CSSStyleDeclaration, clip: Clip | null, opacity: number) => {
+    const r = el.getBoundingClientRect();
+    const auto = cs.appearance !== 'none';
+    const svg = (rect: { x: number; y: number; width: number; height: number }, inner: string) => nodes.push({
+      kind: 'inline-svg', id: nid(), rect, opacity, clip,
+      markup: `<svg xmlns="http://www.w3.org/2000/svg" x="${rect.x}" y="${rect.y}" width="${rect.width}" height="${rect.height}" viewBox="0 0 ${rect.width} ${rect.height}" overflow="visible">${inner}</svg>`,
+    } as PaintNode);
+    if (kind === 'check') {
+      if (!auto) return; // author-drawn: emitBox already painted the checked/unchecked styles
+      const inp = el as HTMLInputElement;
+      const w = r.width, h = r.height, dis = inp.disabled;
+      const ac = (cs as any).accentColor;
+      const accent = dis ? 'rgba(16,16,16,0.3)' : ac && ac !== 'auto' ? normColor(ac) : 'rgb(0, 117, 255)';
+      const on = inp.checked || (inp.type === 'checkbox' && inp.indeterminate);
+      const stroke = dis ? 'rgba(118,118,118,0.3)' : 'rgb(118,118,118)';
+      const fill = dis ? 'rgba(239,239,239,0.3)' : '#fff';
+      const round = inp.type === 'radio';
+      const sh = (f: string, s: string, sw: number) => round
+        ? `<circle cx="${w / 2}" cy="${h / 2}" r="${(Math.min(w, h) - sw) / 2}" fill="${f}" stroke="${s}" stroke-width="${sw}"/>`
+        : `<rect x="${sw / 2}" y="${sw / 2}" width="${w - sw}" height="${h - sw}" rx="2" fill="${f}" stroke="${s}" stroke-width="${sw}"/>`;
+      let inner: string;
+      if (!on) inner = sh(fill, stroke, 1);
+      else if (round) inner = sh(dis ? 'rgba(239,239,239,0.3)' : '#fff', accent, 1) + `<circle cx="${w / 2}" cy="${h / 2}" r="${w * 0.27}" fill="${accent}"/>`;
+      else inner = `<rect width="${w}" height="${h}" rx="2" fill="${accent}"/>` + (inp.indeterminate && !inp.checked
+        ? `<rect x="${w * 0.22}" y="${h / 2 - 1}" width="${w * 0.56}" height="2" fill="#fff"/>`
+        : `<path d="M${w * 0.2} ${h * 0.5} L${w * 0.42} ${h * 0.72} L${w * 0.8} ${h * 0.28}" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>`);
+      svg({ x: r.left, y: r.top, width: w, height: h }, inner);
+      return;
+    }
+    const sc = elScale(el);
+    const bl = num(cs.borderLeftWidth) * sc, br = num(cs.borderRightWidth) * sc, bt = num(cs.borderTopWidth) * sc, bb = num(cs.borderBottomWidth) * sc;
+    const padL = num(cs.paddingLeft) * sc, padR = num(cs.paddingRight) * sc, padT = num(cs.paddingTop) * sc, padB = num(cs.paddingBottom) * sc;
+    if (kind === 'select') {
+      const sel = el as HTMLSelectElement;
+      const raw = sel.selectedOptions[0]?.text || '';
+      const fontSize = num(cs.fontSize) * sc;
+      const color = normColor(cs.color);
+      if (auto) { // Chrome's menulist: chevron at the right edge
+        const cx = r.right - br - 10 * sc, cy = r.top + r.height / 2;
+        svg({ x: cx - 6 * sc, y: cy - 6 * sc, width: 12 * sc, height: 12 * sc },
+          `<path d="M${6 - 3.2 * sc} ${6 - 1.6 * sc} L6 ${6 + 1.6 * sc} L${6 + 3.2 * sc} ${6 - 1.6 * sc}" fill="none" stroke="${color}" stroke-width="${1.5 * sc}" stroke-linecap="round" stroke-linejoin="round"/>`);
+      }
+      if (!raw || fontSize <= 0 || transparent(color)) return;
+      const left = r.left + bl + (auto ? Math.max(padL, 4 * sc) : padL);
+      const cw = r.right - br - (auto ? Math.max(padR, 14 * sc) : padR) - left;
+      const cy0 = r.top + bt + padT, ch = r.height - bt - bb - padT - padB;
+      if (cw <= 0 || ch <= 0) return;
+      mctx.font = `${cs.fontStyle} ${cs.fontWeight} ${fontSize}px ${cs.fontFamily}`;
+      const fm = mctx.measureText('Mg');
+      const ascent = (fm as any).fontBoundingBoxAscent || fontSize * 0.8;
+      const descent = (fm as any).fontBoundingBoxDescent || fontSize * 0.2;
+      const text = cs.textTransform === 'uppercase' ? raw.toUpperCase() : cs.textTransform === 'lowercase' ? raw.toLowerCase() : raw;
+      const textW = mctx.measureText(text).width;
+      const baseline = cy0 + (ch - (ascent + descent)) / 2 + ascent;
+      nodes.push({
+        kind: 'text', id: nid(), rect: { x: left, y: baseline - ascent, width: textW, height: ascent + descent },
+        opacity, clip: intersect(clip, { x: left, y: cy0, width: cw, height: ch, radii: [0, 0, 0, 0] }),
+        lines: [{ text, x: left, baseline }], fontFamily: cs.fontFamily, fontSize, fontWeight: cs.fontWeight,
+        fontStyle: cs.fontStyle, color, letterSpacing: cs.letterSpacing === 'normal' ? 0 : num(cs.letterSpacing) * sc,
+        wordSpacing: 0, preserveSpace: true,
+      } as PaintNode);
+      return;
+    }
+    // textarea: resize grip (two short diagonals in the bottom-right corner), then the text
+    if (auto && cs.resize !== 'none' && r.width > 20 && r.height > 20) {
+      const gx = r.right - bl - 1, gy = r.bottom - bb - 1;
+      svg({ x: gx - 10, y: gy - 10, width: 10, height: 10 },
+        `<path d="M9 1 L1 9 M9 5 L5 9" fill="none" stroke="rgb(118,118,118)" stroke-width="1"/>`);
+    }
+    // textarea: lay the value out in a throw-away mirror <div> with the same computed style, then capture it
+    const ta = el as HTMLTextAreaElement;
+    const isPh = !ta.value;
+    const content = isPh ? ta.placeholder : ta.value;
+    if (!content) return;
+    const cl = r.left + bl + padL, ct = r.top + bt + padT;
+    const cw = ta.clientWidth * sc - padL - padR, ch = ta.clientHeight * sc - padT - padB;
+    if (cw <= 0 || ch <= 0) return;
+    const mir = document.createElement('div');
+    for (let i = 0; i < cs.length; i++) mir.style.setProperty(cs[i], cs.getPropertyValue(cs[i]));
+    const ps = isPh ? getComputedStyle(el, '::placeholder') : cs;
+    const mset = (k: string, v: string) => mir.style.setProperty(k, v, 'important');
+    mset('position', 'fixed'); mset('left', cl / sc + 'px'); mset('top', (ct - ta.scrollTop * sc) / sc + 'px');
+    mset('margin', '0'); mset('border', '0'); mset('padding', '0'); mset('box-sizing', 'content-box');
+    mset('width', (cw / sc) + 'px'); mset('height', 'auto'); mset('min-height', '0'); mset('max-height', 'none');
+    mset('overflow', 'visible'); mset('background', 'none'); mset('box-shadow', 'none'); mset('outline', 'none');
+    mset('transform', 'none'); mset('translate', 'none'); mset('rotate', 'none'); mset('scale', 'none'); mset('resize', 'none');
+    mset('display', 'block'); mset('animation', 'none'); mset('transition', 'none'); mset('appearance', 'none');
+    mset('white-space', cs.whiteSpace === 'pre' ? 'pre' : 'pre-wrap'); mset('overflow-wrap', cs.whiteSpace === 'pre' ? 'normal' : 'break-word');
+    mset('color', ps.color); mset('-webkit-text-fill-color', ps.color); mset('opacity', '1');
+    mir.textContent = content;
+    document.documentElement.appendChild(mir);
+    try {
+      const mcs = getComputedStyle(mir);
+      captureText(mir, mcs, intersect(clip, { x: cl, y: ct, width: cw, height: ch, radii: [0, 0, 0, 0] }), opacity * (isPh ? num(ps.opacity || '1') : 1));
+    } finally { mir.remove(); }
+  };
+
   const captureText = (el: Element, cs: CSSStyleDeclaration, clip: Clip | null, opacity: number) => {
+    const nc = nativeControl(el);
+    if (nc) { captureNative(nc, el, cs, clip, opacity); return; }
     if (el.tagName === 'INPUT' && vectorTextInput(el, cs)) {
       captureInputText(el as HTMLInputElement, cs, clip, opacity);
       return;
@@ -2354,7 +2464,7 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
       captureListMarker(el, cs, childClip, opacity);
     }
 
-    const kids = Array.from(el.children);
+    const kids = nativeControl(el) ? [] : Array.from(el.children); // <option>s are painted by captureNative
     const parentIsFlexGrid = /flex|grid/.test(cs.display);
     const meta = kids.map((k) => {
       const kcs = getComputedStyle(k);

@@ -100,6 +100,7 @@ Numbers are `diff` (whole page) unless stated. "→" = before → after.
 | E37 | antd.design | `matrix3d(…,0,0,1000,1)` (= `translateZ`) rastered a 1280×640 subtree | a 3D matrix is only a 3D effect under perspective (own `perspective()` term or a perspective ancestor); otherwise it is an orthographic projection and the (a,b,c,d,e,f) part is exact | antd raster 80→40 %, text cov 60→101 % (fixture `transform-3d-flat`) | ✅ |
 | E38 | antd inputs | `text-overflow: ellipsis` text inputs excluded from vector inputs | truncate the value with the browser's prefix-that-fits + `…` | form-control rasters gone on antd | ✅ |
 | E39 | Bootstrap accordion, Wikipedia, Mozilla | pseudo `::after` with `url()` background (chevrons/icons) stayed raster | pre-load pseudo background images in `walkNode`, then `materializePseudo` can place them | bootstrap lib raster 9→1 %, wikipedia 12→2 %, mozilla 34→**0 %** | ✅ |
+| E40 | antd, bootstrap, forms everywhere | native `checkbox/radio/select/textarea` always rastered (lost in the extension: no screenshot) | box from computed style via `emitBox`; check glyphs / chevron / resize grip as `inline-svg`; select's selected text synthesized; textarea value laid out in a temporary mirror `<div>` (same computed style) and captured as normal text | fixture `native-controls` **0.11 %**, no `data:image/png` | ✅ (range/progress/meter/multi-select still raster) |
 
 ### Negative / neutral results
 - **Flagged "regress" in `pseudo-url-3d-flat`** (bbc 0.00→0.22 %, antdesign 0.07→0.35 %, devto 0.37→0.61 %): their raster
