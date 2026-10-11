@@ -92,27 +92,26 @@ async function run(opts: InPageOptions, root?: Element): Promise<string> {
     root,
   );
 
+  const targets = new Map(scene.rasterTargets.map((t) => [t.id, t]));
+  /** Raster nodes with a drawable target rect, optionally only those still lacking pixels. */
+  const pendingRasters = (onlyUnfilled: boolean) =>
+    scene.nodes.flatMap((node) => {
+      if (node.kind !== 'raster' || (onlyUnfilled && node.href)) return [];
+      const t = targets.get(node.id);
+      return t && t.width > 0 && t.height > 0 ? [{ node, t }] : [];
+    });
+
   if (opts.rasterize) {
-    const byId = new Map(scene.rasterTargets.map((t) => [t.id, t]));
-    for (const node of scene.nodes) {
-      if (node.kind !== 'raster') continue;
-      const t = byId.get(node.id);
-      if (!t || t.width <= 0 || t.height <= 0) continue;
-      node.href = await opts.rasterize(
-        { x: t.x, y: t.y, width: t.width, height: t.height },
-        scene.deviceScaleFactor,
-      );
+    for (const { node, t } of pendingRasters(false)) {
+      node.href = await opts.rasterize({ x: t.x, y: t.y, width: t.width, height: t.height }, scene.deviceScaleFactor);
     }
   }
 
   if (opts.domRasterFallback !== false) {
     const domRaster = createDomRasterizer();
-    const byId = new Map(scene.rasterTargets.map((t) => [t.id, t]));
-    for (const node of scene.nodes) {
-      if (node.kind !== 'raster' || node.href) continue;
-      const t = byId.get(node.id);
+    for (const { node, t } of pendingRasters(true)) {
       const el = rasterElements.get(node.id);
-      if (!t || !el || t.width <= 0 || t.height <= 0) continue;
+      if (!el) continue;
       node.href = await domRaster(el, { x: t.x, y: t.y, width: t.width, height: t.height }, scene.deviceScaleFactor);
     }
   }

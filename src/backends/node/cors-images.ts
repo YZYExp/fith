@@ -1,5 +1,6 @@
 import type { Page } from 'playwright';
 import type { Scene, ImageNode } from '../../core/ir/types.js';
+import { fetchViaContext } from './page-utils.js';
 
 /**
  * <img>s the page could not read in-page (cross-origin without CORS headers) are captured as raster
@@ -14,7 +15,8 @@ export async function resolveCorsImages(page: Page, scene: Scene, maxBytes = 6 *
     const { src, rect, preserveAspectRatio } = node.imgFallback;
     if (!/^https?:/i.test(src)) continue;
     try {
-      const res = await page.context().request.get(src, { headers: { referer: page.url() }, timeout: 15_000 });
+      const res = await fetchViaContext(page, src);
+      if (!res) continue;
       const type = (res.headers()['content-type'] || '').split(';')[0].trim().toLowerCase();
       if (!res.ok() || !/^image\//.test(type)) continue;
       const body = await res.body();

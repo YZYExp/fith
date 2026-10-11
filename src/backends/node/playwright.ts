@@ -12,6 +12,7 @@ import { emitSvg, type EmitOptions } from '../../core/emit/svg.js';
 import { createOutliner } from '../../core/emit/outline.js';
 import { systemFallbackLoader, systemFontLoader } from './fonts.js';
 import { findDiffRegions } from './diff-patch.js';
+import { pngDataUrl, waitForFonts } from './page-utils.js';
 import type { Scene } from '../../core/ir/types.js';
 
 export interface RenderOptions {
@@ -62,9 +63,7 @@ export type RenderInput = { html: string } | { url: string } | { page: Page };
 
 async function withinViewport(page: Page, width: number, height: number | undefined) {
   await page.setViewportSize({ width, height: height || 800 });
-  await page.evaluate(async () => {
-    if (document.fonts) await document.fonts.ready;
-  });
+  await waitForFonts(page);
   if (!height) {
     const full = await page.evaluate(() =>
       Math.max(document.documentElement.scrollHeight, document.body ? document.body.scrollHeight : 0),
@@ -100,9 +99,7 @@ async function applyDiffPatch(
   try {
     await svgPage.setViewportSize({ width: scene.width, height: scene.height });
     await svgPage.goto(pathToFileURL(tmp).href, { waitUntil: 'networkidle' });
-    await svgPage.evaluate(async () => {
-      if (document.fonts) await document.fonts.ready;
-    });
+    await waitForFonts(svgPage);
     svgBuf = await svgPage.screenshot({
       clip: { x: 0, y: 0, width: scene.width, height: scene.height },
       type: 'png',
@@ -127,7 +124,7 @@ async function applyDiffPatch(
         id: `dp${patched}`,
         rect,
         opacity: 1,
-        href: 'data:image/png;base64,' + buf.toString('base64'),
+        href: pngDataUrl(buf),
         reason: 'diff-patch',
       });
       patched++;
@@ -135,6 +132,25 @@ async function applyDiffPatch(
   }
 
   return patched > 0 ? emitSvg(scene, emitOpts) : svg;
+}
+
+/** Fill each raster node's `href` with a screenshot of its target rect (null when the shot fails). */
+async function screenshotRasterTargets(page: Page, scene: Scene): Promise<void> {
+  const byId = new Map(scene.rasterTargets.map((t) => [t.id, t]));
+  for (const node of scene.nodes) {
+    if (node.kind !== 'raster') continue;
+    const t = byId.get(node.id);
+    if (!t || t.width <= 0 || t.height <= 0) continue;
+    try {
+      const buf = await page.screenshot({
+        clip: { x: t.x, y: t.y, width: t.width, height: t.height },
+        type: 'png',
+      });
+      node.href = pngDataUrl(buf);
+    } catch {
+      node.href = null;
+    }
+  }
 }
 
 async function captureAndEmit(page: Page, opts: RenderOptions): Promise<RenderResult> {
@@ -171,28 +187,13 @@ async function captureAndEmit(page: Page, opts: RenderOptions): Promise<RenderRe
       clip: { x: 0, y: 0, width: vp.width, height: vp.height },
       type: 'png',
     });
-    scene.baseLayer = 'data:image/png;base64,' + buf.toString('base64');
+    scene.baseLayer = pngDataUrl(buf);
   }
 
   // Prefer the real bytes of cross-origin <img>s over screenshots of them.
   await resolveCorsImages(page, scene);
 
-  // Resolve raster targets via screenshots.
-  const byId = new Map(scene.rasterTargets.map((t) => [t.id, t]));
-  for (const node of scene.nodes) {
-    if (node.kind !== 'raster') continue;
-    const t = byId.get(node.id);
-    if (!t || t.width <= 0 || t.height <= 0) continue;
-    try {
-      const buf = await page.screenshot({
-        clip: { x: t.x, y: t.y, width: t.width, height: t.height },
-        type: 'png',
-      });
-      node.href = 'data:image/png;base64,' + buf.toString('base64');
-    } catch {
-      node.href = null;
-    }
-  }
+  await screenshotRasterTargets(page, scene);
 
   // Build emit options (outline mode converts text to glyph paths).
   const emitOpts: EmitOptions = {};
