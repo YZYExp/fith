@@ -1,4 +1,5 @@
 import type { Page } from 'playwright';
+import { fetchViaContext } from './page-utils.js';
 
 /**
  * Stylesheets served from another origin without CORS headers (CDNs) throw on `.cssRules`, so in-page
@@ -33,15 +34,15 @@ export async function collectExternalCss(page: Page): Promise<Record<string, str
   const worker = async () => {
     while (next < list.length) {
       const href = list[next++];
+      // unreachable sheets are skipped: their fonts stay referenced by name
+      const res = await fetchViaContext(page, href);
+      if (!res?.ok()) continue;
       try {
-        const res = await page.context().request.get(href, { headers: { referer: page.url() }, timeout: 15_000 });
-        if (res.ok()) {
-          const text = await res.text();
-          // sheets without @font-face/@import can't matter for fonts: record them empty so the page doesn't re-fetch
-          map[href] = /@font-face|@import/.test(text) ? text : '';
-        }
+        const text = await res.text();
+        // sheets without @font-face/@import can't matter for fonts: record them empty so the page doesn't re-fetch
+        map[href] = /@font-face|@import/.test(text) ? text : '';
       } catch {
-        /* unreachable: fonts in this sheet stay referenced by name */
+        /* body unreadable */
       }
     }
   };
