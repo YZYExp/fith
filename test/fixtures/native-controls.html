@@ -1,0 +1,28 @@
+<!doctype html><html><head><meta charset="utf-8"><style>
+body{margin:0;padding:16px;font:14px sans-serif;background:#fff;color:#222}
+.row{display:flex;gap:16px;align-items:center;margin-bottom:12px}
+select{font:14px sans-serif}
+textarea{font:14px sans-serif;width:220px;height:84px}
+.styled{appearance:none;border:1px solid #ced4da;border-radius:6px;padding:6px 10px;background:#fff;width:160px;height:34px}
+textarea.styled{height:70px}
+</style></head><body>
+<div class="row">
+<label><input type="checkbox"> off</label>
+<label><input type="checkbox" checked> on</label>
+<label><input type="checkbox" disabled> dis</label>
+<label><input type="radio" name="r"> off</label>
+<label><input type="radio" name="r" checked> on</label>
+<label><input type="checkbox" checked style="accent-color:#e91e63"> pink</label>
+</div>
+<div class="row">
+<select><option>Apple</option><option selected>Banana split</option></select>
+<select class="styled"><option>Styled option</option></select>
+<select disabled><option>Disabled</option></select>
+</div>
+<div class="row">
+<textarea>first line
+second line is long enough to wrap around the textarea width for sure
+third</textarea>
+<textarea class="styled" placeholder="Write something…"></textarea>
+</div>
+</body></html>

@@ -66,6 +66,19 @@ describe('real-world regressions', () => {
     expect(r.ratio).toBeLessThan(0.02);
   }, 60_000);
 
+  it('vectorizes native checkbox / radio / select / textarea (glyphs, selected text, wrapped lines) instead of rastering', async () => {
+    const r = await validate(
+      { url: pathToFileURL(resolve(FIXTURES, 'native-controls.html')).href },
+      { width: 560, height: 260, name: 'native-controls', outDir: OUT, fontMode: 'none' },
+    );
+    const svg = readFileSync(resolve(OUT, 'native-controls.svg'), 'utf8');
+    expect(svg).not.toContain('data:image/png');
+    for (const t of ['Banana split', 'Styled option', 'Write something', 'first line', 'around the textarea width']) expect(svg).toContain(t);
+    expect(svg).not.toContain('Apple'); // only the selected <option> is painted
+    expect(svg).toContain('rgb(233, 30, 99)'); // accent-color checkbox
+    expect(r.ratio).toBeLessThan(0.02);
+  }, 60_000);
+
   it('paints z-indexed descendants in their nearest stacking context; body bg stays under negative z; fixed scrim is vector', async () => {
     const r = await validate(
       { url: pathToFileURL(resolve(FIXTURES, 'stacking-order.html')).href },
