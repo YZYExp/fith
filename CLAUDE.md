@@ -45,7 +45,9 @@ The core is a two-phase pipeline:
   scroll / content-visibility / unfurl changes, each returning its own idempotent `restore`, which `captureScene`
   also calls in its `finally`), `colorNorm.ts` (canvas colour normaliser), `images.ts` (data URLs of images and
   canvases) and `fonts.ts` (`@font-face` collection). Each takes the `Document` / window it works in. Keep new
-  helpers out of the closure the same way.
+  helpers out of the closure the same way. `background.ts` holds box geometry (radii, clip intersection), gradient
+  layers, mask layers and background / image layers; the functions that need the page's colour normaliser, the
+  loaded-image table or the document take a `BgEnv` first, and `captureScene` binds one with `bindEnv`.
 
 - The `Scene` IR is the boundary between the in-page capture and the Node backend.
   Fields added to `Scene` must be added to `src/core/ir/types.ts`.
