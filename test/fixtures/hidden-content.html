@@ -1,0 +1,28 @@
+<!doctype html>
+<style>
+body { margin: 16px; font: 16px sans-serif; background: white; }
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
+.cv-hidden { content-visibility: hidden; }
+.cv-auto { content-visibility: auto; contain-intrinsic-size: auto 40px; }
+.zero-h { height: 0; overflow: hidden; }
+.vis-hidden { visibility: hidden; }
+.off { position: absolute; left: -9999px; top: 0; }
+p { margin: 4px 0; }
+</style>
+<p>SHOWN plain text</p>
+<p hidden>HIDDEN attribute</p>
+<div hidden><p>HIDDEN ancestor attribute</p></div>
+<div style="display:none"><p>HIDDEN display none</p></div>
+<div class="vis-hidden"><p>HIDDEN visibility</p></div>
+<div style="opacity:0"><p>HIDDEN opacity</p></div>
+<span class="sr-only">HIDDEN sr-only</span>
+<div class="cv-hidden" style="background:#fdd"><p>HIDDEN content-visibility hidden</p></div>
+<div class="cv-hidden" hidden="until-found"><p>HIDDEN until-found</p></div>
+<div class="cv-auto"><p>SHOWN content-visibility auto</p></div>
+<div class="zero-h"><p>HIDDEN zero-height overflow</p></div>
+<details><summary>SHOWN summary</summary><p>HIDDEN closed details body</p></details>
+<details open><summary>SHOWN open summary</summary><p>SHOWN open details body</p></details>
+<div class="off"><p>HIDDEN off-screen</p></div>
+<template><p>HIDDEN template</p></template>
+<dialog><p>HIDDEN closed dialog</p></dialog>
+<p>SHOWN last</p>

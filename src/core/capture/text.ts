@@ -36,8 +36,11 @@ export const nativeControl = (el: Element): 'check' | 'select' | 'textarea' | nu
 // Synthesize a text node for the CSS ::marker pseudo-element on list items.
 // Markers are pseudo-elements not in the DOM — getComputedStyle(el,'::marker')
 // exposes their computed content and color in Chrome 86+/FF 68+/Safari 13.1+.
+/** A clip with no area hides everything under it (a collapsed `height:0; overflow:hidden` box, hidden content). */
+export const emptyClip = (clip: Clip | null) => !!clip && (clip.width <= 0 || clip.height <= 0);
+
 export const captureListMarker = (ctx: CaptureCtx, el: Element, cs: CSSStyleDeclaration, clip: Clip | null, opacity: number) => {
-  if (cs.display !== 'list-item') return;
+  if (cs.display !== 'list-item' || emptyClip(clip)) return;
   const ms = ctx.win.getComputedStyle(el, '::marker');
   let markerText = ms.content || '';
   if (!markerText || markerText === 'none' || markerText === 'normal') {
@@ -320,6 +323,7 @@ export const captureNative = (ctx: CaptureCtx, kind: 'check' | 'select' | 'texta
 };
 
 export const captureText = (ctx: CaptureCtx, el: Element, cs: CSSStyleDeclaration, clip: Clip | null, opacity: number) => {
+  if (emptyClip(clip)) return;
   const nc = nativeControl(el);
   if (nc) { captureNative(ctx, nc, el, cs, clip, opacity); return; }
   if (el.tagName === 'INPUT' && vectorTextInput(el, cs)) {

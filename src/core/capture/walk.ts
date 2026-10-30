@@ -239,6 +239,12 @@ export const walkNode = async (ctx: CaptureCtx, el: Element, clip: Clip | null, 
     });
   }
 
+  // Content the browser does not paint: `content-visibility:hidden` (also `hidden=until-found`) and the body of a
+  // closed <details>. The element's own box stays; its text and children are not drawn.
+  const closedDetails = el.tagName === 'DETAILS' && !(el as HTMLDetailsElement).open;
+  const contentHidden = !skipRender && ((cs as any).contentVisibility === 'hidden' || closedDetails);
+  if (contentHidden) childClip = { x: r.left, y: r.top, width: 0, height: 0, radii: radiiOf(cs, 0, 0) };
+
   let afterPseudoNodes: PaintNode[] = [];
   let pseudoVectorized = false;
   if (boxReason === 'pseudo') {
@@ -286,7 +292,10 @@ export const walkNode = async (ctx: CaptureCtx, el: Element, clip: Clip | null, 
     captureListMarker(ctx, el, cs, childClip, opacity);
   }
 
-  const kids = nativeControl(el) ? [] : Array.from(el.children); // <option>s are painted by captureNative
+  // <option>s are painted by captureNative; a closed <details> paints only its first <summary>
+  const kids = nativeControl(el) ? []
+    : closedDetails ? Array.from(el.children).filter((k, _i, all) => k === all.find((c) => c.tagName === 'SUMMARY'))
+    : contentHidden ? [] : Array.from(el.children);
   const parentIsFlexGrid = /flex|grid/.test(cs.display);
   const meta = kids.map((k) => {
     const kcs = ctx.win.getComputedStyle(k);
