@@ -274,9 +274,27 @@ function splitInlineSvg(markup: string): { open: string; rest: string; x: string
   return { open, rest, x, y };
 }
 
+/**
+ * Prefix the ids an inline `<svg>` defines (and the `url(#id)` / `href="#id"` references to them), so two captures
+ * in one document do not share a gradient or clip path just because both icons call it `a`.
+ */
+export function prefixSvgIds(markup: string, prefix: string): string {
+  if (!prefix) return markup;
+  const ids = new Set<string>();
+  for (const m of markup.matchAll(/\sid=(["'])([^"']+)\1/g)) ids.add(m[2]);
+  if (ids.size === 0) return markup;
+  const re = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const alt = [...ids].sort((a, b) => b.length - a.length).map(re).join('|');
+  return markup
+    .replace(new RegExp(`(\\sid=["'])(${alt})(["'])`, 'g'), `$1${prefix}$2$3`)
+    .replace(new RegExp(`(url\\(\\s*["']?#)(${alt})(["']?\\s*\\))`, 'g'), `$1${prefix}$2$3`)
+    .replace(new RegExp(`((?:xlink:)?href=["']#)(${alt})(["'])`, 'g'), `$1${prefix}$2$3`);
+}
+
 function emitInlineSvg(node: InlineSvgNode, defs: Defs, dedupe: boolean): string {
-  if (!dedupe) return node.markup;
-  const { open, rest, x, y } = splitInlineSvg(node.markup);
+  const markup = prefixSvgIds(node.markup, defs.prefix);
+  if (!dedupe) return markup;
+  const { open, rest, x, y } = splitInlineSvg(markup);
   const symbol = open.replace(/^<svg/, '<svg id="{ID}"') + rest;
   const id = defs.add(symbol);
   return `<use href="#${id}" x="${x}" y="${y}"/>`;

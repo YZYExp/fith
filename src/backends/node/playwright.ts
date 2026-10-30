@@ -10,7 +10,8 @@ import { runCaptureScene, runCaptureSourceHtml } from './inject.js';
 import { assertIdPrefix, emitSvg, type EmitOptions } from '../../core/emit/svg.js';
 import { findDiffRegions } from './diff-patch.js';
 import { pngDataUrl, waitForFonts } from './page-utils.js';
-import type { CaptureReport, Scene } from '../../core/ir/types.js';
+import type { CaptureReport, FontFace, FontResolver, Scene } from '../../core/ir/types.js';
+import { resolveFonts } from '../../core/capture/fonts.js';
 import { buildReport } from '../../core/report.js';
 
 export interface RenderOptions {
@@ -51,6 +52,11 @@ export interface RenderOptions {
   captureSourceHtml?: boolean;
   /** Prepended to every id in the SVG so several captures can share one document. */
   idPrefix?: string;
+  /**
+   * Faces to embed instead of the ones read from the page's `@font-face` rules (`embed` and `outline` modes): a list,
+   * or a function asked once per family, weight and style the text uses, with the characters set in it.
+   */
+  fonts?: FontFace[] | FontResolver;
 }
 
 export interface RenderResult {
@@ -181,8 +187,11 @@ async function captureAndEmit(page: Page, opts: RenderOptions): Promise<RenderRe
     // outline mode still needs @font-face bytes to outline webfont glyphs
     fontMode: (opts.fontMode === 'none' ? 'none' : 'embed') as 'embed' | 'none',
     collectGlyphX: opts.fontMode === 'outline',
-    externalCss: opts.fontMode === 'none' ? undefined : await collectExternalCss(page),
+    // a list goes into the page; a function cannot cross `page.evaluate`, so it runs here once the text is known
+    fonts: typeof opts.fonts === 'function' ? [] : opts.fonts,
+    externalCss: opts.fontMode === 'none' || opts.fonts ? undefined : await collectExternalCss(page),
   });
+  if (typeof opts.fonts === 'function' && opts.fontMode !== 'none') scene.fonts = await resolveFonts(scene.nodes, opts.fonts);
 
   // Full-page base-layer screenshot (guarantees visual floor; optional).
   if (opts.guaranteeFloor) {

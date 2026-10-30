@@ -11,7 +11,7 @@ export class Defs {
   private items = new Map<string, string>();
   private seq = 0;
   /** `prefix` keeps the ids of several SVGs in one document apart. */
-  constructor(private prefix = '') {}
+  constructor(readonly prefix = '') {}
   add(content: string): string {
     const existing = this.items.get(content);
     if (existing) return existing;
