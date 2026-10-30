@@ -3,7 +3,7 @@ import { bindEnv, type BgEnv, type ImgInfo, bgImageLayer as bgBgImageLayer, pars
 import { unfurlScrollContainers, resetScrollAndContentVisibility } from './unfurl.js';
 import { createColorNormalizer } from './colorNorm.js';
 import { canvasDataUrl as domCanvasDataUrl, canvasExtractDataURL as domCanvasExtractDataURL } from './images.js';
-import { collectFonts } from './fonts.js';
+import { collectFonts, resolveFonts } from './fonts.js';
 import { walk } from './walk.js';
 import type { CaptureCtx } from './ctx.js';
 import { transparent } from '../../css/color.js';
@@ -141,7 +141,11 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
   restoreScroll();
 
   const fonts =
-    (opts.fontMode ?? 'embed') !== 'embed' ? [] : opts.fonts ?? (await collectFonts(ctx.nodes, { doc, win, externalCss: opts.externalCss }));
+    (opts.fontMode ?? 'embed') !== 'embed'
+      ? []
+      : typeof opts.fonts === 'function'
+        ? await resolveFonts(ctx.nodes, opts.fonts)
+        : opts.fonts ?? (await collectFonts(ctx.nodes, { doc, win, externalCss: opts.externalCss }));
 
   return {
     width: W,

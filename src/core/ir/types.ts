@@ -62,6 +62,18 @@ export interface FontFace {
   unicodeRange?: string;
 }
 
+/** What a font resolver is asked for: one face the page's text uses, and the characters set in it. */
+export interface FontRequest {
+  family: string;
+  weight: string;
+  style: string;
+  /** Every distinct character drawn in this family, weight and style (for cutting a subset). */
+  chars: string;
+}
+
+/** Supplies the file for a requested face; `null` leaves the family referenced by name. */
+export type FontResolver = (req: FontRequest) => Promise<FontFace | FontFace[] | null | undefined> | FontFace | FontFace[] | null | undefined;
+
 export interface RasterTarget {
   id: string;
   x: number;
@@ -300,7 +312,7 @@ export interface CaptureOptions {
    * In `embed` mode, use exactly these faces instead of reading the document's `@font-face` rules. For hosts
    * that already hold the font bytes (a frame without network access, a subset cut from the used text).
    */
-  fonts?: FontFace[];
+  fonts?: FontFace[] | FontResolver;
   /** Capture per-glyph x positions for outline mode (slower). */
   collectGlyphX?: boolean;
   /**

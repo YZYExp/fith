@@ -62,4 +62,37 @@ describe('host hooks of the in-page backend', () => {
     expect(withFont).toContain('data:font/woff2;base64,AAAA');
     expect(without).not.toContain('@font-face');
   }, 60_000);
+
+  it('a fonts function is asked once per used face, with the characters set in it', async () => {
+    const page = await open(SMOKE);
+    const out = await page.evaluate(async () => {
+      const FH = (window as any).FittingHtml;
+      const reqs: { family: string; weight: string; style: string; chars: string }[] = [];
+      const svg: string = await FH.captureCurrentPage({
+        width: 420,
+        height: 280,
+        fonts: (r: any) => {
+          reqs.push(r);
+          return { family: r.family, weight: r.weight, style: r.style, src: 'data:font/woff2;base64,BBBB', format: 'woff2' };
+        },
+      });
+      return { svg, reqs };
+    });
+    expect(out.reqs.length).toBeGreaterThan(0);
+    const keys = out.reqs.map((r) => `${r.family.toLowerCase()}|${r.weight}|${r.style}`);
+    expect(new Set(keys).size).toBe(keys.length);
+    expect(out.reqs.every((r) => r.chars.length > 0 && new Set(r.chars).size === r.chars.length)).toBe(true);
+    expect(out.svg).toContain('data:font/woff2;base64,BBBB');
+  }, 60_000);
+
+  it('a fonts function that throws or answers null leaves the family referenced by name', async () => {
+    const page = await open(SMOKE);
+    const svg: string = await page.evaluate(async () => {
+      const FH = (window as any).FittingHtml;
+      let n = 0;
+      return FH.captureCurrentPage({ width: 420, height: 280, fonts: () => { if (n++ % 2) throw new Error('no'); return null; } });
+    });
+    expect(svg).not.toContain('@font-face');
+    expect(svg).toContain('<text');
+  }, 60_000);
 });

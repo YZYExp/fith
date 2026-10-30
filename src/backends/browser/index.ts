@@ -6,7 +6,7 @@
 import { captureScene } from '../../core/capture/capture.js';
 import { emitSvg } from '../../core/emit/svg.js';
 import { captureSourceHtml } from '../../core/capture/source-html.js';
-import type { CaptureReport, FontFace, Rect, Scene } from '../../core/ir/types.js';
+import type { CaptureReport, FontFace, FontRequest, FontResolver, Rect, Scene } from '../../core/ir/types.js';
 import { buildReport } from '../../core/report.js';
 import type { Outliner } from '../../core/emit/outline.js';
 import { createDomRasterizer } from './dom-raster.js';
@@ -28,9 +28,10 @@ export interface InPageOptions {
   fontMode?: 'embed' | 'outline' | 'none';
   /**
    * Faces to embed instead of the ones read from the document's `@font-face` rules (`embed` and `outline` modes).
-   * For frames without network access, or when the host already holds the bytes.
+   * For frames without network access, or when the host already holds the bytes. A function is asked for each
+   * face the text uses, with the characters set in it, so the host can cut a subset.
    */
-  fonts?: FontFace[];
+  fonts?: FontFace[] | FontResolver;
   /** Prepended to every id in the SVG so several captures can share one document (see `EmitOptions.idPrefix`). */
   idPrefix?: string;
   /**
@@ -170,4 +171,4 @@ export function captureElementDetailed(el: Element, opts: InPageOptions = {}): P
 }
 
 export { captureScene, emitSvg, captureSourceHtml, buildReport };
-export type { CaptureReport };
+export type { CaptureReport, FontFace, FontRequest, FontResolver };

@@ -1,4 +1,4 @@
-import type { PaintNode } from '../ir/types.js';
+import type { FontFace, FontRequest, FontResolver, PaintNode } from '../ir/types.js';
 import { fetchDataURL } from './images.js';
 
 export async function collectFonts(painted: PaintNode[], env: { doc: Document; win: Window & typeof globalThis; externalCss?: Record<string, string> }) {
@@ -101,6 +101,33 @@ export async function collectFonts(painted: PaintNode[], env: { doc: Document; w
     else { dataUrl = await fetchDataURL(abs); urlCache.set(abs, dataUrl); }
     if (!dataUrl) continue;
     out.push({ family, weight, style: fstyle, src: dataUrl, format: fmtFromUrl(pick.url, pick.hint), unicodeRange });
+  }
+  return out;
+}
+
+/** The faces the text nodes use, with the characters set in each (what a resolver is asked for). */
+export function fontRequests(painted: PaintNode[]): FontRequest[] {
+  const byKey = new Map<string, { family: string; weight: string; style: string; chars: Set<string> }>();
+  for (const node of painted) {
+    if (node.kind !== 'text') continue;
+    const family = node.fontFamily.split(',')[0].trim().replace(/^["']|["']$/g, '');
+    if (!family) continue;
+    const key = family.toLowerCase() + '|' + node.fontWeight + '|' + node.fontStyle;
+    let entry = byKey.get(key);
+    if (!entry) byKey.set(key, (entry = { family, weight: node.fontWeight, style: node.fontStyle, chars: new Set() }));
+    for (const line of node.lines) for (const ch of line.text) entry.chars.add(ch);
+  }
+  return [...byKey.values()].map((e) => ({ family: e.family, weight: e.weight, style: e.style, chars: [...e.chars].join('') }));
+}
+
+/** Ask the host for each used face; a throwing or empty answer leaves that family referenced by name. */
+export async function resolveFonts(painted: PaintNode[], resolve: FontResolver): Promise<FontFace[]> {
+  const out: FontFace[] = [];
+  for (const req of fontRequests(painted)) {
+    try {
+      const got = await resolve(req);
+      if (got) out.push(...(Array.isArray(got) ? got : [got]));
+    } catch { /* the family stays referenced by name */ }
   }
   return out;
 }
