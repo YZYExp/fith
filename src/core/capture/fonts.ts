@@ -64,7 +64,7 @@ export async function collectFonts(painted: PaintNode[], env: { doc: Document; w
     try {
       let text = env.externalCss?.[href] as string | undefined;
       if (text === undefined) {
-        const res = await fetch(href, { cache: 'force-cache' });
+        const res = await win.fetch(href, { cache: 'force-cache' });
         if (!res.ok) continue;
         text = await res.text();
       }
@@ -98,7 +98,7 @@ export async function collectFonts(painted: PaintNode[], env: { doc: Document; w
     seen.add(key);
     let dataUrl: string | null;
     if (urlCache.has(abs)) dataUrl = urlCache.get(abs)!;
-    else { dataUrl = await fetchDataURL(abs); urlCache.set(abs, dataUrl); }
+    else { dataUrl = await fetchDataURL(abs, win); urlCache.set(abs, dataUrl); }
     if (!dataUrl) continue;
     out.push({ family, weight, style: fstyle, src: dataUrl, format: fmtFromUrl(pick.url, pick.hint), unicodeRange });
   }

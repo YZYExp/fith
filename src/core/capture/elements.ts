@@ -184,7 +184,7 @@ export const needsSubtreeRaster = (ctx: CaptureCtx, el: Element, cs: CSSStyleDec
 export const loadImgInfo = async (ctx: CaptureCtx, url: string) => {
   if (ctx.imgInfo.has(url)) return;
   ctx.imgInfo.set(url, null);
-  const fetched = await fetchDataURL(url);
+  const fetched = await fetchDataURL(url, ctx.win);
   if (!fetched) return;
   const href = normDataUrl(fetched);
   const dim = await new Promise<{ w: number; h: number } | null>((res) => {
@@ -371,7 +371,7 @@ export const captureImageEl = (ctx: CaptureCtx, el: Element, cs: CSSStyleDeclara
       const canvas = ctx.canvasExtractDataURL(img);
       if (canvas) { node.href = canvas; return; }
       // 2) Fall back to fetch
-      const fetched = await fetchDataURL(src);
+      const fetched = await fetchDataURL(src, ctx.win);
       if (fetched) { node.href = fetched; return; }
       // 3) CORS / network failure: convert this node in-place to a raster target
       //    so it keeps its paint-order position rather than appending at the end.

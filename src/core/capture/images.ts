@@ -12,22 +12,25 @@ export const normDataUrl = (u: string): string => {
   }
 };
 
-export const blobToDataURL = (blob: Blob): Promise<string | null> =>
+type Win = Window & typeof globalThis;
+
+export const blobToDataURL = (blob: Blob, win?: Win): Promise<string | null> =>
   new Promise((resolve) => {
-    const fr = new FileReader();
+    const fr = new (win?.FileReader ?? FileReader)();
     fr.onload = () => resolve(fr.result as string);
     fr.onerror = () => resolve(null);
     fr.readAsDataURL(blob);
   });
 
-export const fetchDataURL = async (url: string): Promise<string | null> => {
+/** Fetch with the window of the element's document when given: a frame's origin, referrer and CSP, not the host page's. */
+export const fetchDataURL = async (url: string, win?: Win): Promise<string | null> => {
   // Guard against fetching the current page when img.src is empty or blank.
   if (!url || url === 'about:blank') return null;
   if (url.startsWith('data:')) return url;
   try {
-    const res = await fetch(url, { cache: 'force-cache' });
+    const res = await (win?.fetch ?? fetch).call(win ?? globalThis, url, { cache: 'force-cache' });
     if (!res.ok) return null;
-    return await blobToDataURL(await res.blob());
+    return await blobToDataURL(await res.blob(), win);
   } catch {
     return null;
   }

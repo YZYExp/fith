@@ -31,4 +31,28 @@ describe('idPrefix', () => {
     expect(() => emitSvg(scene, { idPrefix: 'a b' })).toThrow(/idPrefix/);
     expect(() => emitSvg(scene, { idPrefix: 'ok-1_' })).not.toThrow();
   });
+
+  it('prefixes the ids an inline <svg> defines and the references to them, and only those', () => {
+    const icon = '<svg width="24" height="24"><defs><linearGradient id="a"><stop offset="0" stop-color="#f00"/></linearGradient>' +
+      '<clipPath id="c1"><rect width="9" height="9"/></clipPath></defs>' +
+      '<rect fill="url(#a)" clip-path="url(#c1)" width="24" height="24"/><use href="#a"/><use xlink:href="#c1"/><rect fill="url(#other)"/></svg>';
+    const scene = (markup: string) =>
+      ({
+        width: 24, height: 24, deviceScaleFactor: 1, background: '', rasterTargets: [], fonts: [],
+        nodes: [{ id: 'n1', kind: 'inline-svg', rect: { x: 0, y: 0, width: 24, height: 24 }, opacity: 1, markup }],
+      }) as unknown as Scene;
+    const one = emitSvg(scene(icon), { idPrefix: 'one-' });
+    const two = emitSvg(scene(icon), { idPrefix: 'two-' });
+    expect(one).toContain('id="one-a"');
+    expect(one).toContain('id="one-c1"');
+    expect(one).toContain('fill="url(#one-a)"');
+    expect(one).toContain('clip-path="url(#one-c1)"');
+    expect(one).toContain('href="#one-a"');
+    expect(one).toContain('xlink:href="#one-c1"');
+    expect(one).toContain('url(#other)'); // not defined here: left alone
+    expect(one).not.toContain('"a"');
+    expect(ids(one).filter((id) => ids(two).includes(id))).toEqual([]);
+    // no prefix: markup untouched
+    expect(emitSvg(scene(icon))).toContain('id="a"');
+  });
 });
