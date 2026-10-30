@@ -63,7 +63,7 @@ Save this as `convert.mjs` in the repository root and run `node convert.mjs`:
 
 ```js
 import { writeFile } from 'node:fs/promises';
-import { htmlToSvg } from './dist/index.js';
+import { htmlToSvg } from './dist/node.js';
 
 const svg = await htmlToSvg(
   '<html><body><h1>Hello, SVG</h1><p>Made from HTML.</p></body></html>',
@@ -73,14 +73,25 @@ const svg = await htmlToSvg(
 await writeFile('page.svg', svg, 'utf8');
 ```
 
-When fitting-html is installed or linked into another project, import from `fitting-html` instead of `./dist/index.js`.
+When fitting-html is installed or linked into another project, import from `fitting-html/node` instead of `./dist/node.js`.
+
+### Package entries
+
+| Entry | Contents | Needs |
+|---|---|---|
+| `fitting-html` | scene types, `emitSvg`, `buildReport` | nothing |
+| `fitting-html/node` | `htmlToSvg`, `renderToSvg`, `renderDetailed` | peer `playwright`; `opentype.js` for `fontMode: 'outline'` |
+| `fitting-html/browser` | `captureCurrentPage`, `captureElement`, `captureSourceHtml` | nothing |
+| `fitting-html/outline` | `createOutliner` for outline mode in the browser | peer `opentype.js` |
+
+Both peers are optional: install only what the entries you use need.
 
 ## Usage
 
 ### HTML, URL, or an existing Playwright page
 
 ```js
-import { htmlToSvg } from './dist/index.js';
+import { htmlToSvg } from './dist/node.js';
 
 // A bare string is HTML. URLs must use the { url } form.
 const fromHtml = await htmlToSvg('<h1>Hello</h1>', { width: 1280 });

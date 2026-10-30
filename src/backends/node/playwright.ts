@@ -8,8 +8,6 @@ import { pathToFileURL } from 'node:url';
 import { chromium, type Browser, type Page } from 'playwright';
 import { runCaptureScene, runCaptureSourceHtml } from './inject.js';
 import { assertIdPrefix, emitSvg, type EmitOptions } from '../../core/emit/svg.js';
-import { createOutliner } from '../../core/emit/outline.js';
-import { systemFallbackLoader, systemFontLoader } from './fonts.js';
 import { findDiffRegions } from './diff-patch.js';
 import { pngDataUrl, waitForFonts } from './page-utils.js';
 import type { CaptureReport, Scene } from '../../core/ir/types.js';
@@ -204,6 +202,11 @@ async function captureAndEmit(page: Page, opts: RenderOptions): Promise<RenderRe
   // Build emit options (outline mode converts text to glyph paths).
   const emitOpts: EmitOptions = { idPrefix: opts.idPrefix };
   if (opts.fontMode === 'outline') {
+    // opentype.js is an optional peer: only outline mode loads it
+    const [{ createOutliner }, { systemFallbackLoader, systemFontLoader }] = await Promise.all([
+      import('../../core/emit/outline.js'),
+      import('./fonts.js'),
+    ]);
     emitOpts.outline = createOutliner(scene.fonts, systemFontLoader(), systemFallbackLoader());
     scene.fonts = []; // glyphs become paths; no @font-face <style> needed
   }

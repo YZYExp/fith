@@ -8,12 +8,12 @@ importers:
 
   .:
     dependencies:
-      opentype.js:
-        specifier: ^2.0.0
-        version: 2.0.0
-      playwright:
-        specifier: ^1.47.0
-        version: 1.60.0
+      pixelmatch:
+        specifier: ^6.0.0
+        version: 6.0.0
+      pngjs:
+        specifier: ^7.0.0
+        version: 7.0.0
     devDependencies:
       '@sparticuz/chromium':
         specifier: ^148.0.0
@@ -36,12 +36,12 @@ importers:
       esbuild:
         specifier: ^0.28.0
         version: 0.28.0
-      pixelmatch:
-        specifier: ^6.0.0
-        version: 6.0.0
-      pngjs:
-        specifier: ^7.0.0
-        version: 7.0.0
+      opentype.js:
+        specifier: ^2.0.0
+        version: 2.0.0
+      playwright:
+        specifier: ^1.47.0
+        version: 1.60.0
       tsx:
         specifier: ^4.22.3
         version: 4.22.3

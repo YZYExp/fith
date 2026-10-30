@@ -62,7 +62,7 @@ node dist/backends/node/cli.js homepage/public/examples/card.html \
 
 ```js
 import { writeFile } from 'node:fs/promises';
-import { htmlToSvg } from './dist/index.js';
+import { htmlToSvg } from './dist/node.js';
 
 const svg = await htmlToSvg(
   '<html><body><h1>Hello, SVG</h1><p>Made from HTML.</p></body></html>',
@@ -72,14 +72,25 @@ const svg = await htmlToSvg(
 await writeFile('page.svg', svg, 'utf8');
 ```
 
-在其他项目中安装或链接 fitting-html 后，将 `./dist/index.js` 改为 `fitting-html` 即可。
+在其他项目中安装或链接 fitting-html 后，将 `./dist/node.js` 改为 `fitting-html/node` 即可。
+
+### 包入口
+
+| 入口 | 内容 | 依赖 |
+|---|---|---|
+| `fitting-html` | 场景类型、`emitSvg`、`buildReport` | 无 |
+| `fitting-html/node` | `htmlToSvg`、`renderToSvg`、`renderDetailed` | peer `playwright`；`fontMode: 'outline'` 需要 `opentype.js` |
+| `fitting-html/browser` | `captureCurrentPage`、`captureElement`、`captureSourceHtml` | 无 |
+| `fitting-html/outline` | 浏览器里 outline 模式用的 `createOutliner` | peer `opentype.js` |
+
+两个 peer 都是可选的，按用到的入口安装即可。
 
 ## 使用方式
 
 ### HTML、URL 与已有 Playwright 页面
 
 ```js
-import { htmlToSvg } from './dist/index.js';
+import { htmlToSvg } from './dist/node.js';
 
 // 直接传入的字符串会被视为 HTML；URL 必须使用 { url }。
 const fromHtml = await htmlToSvg('<h1>Hello</h1>', { width: 1280 });

@@ -1,23 +1,9 @@
 /**
- * Public API. Default entry = core pipeline + Node (Playwright) backend.
+ * Public API, environment-free: the scene IR, the SVG emitter and the report. It imports neither Playwright
+ * nor opentype.js. Capturing runs in a page (`fitting-html/browser`) or through Playwright
+ * (`fitting-html/node`); glyph outlines come from `fitting-html/outline`.
  */
 export type * from './core/ir/types.js';
 export { emitSvg } from './core/emit/svg.js';
-export { captureScene } from './core/capture/capture.js';
-export { captureSourceHtml } from './core/capture/source-html.js';
+export type { EmitOptions } from './core/emit/svg.js';
 export { buildReport } from './core/report.js';
-export { renderToSvg, renderDetailed } from './backends/node/playwright.js';
-export type { RenderInput, RenderOptions, RenderResult } from './backends/node/playwright.js';
-
-import { renderToSvg, type RenderInput, type RenderOptions } from './backends/node/playwright.js';
-
-export interface ConvertOptions extends RenderOptions {}
-
-/** Convert HTML / a URL into a self-contained SVG string. */
-export async function htmlToSvg(
-  input: string | RenderInput,
-  options: ConvertOptions,
-): Promise<string> {
-  const normalized: RenderInput = typeof input === 'string' ? { html: input } : input;
-  return renderToSvg(normalized, options);
-}

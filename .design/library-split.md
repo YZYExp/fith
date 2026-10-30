@@ -152,3 +152,7 @@ interface CaptureReport {
 2. 在 fith 仓库做：我需要对该仓库的写权限（目前只读克隆，且没有加入本项目的可推送仓库），以及是否由我提 PR 还是先给合作伙伴看设计。
 3. 阶段顺序：是否先做 0 + A（最小、最安全）作为第一个 PR。
 4. 包名：保持 `fitting-html` 还是改为 `fith`（发布前决定）。
+
+## 包出口（已实施）
+
+`fitting-html` 根入口不依赖 Playwright 和 opentype.js（场景类型、`emitSvg`、`buildReport`）；`/node` 是 Playwright 后端（peer，可选），outline 模式才动态加载 opentype.js；`/browser` 页内捕获；`/outline` 浏览器里的 `createOutliner`（peer opentype.js，可选）。`diffPatch` 用的 `pixelmatch`、`pngjs` 原先只在 devDependencies，随包发布的代码却引用，现改为 dependencies。`test/exports.test.ts` 用 esbuild 的依赖图保证各入口只依赖它声明的包。
