@@ -17,7 +17,7 @@ import { chromium, type Browser, type Page } from 'playwright';
 import { PNG } from 'pngjs';
 import pixelmatch from 'pixelmatch';
 import sparticuz from '@sparticuz/chromium';
-import { captureScene } from '../../src/core/capture/capture.js';
+import { runCaptureScene } from '../../src/backends/node/inject.js';
 import { emitSvg } from '../../src/core/emit/svg.js';
 import { createViewportRasterizer } from '../../src/backends/browser/viewport-raster.js';
 import type { Scene } from '../../src/core/ir/types.js';
@@ -96,7 +96,7 @@ describe('extension viewport-only capture', () => {
           if (!g.__name) g.__name = (t: any) => t;
         });
         // Viewport-only: do NOT unfurl scroll; coords stay viewport-relative.
-        const scene: Scene = await page.evaluate(captureScene, {
+        const scene: Scene = await runCaptureScene(page, {
           width: VW,
           height: VH,
           deviceScaleFactor: 1,

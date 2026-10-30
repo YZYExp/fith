@@ -13,7 +13,7 @@ import { resolve } from 'node:path';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { chromium, type Browser } from 'playwright';
 import sparticuz from '@sparticuz/chromium';
-import { captureScene } from '../../src/core/capture/capture.js';
+import { runCaptureScene } from '../../src/backends/node/inject.js';
 import { emitSvg } from '../../src/core/emit/svg.js';
 
 const ENABLED = process.env.REALWORLD_TESTS === '1';
@@ -43,7 +43,7 @@ async function captureUrl(
       if (!g.__name) g.__name = (t: any) => t;
     });
 
-    const scene = await page.evaluate(captureScene, {
+    const scene = await runCaptureScene(page, {
       width,
       height,
       deviceScaleFactor: 1,
