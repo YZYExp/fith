@@ -8,7 +8,7 @@ import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { chromium } from 'playwright';
 import sparticuz from '@sparticuz/chromium';
-import { captureScene } from '../src/core/capture/capture.js';
+import { runCaptureScene } from '../src/backends/node/inject.js';
 
 async function main() {
   const [src, xs, ys, ws = '1280', hs = '1600'] = process.argv.slice(2);
@@ -44,7 +44,7 @@ async function main() {
   console.log('DOM elements (outer → inner):');
   for (const e of els) console.log(' ', JSON.stringify(e));
   await page.evaluate(() => { const g = globalThis as any; if (!g.__name) g.__name = (t: any) => t; });
-  const scene = await page.evaluate(captureScene, { width, height, deviceScaleFactor: 1, fontMode: 'none', captureScrollableContent: true, containerRasterFallback: true } as any);
+  const scene = await runCaptureScene(page, { width, height, deviceScaleFactor: 1, fontMode: 'none', captureScrollableContent: true, containerRasterFallback: true } as any);
   console.log('\nScene nodes covering point:');
   for (const n of scene.nodes) {
     const r = n.rect;

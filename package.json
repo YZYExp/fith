@@ -22,7 +22,7 @@
     "dist"
   ],
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "pnpm build:inject && tsc -p tsconfig.json",
     "build:extension": "tsx scripts/build-extension.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
@@ -33,7 +33,9 @@
     "bench:fetch": "tsx bench/fetch.ts",
     "inspect": "tsx scripts/inspect.ts",
     "bench:docs": "tsx bench/docs.ts",
-    "bench:effects": "tsx bench/effects/lab.ts"
+    "bench:effects": "tsx bench/effects/lab.ts",
+    "golden": "tsx scripts/golden.ts",
+    "build:inject": "tsx scripts/build-inject.ts"
   },
   "keywords": [
     "html",

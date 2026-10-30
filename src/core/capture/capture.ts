@@ -1,10 +1,10 @@
 import type { Scene, PaintNode, Clip, CornerRadii, CaptureOptions, BgLayer } from '../ir/types.js';
 
 /**
- * Captures the current page into a Scene IR. Runs INSIDE the page context, so it
- * must be fully self-contained (no imports/closure refs) to be injectable via
- * Playwright `page.evaluate`. The same function is reused by the extension and
- * in-page-library backends, where it is simply called directly.
+ * Captures the current page into a Scene IR. Runs INSIDE the page context (bundled into
+ * the IIFE the Node backend injects, see src/inject/entry.ts), so it must not use Node
+ * APIs. The same function is reused by the extension and in-page-library backends, where
+ * it is simply called directly.
  */
 export async function captureScene(opts: CaptureOptions, root?: Element): Promise<Scene> {
   const dpr = opts.deviceScaleFactor || 1;

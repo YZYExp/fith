@@ -12,7 +12,7 @@ import { pathToFileURL } from 'node:url';
 import { chromium, type Browser } from 'playwright';
 import { PNG } from 'pngjs';
 import sparticuz from '@sparticuz/chromium';
-import { captureScene } from '../src/core/capture/capture.js';
+import { runCaptureScene } from '../src/backends/node/inject.js';
 import { emitSvg } from '../src/core/emit/svg.js';
 
 const ARGS = ['--no-sandbox', '--disable-setuid-sandbox', '--disable-gpu', '--single-process', '--ignore-certificate-errors'];
@@ -74,8 +74,7 @@ async function run() {
         const liveBuf = await page.screenshot({ clip: { x: 0, y: 0, width: W, height: H } });
 
         // 2) capture → emit SVG (with raster targets resolved)
-        await page.evaluate(() => { const g = globalThis as any; if (!g.__name) g.__name = (x: any) => x; });
-        const scene = await page.evaluate(captureScene, {
+        const scene = await runCaptureScene(page, {
           width: W, height: H, deviceScaleFactor: 1, fontMode: 'embed',
           captureScrollableContent: false, containerRasterFallback: true,
         } as any);

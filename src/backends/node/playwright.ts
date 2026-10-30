@@ -6,8 +6,7 @@ import { writeFileSync, unlinkSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import { pathToFileURL } from 'node:url';
 import { chromium, type Browser, type Page } from 'playwright';
-import { captureScene } from '../../core/capture/capture.js';
-import { captureSourceHtml } from '../../core/capture/source-html.js';
+import { runCaptureScene, runCaptureSourceHtml } from './inject.js';
 import { emitSvg, type EmitOptions } from '../../core/emit/svg.js';
 import { createOutliner } from '../../core/emit/outline.js';
 import { systemFallbackLoader, systemFontLoader } from './fonts.js';
@@ -158,8 +157,9 @@ async function captureAndEmit(page: Page, opts: RenderOptions): Promise<RenderRe
   await withinViewport(page, opts.width, opts.height);
   if (opts.settleMs) await page.waitForTimeout(opts.settleMs);
 
-  // Dev transpilers (tsx/esbuild keepNames) reference a `__name` helper inside
-  // the serialized capture function; provide a no-op so it resolves in-page.
+  // Dev transpilers (tsx/esbuild keepNames) reference a `__name` helper inside the small functions
+  // serialised by the `page.evaluate` calls of the backend; provide a no-op so it resolves in-page.
+  // (The capture itself is a pre-built bundle and does not need it.)
   await page.evaluate(() => {
     const g = globalThis as any;
     if (!g.__name) g.__name = (t: any) => t;
@@ -167,10 +167,10 @@ async function captureAndEmit(page: Page, opts: RenderOptions): Promise<RenderRe
 
   // Snapshot the source first: capture may temporarily touch the DOM.
   const sourceHtml = opts.captureSourceHtml
-    ? await page.evaluate(captureSourceHtml, undefined)
+    ? await runCaptureSourceHtml(page)
     : undefined;
 
-  const scene: Scene = await page.evaluate(captureScene, {
+  const scene: Scene = await runCaptureScene(page, {
     width: opts.width,
     height: opts.height,
     deviceScaleFactor: dsr,
