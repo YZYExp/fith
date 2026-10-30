@@ -150,3 +150,68 @@ describe('css/clip', () => {
     expect(rrPath(0, 0, 10, 10, [20, 20, 20, 20])).toContain('A5,5 0 0 1'); // clamped to half the shorter side
   });
 });
+
+// ---- capture/background.ts: box geometry and gradient layers (no DOM needed for these) ------------------------
+import { radiiOf, radiiYOf, intersect, clipsContent, parseGradientLayer, singleUrl, layerUrl, type BgEnv } from '../src/core/capture/background.js';
+
+const env = { doc: undefined, win: undefined, normColor: norm, imgInfo: new Map() } as unknown as BgEnv;
+const style = (o: Record<string, string>) => o as unknown as CSSStyleDeclaration;
+
+describe('capture/background geometry', () => {
+  it('radiiOf resolves percentages against the box', () => {
+    const cs = style({ borderTopLeftRadius: '50%', borderTopRightRadius: '10px', borderBottomRightRadius: '0px', borderBottomLeftRadius: '25%' });
+    expect(radiiOf(cs, 200, 100)).toEqual([100, 10, 0, 50]);
+  });
+
+  it('radiiYOf is undefined for circular corners and gives the vertical radii for elliptical ones', () => {
+    const circle = style({ borderTopLeftRadius: '8px', borderTopRightRadius: '8px', borderBottomRightRadius: '8px', borderBottomLeftRadius: '8px' });
+    expect(radiiYOf(circle, 100, 100)).toBeUndefined();
+    const ellipse = style({ borderTopLeftRadius: '50%', borderTopRightRadius: '50%', borderBottomRightRadius: '50%', borderBottomLeftRadius: '50%' });
+    expect(radiiYOf(ellipse, 200, 100)).toEqual([50, 50, 50, 50]);
+  });
+
+  it('intersect clips to the overlap and keeps the radii of the smaller box', () => {
+    const a = { x: 0, y: 0, width: 100, height: 100, radii: [0, 0, 0, 0] as [number, number, number, number] };
+    const b = { x: 50, y: 20, width: 100, height: 40, radii: [8, 8, 8, 8] as [number, number, number, number] };
+    expect(intersect(null, b)).toBe(b);
+    expect(intersect(a, b)).toEqual({ x: 50, y: 20, width: 50, height: 40, radii: [8, 8, 8, 8] });
+  });
+
+  it('clipsContent is true for hidden, clip, scroll and auto on either axis', () => {
+    expect(clipsContent(style({ overflowX: 'visible', overflowY: 'hidden' }))).toBe(true);
+    expect(clipsContent(style({ overflowX: 'visible', overflowY: 'visible' }))).toBe(false);
+  });
+
+  it('reads the url of a single image layer', () => {
+    expect(singleUrl('url("a.png")')).toBe('a.png');
+    expect(singleUrl('url(a.png), url(b.png)')).toBeNull();
+    expect(layerUrl('image-set(url("a.png") 1x, url("b.png") 2x)')).toBe('a.png');
+  });
+});
+
+describe('capture/background gradient layers', () => {
+  const box = { x: 0, y: 0, width: 200, height: 100 };
+
+  it('resolves a corner keyword against the box', () => {
+    const g = parseGradientLayer(env, 'linear-gradient(to top right, rgb(1, 1, 1), rgb(2, 2, 2))', box) as { angle: number };
+    // the 50% line must run through the other two corners, so on a 2:1 box the angle is atan(h / w)
+    expect(g.angle).toBeCloseTo((Math.atan2(100, 200) * 180) / Math.PI, 5);
+  });
+
+  it('keeps px stops, which resolve against the gradient line length', () => {
+    const g = parseGradientLayer(env, 'linear-gradient(90deg, rgb(1, 1, 1) 0px, rgb(2, 2, 2) 100px)', box) as { stops: { offset: number }[] };
+    expect(g.stops.map((s) => s.offset)).toEqual([0, 0.5]);
+  });
+
+  it('recognises radial and conic layers and refuses unknown functions or two gradients in one layer', () => {
+    expect((parseGradientLayer(env, 'radial-gradient(rgb(1, 1, 1), rgb(2, 2, 2))', box) as { type: string }).type).toBe('radial-gradient');
+    expect((parseGradientLayer(env, 'conic-gradient(rgb(1, 1, 1), rgb(2, 2, 2))', box) as { type: string }).type).toBe('conic-gradient');
+    expect(parseGradientLayer(env, 'url(a.png)', box)).toBeNull();
+    expect(parseGradientLayer(env, 'linear-gradient(rgb(1, 1, 1), rgb(2, 2, 2)) linear-gradient(rgb(3, 3, 3), rgb(4, 4, 4))', box)).toBeNull();
+  });
+
+  it('refuses a colour space other than srgb', () => {
+    expect(parseGradientLayer(env, 'linear-gradient(in oklab, rgb(1, 1, 1), rgb(2, 2, 2))', box)).toBeNull();
+    expect(parseGradientLayer(env, 'linear-gradient(in srgb, rgb(1, 1, 1), rgb(2, 2, 2))', box)).not.toBeNull();
+  });
+});
