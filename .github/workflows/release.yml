@@ -1,0 +1,174 @@
+name: Release
+
+# Push a tag vX.Y.Z (or vX.Y.Z-rc.N). The tag is the version: the build stamps
+# it into package.json before packing, so nothing is bumped by hand on main.
+#
+#   build    build, tests, pack the tarball, install it into an empty project and
+#            check every entry and the command, then its sha256
+#   github   a GitHub release on the tag with the tarball and the sha256
+#   npm      the same tarball published as `fith`, behind the `production`
+#            environment; a tag with a suffix (-rc.1, -beta) goes to the `rc`
+#            dist-tag, any other to `latest`
+#
+# npm auth: Trusted Publishing only. The job's GitHub OIDC id-token is exchanged
+# for a credential good for one publish (a one-time credential per run); there is
+# no NPM_TOKEN and no NODE_AUTH_TOKEN. The npm side is bound to the repository,
+# this file name and the `production` environment, so do not rename either. The
+# package is set to require 2FA and disallow tokens: outside this workflow only a
+# maintainer with a one-time password can publish (scripts/npm-bootstrap.sh,
+# .design/release.md).
+
+on:
+  push:
+    tags: ['v*.*.*']
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build, test and pack
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      dist_tag: ${{ steps.version.outputs.dist_tag }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Read the version from the tag and check a license is set
+        id: version
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "❌ tag $TAG is not vX.Y.Z or vX.Y.Z-<suffix> (such as v0.1.0-rc.1)"
+            exit 1
+          fi
+          VERSION="${TAG#v}"
+          if [ -z "$(node -p 'require("./package.json").license || ""')" ]; then
+            echo "❌ package.json has no license"
+            exit 1
+          fi
+          case "$VERSION" in
+            *-*) DIST_TAG=rc ;;
+            *) DIST_TAG=latest ;;
+          esac
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "dist_tag=$DIST_TAG" >> "$GITHUB_OUTPUT"
+          echo "Releasing $VERSION (npm dist-tag $DIST_TAG)"
+
+      # npm checks provenance against the repository field, so it names the repository this run is in.
+      - name: Stamp the version and repository into package.json
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          REPO: ${{ github.repository }}
+        run: |
+          node -e 'const fs=require("fs"),p=JSON.parse(fs.readFileSync("package.json","utf8"));p.version=process.env.VERSION;p.repository={type:"git",url:`git+https://github.com/${process.env.REPO}.git`};fs.writeFileSync("package.json",JSON.stringify(p,null,2)+"\n")'
+          node -p 'require("./package.json").version'
+
+      - uses: pnpm/action-setup@v4
+        with:
+          run_install: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Build
+        run: pnpm build && pnpm build:extension
+
+      - name: Install Playwright browsers
+        run: pnpm exec playwright install chromium --with-deps
+
+      - name: Tests
+        run: pnpm test
+
+      - name: Pack
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          mkdir -p out
+          npm pack --pack-destination out
+          (cd out && sha256sum "fith-$VERSION.tgz" > "fith-$VERSION.tgz.sha256" && cat ./*.sha256)
+
+      - name: Install the tarball into an empty project and run it
+        run: .github/scripts/smoke-package.sh "out/fith-${{ steps.version.outputs.version }}.tgz" "${{ steps.version.outputs.version }}"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: fith-${{ steps.version.outputs.version }}
+          path: out/
+          if-no-files-found: error
+
+  github:
+    name: GitHub release
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: fith-${{ needs.build.outputs.version }}
+          path: out
+
+      - name: Create the release with the tarball attached
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+          DIST_TAG: ${{ needs.build.outputs.dist_tag }}
+        run: |
+          PRERELEASE=()
+          [ "$DIST_TAG" = latest ] || PRERELEASE=(--prerelease)
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$TAG" --repo "$GITHUB_REPOSITORY" --clobber -- out/*
+          else
+            gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --verify-tag --title "$TAG" \
+              --generate-notes "${PRERELEASE[@]}" -- out/*
+          fi
+
+  npm:
+    name: Publish to npm
+    needs: [build, github]
+    runs-on: ubuntu-latest
+    environment: production
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: fith-${{ needs.build.outputs.version }}
+          path: out
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Check npm supports trusted publishing
+        run: |
+          npm --version
+          node -e 'const [a,b,c]=process.argv[1].split(".").map(Number); if (a<11||(a===11&&(b<5||(b===5&&c<1)))) { console.error("npm >= 11.5.1 required for OIDC trusted publishing"); process.exit(1) }' "$(npm --version)"
+
+      # npm silently falls back to token auth (and then fails with E404) when
+      # the OIDC exchange is rejected; do the same exchange here first so the
+      # registry's reason is visible in the log. Fails before anything is published.
+      - name: Verify npm OIDC trusted-publisher exchange
+        run: .github/scripts/npm-oidc-check.sh fith
+
+      - name: Publish fith
+        env:
+          VERSION: ${{ needs.build.outputs.version }}
+          DIST_TAG: ${{ needs.build.outputs.dist_tag }}
+        run: .github/scripts/npm-publish.sh "out/fith-$VERSION.tgz" "$DIST_TAG"

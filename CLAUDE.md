@@ -115,6 +115,14 @@ Re-run all of it after every rebase or merge from `main`. Every new capture beha
 `test/fixtures/` plus a test in `test/visual/` (pixel diff **and** a structural assertion such as "this text
 is still vector" / "no `data:image/png`"), so a silent fall-back to raster fails the build.
 
+## Releases
+
+A `vX.Y.Z` tag publishes `fith` (GitHub release plus npm), see `.design/release.md`. npm auth is Trusted Publishing only
+(`.github/workflows/release.yml`, environment `production`, no token anywhere): do not rename that file or environment, and
+never add an `NPM_TOKEN`. The build stamps the version and repository into `package.json`, so never bump the version by
+hand. Never push a release tag unless a maintainer asks. `.github/scripts/smoke-package.sh` installs the packed tarball
+into an empty project; CI runs it on every PR, so a new entry or a file the package needs must show up there.
+
 ## Real-world Benchmark (`bench/`)
 
 `pnpm bench` runs fith on live sites and on real third-party UI libraries (fetched from npm by
