@@ -6,10 +6,18 @@
 import { captureScene } from '../../core/capture/capture.js';
 import { emitSvg } from '../../core/emit/svg.js';
 import { captureSourceHtml } from '../../core/capture/source-html.js';
-import type { CaptureReport, Rect, Scene } from '../../core/ir/types.js';
+import type { CaptureReport, FontFace, Rect, Scene } from '../../core/ir/types.js';
 import { buildReport } from '../../core/report.js';
 import type { Outliner } from '../../core/emit/outline.js';
 import { createDomRasterizer } from './dom-raster.js';
+
+/** What a host's `rasterize` callback learns about the region it is asked for. */
+export interface RasterInfo {
+  /** The element the region belongs to, when it has one (an `<iframe>`, `<x-embed>`, `<video>`, a 3D-transformed box…). */
+  element?: Element;
+  /** Why the region could not be drawn as vectors (`canvas`, `3d-transform`, `filter`, …). */
+  reason: string;
+}
 
 export interface InPageOptions {
   /** Defaults to the current layout viewport width. */
@@ -18,6 +26,11 @@ export interface InPageOptions {
   height?: number;
   deviceScaleFactor?: number;
   fontMode?: 'embed' | 'outline' | 'none';
+  /**
+   * Faces to embed instead of the ones read from the document's `@font-face` rules (`embed` and `outline` modes).
+   * For frames without network access, or when the host already holds the bytes.
+   */
+  fonts?: FontFace[];
   /**
    * Optional glyph outliner for `outline` mode. Supplied by the caller to keep
    * opentype.js out of the default in-page bundle (so the content script stays
@@ -30,7 +43,7 @@ export interface InPageOptions {
    * arbitrary DOM; an extension provides this via chrome.tabs.captureVisibleTab.
    * When absent, such regions are omitted.
    */
-  rasterize?: (rect: Rect, scale: number) => Promise<string | null>;
+  rasterize?: (rect: Rect, scale: number, info: RasterInfo) => Promise<string | null>;
   /**
    * Capture only the currently-visible viewport instead of the full scrollable
    * document. Coordinates stay viewport-relative (scroll is NOT reset), so a
@@ -91,6 +104,7 @@ async function run(opts: InPageOptions, root?: Element): Promise<{ svg: string; 
       // Viewport-only skips this so the capture matches what's on screen now.
       captureScrollableContent: !viewportOnly,
       rasterElements,
+      fonts: opts.fonts,
       unfurlScrollContainers: opts.unfurlScrollContainers,
     },
     root,
@@ -107,7 +121,10 @@ async function run(opts: InPageOptions, root?: Element): Promise<{ svg: string; 
 
   if (opts.rasterize) {
     for (const { node, t } of pendingRasters(false)) {
-      node.href = await opts.rasterize({ x: t.x, y: t.y, width: t.width, height: t.height }, scene.deviceScaleFactor);
+      node.href = await opts.rasterize({ x: t.x, y: t.y, width: t.width, height: t.height }, scene.deviceScaleFactor, {
+        element: rasterElements.get(node.id),
+        reason: node.reason,
+      });
       if (node.href) node.filledBy = 'screenshot';
     }
   }

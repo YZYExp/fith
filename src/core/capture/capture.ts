@@ -140,7 +140,8 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
 
   restoreScroll();
 
-  const fonts = (opts.fontMode ?? 'embed') === 'embed' ? await collectFonts(ctx.nodes, { doc, win, externalCss: (opts as any).externalCss }) : [];
+  const fonts =
+    (opts.fontMode ?? 'embed') !== 'embed' ? [] : opts.fonts ?? (await collectFonts(ctx.nodes, { doc, win, externalCss: opts.externalCss }));
 
   return {
     width: W,

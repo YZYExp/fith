@@ -296,6 +296,11 @@ export interface CaptureOptions {
   deviceScaleFactor?: number;
   /** 'embed' inlines @font-face files as base64; 'none' references families by name. */
   fontMode?: 'embed' | 'none';
+  /**
+   * In `embed` mode, use exactly these faces instead of reading the document's `@font-face` rules. For hosts
+   * that already hold the font bytes (a frame without network access, a subset cut from the used text).
+   */
+  fonts?: FontFace[];
   /** Capture per-glyph x positions for outline mode (slower). */
   collectGlyphX?: boolean;
   /**
