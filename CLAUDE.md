@@ -17,7 +17,7 @@ It works in three environments:
 - **Chrome extension** (`src/backends/extension/`) — popup + content script + service worker
 
 The core is a two-phase pipeline:
-1. `captureScene` (runs in-page) — walks the DOM, emits a `Scene` IR of `PaintNode[]`
+1. `captureScene` (runs in-page, `src/core/capture/`) — walks the DOM, emits a `Scene` IR of `PaintNode[]`
 2. `emitSvg` (Node or in-page) — serializes the IR to an SVG string
 
 ## Key Architecture Constraints
@@ -40,6 +40,14 @@ The core is a two-phase pipeline:
   iframe (`instanceof HTMLElement` is false across realms). Use `win.getComputedStyle`, `win.HTMLElement`,
   `doc.createElement`… in new code; `test/visual/cross-document.test.ts` guards it. Known gap: the
   `dom-raster.ts` fallback still uses the page globals.
+
+- `captureScene` (`capture.ts`, ~160 lines) only sets up a run and builds one `CaptureCtx` (`ctx.ts`: the document and
+  window, options, the paint list, counters, caches and the bound parsers); everything else is a function of a sibling
+  module taking `ctx` first: `walk.ts` (paint order, stacking contexts, groups), `elements.ts` (visibility, raster
+  decisions, inline SVG, images, canvases), `box.ts` (backgrounds, borders, shadows, pseudo-elements), `text.ts`
+  (text, form controls, list markers, native controls). Per-run state belongs in `CaptureCtx`, never in a module-level
+  variable (two captures may run at once in different documents). Cycles between these modules are fine: they only
+  call each other at run time.
 
 - Code that is not a paint decision lives beside `captureScene` in `src/core/capture/`: `unfurl.ts` (the temporary
   scroll / content-visibility / unfurl changes, each returning its own idempotent `restore`, which `captureScene`
