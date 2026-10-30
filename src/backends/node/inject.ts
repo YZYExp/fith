@@ -9,13 +9,14 @@ let source: Promise<string> | undefined;
  */
 function bundleSource(): Promise<string> {
   source ??= (async () => {
-    const generated = '../../inject/bundle.generated.js';
-    try {
-      return ((await import(generated)) as { default: string }).default;
-    } catch {
+    // From source (tsx / vitest) always bundle the current files: a `bundle.generated.ts` left by an earlier
+    // build would silently run old capture code.
+    if (import.meta.url.endsWith('.ts')) {
       const { injectSource } = await import(/* @vite-ignore */ '../../../scripts/build-inject.js' as string);
       return (injectSource as () => Promise<string>)();
     }
+    const generated = '../../inject/bundle.generated.js';
+    return ((await import(generated)) as { default: string }).default;
   })();
   return source;
 }

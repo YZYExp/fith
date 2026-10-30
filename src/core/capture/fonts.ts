@@ -110,24 +110,29 @@ export function fontRequests(painted: PaintNode[]): FontRequest[] {
   const byKey = new Map<string, { family: string; weight: string; style: string; chars: Set<string> }>();
   for (const node of painted) {
     if (node.kind !== 'text') continue;
-    const family = node.fontFamily.split(',')[0].trim().replace(/^["']|["']$/g, '');
-    if (!family) continue;
-    const key = family.toLowerCase() + '|' + node.fontWeight + '|' + node.fontStyle;
-    let entry = byKey.get(key);
-    if (!entry) byKey.set(key, (entry = { family, weight: node.fontWeight, style: node.fontStyle, chars: new Set() }));
-    for (const line of node.lines) for (const ch of line.text) entry.chars.add(ch);
+    // every listed family: the browser falls through the list per character
+    for (const raw of node.fontFamily.split(',')) {
+      const family = raw.trim().replace(/^["']|["']$/g, '');
+      if (!family) continue;
+      const key = family.toLowerCase() + '|' + node.fontWeight + '|' + node.fontStyle;
+      let entry = byKey.get(key);
+      if (!entry) byKey.set(key, (entry = { family, weight: node.fontWeight, style: node.fontStyle, chars: new Set() }));
+      for (const line of node.lines) for (const ch of line.text) entry.chars.add(ch);
+    }
   }
   return [...byKey.values()].map((e) => ({ family: e.family, weight: e.weight, style: e.style, chars: [...e.chars].join('') }));
 }
 
 /** Ask the host for each used face; a throwing or empty answer leaves that family referenced by name. */
 export async function resolveFonts(painted: PaintNode[], resolve: FontResolver): Promise<FontFace[]> {
-  const out: FontFace[] = [];
-  for (const req of fontRequests(painted)) {
-    try {
-      const got = await resolve(req);
-      if (got) out.push(...(Array.isArray(got) ? got : [got]));
-    } catch { /* the family stays referenced by name */ }
-  }
-  return out;
+  const answers = await Promise.all(
+    fontRequests(painted).map(async (req) => {
+      try {
+        return await resolve(req);
+      } catch {
+        return null; // the family stays referenced by name
+      }
+    }),
+  );
+  return answers.flatMap((got) => (got ? (Array.isArray(got) ? got : [got]) : []));
 }

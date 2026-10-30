@@ -124,10 +124,14 @@ async function run(opts: InPageOptions, root?: Element): Promise<{ svg: string; 
 
   if (opts.rasterize) {
     for (const { node, t } of pendingRasters(false)) {
-      node.href = await opts.rasterize({ x: t.x, y: t.y, width: t.width, height: t.height }, scene.deviceScaleFactor, {
-        element: rasterElements.get(node.id),
-        reason: node.reason,
-      });
+      try {
+        node.href = await opts.rasterize({ x: t.x, y: t.y, width: t.width, height: t.height }, scene.deviceScaleFactor, {
+          element: rasterElements.get(node.id),
+          reason: node.reason,
+        });
+      } catch {
+        node.href = null; // one region the host could not draw must not lose the whole capture
+      }
       if (node.href) node.filledBy = 'screenshot';
     }
   }
