@@ -57,6 +57,18 @@ describe('outline font resolution (unit)', () => {
   });
 });
 
+/** What fontconfig offers on this machine, so a failing ratio says which fonts it was measured with. */
+const fontContext = (() => {
+  const run = (args: string[]) => {
+    try {
+      return execFileSync(args[0], args.slice(1), { encoding: 'utf8' }).trim().split('\n').slice(0, 12).join(' | ');
+    } catch {
+      return 'n/a';
+    }
+  };
+  return `zh fonts: ${run(['fc-list', ':lang=zh', 'family'])}; sans: ${run(['fc-match', 'sans-serif:lang=zh-cn'])}; serif: ${run(['fc-match', 'serif'])}; arial: ${run(['fc-match', 'Arial'])}`;
+})();
+
 describe('outline mode: per-glyph font fallback (visual)', () => {
   let server: { url: string; close: () => Promise<void> };
 
@@ -78,10 +90,10 @@ describe('outline mode: per-glyph font fallback (visual)', () => {
     if (hasCjkFont) {
       // with a CJK system font every glyph is outlined; before the fix CJK became tofu
       expect(svg).not.toContain('<text');
-      expect(r.ratio).toBeLessThan(0.01);
+      expect(r.ratio, fontContext).toBeLessThan(0.01);
     } else {
       // without one, CJK lines stay <text> rather than being drawn as .notdef
-      expect(r.ratio).toBeLessThan(0.03);
+      expect(r.ratio, fontContext).toBeLessThan(0.03);
     }
   }, 90_000);
 });
