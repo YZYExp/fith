@@ -6,7 +6,8 @@
 import { captureScene } from '../../core/capture/capture.js';
 import { emitSvg } from '../../core/emit/svg.js';
 import { captureSourceHtml } from '../../core/capture/source-html.js';
-import type { Rect, Scene } from '../../core/ir/types.js';
+import type { CaptureReport, Rect, Scene } from '../../core/ir/types.js';
+import { buildReport } from '../../core/report.js';
 import type { Outliner } from '../../core/emit/outline.js';
 import { createDomRasterizer } from './dom-raster.js';
 
@@ -55,7 +56,7 @@ export interface InPageOptions {
   unfurlScrollContainers?: boolean;
 }
 
-async function run(opts: InPageOptions, root?: Element): Promise<string> {
+async function run(opts: InPageOptions, root?: Element): Promise<{ svg: string; report: CaptureReport }> {
   // the element's own document and window: it may live in a same-origin iframe of this page
   const doc = root?.ownerDocument ?? document;
   const win = doc.defaultView ?? window;
@@ -107,6 +108,7 @@ async function run(opts: InPageOptions, root?: Element): Promise<string> {
   if (opts.rasterize) {
     for (const { node, t } of pendingRasters(false)) {
       node.href = await opts.rasterize({ x: t.x, y: t.y, width: t.width, height: t.height }, scene.deviceScaleFactor);
+      if (node.href) node.filledBy = 'screenshot';
     }
   }
 
@@ -116,24 +118,37 @@ async function run(opts: InPageOptions, root?: Element): Promise<string> {
       const el = rasterElements.get(node.id);
       if (!el) continue;
       node.href = await domRaster(el, { x: t.x, y: t.y, width: t.width, height: t.height }, scene.deviceScaleFactor);
+      if (node.href) node.filledBy = 'dom';
     }
   }
 
   if (opts.fontMode === 'outline' && opts.outline) {
+    const report = buildReport(scene, { outlined: true });
     scene.fonts = [];
-    return emitSvg(scene, { outline: opts.outline });
+    return { svg: emitSvg(scene, { outline: opts.outline }), report };
   }
-  return emitSvg(scene);
+  return { svg: emitSvg(scene), report: buildReport(scene) };
 }
 
 /** Capture the current page into a self-contained SVG string. */
-export function captureCurrentPage(opts: InPageOptions = {}): Promise<string> {
-  return run(opts);
+export async function captureCurrentPage(opts: InPageOptions = {}): Promise<string> {
+  return (await run(opts)).svg;
 }
 
 /** Capture a single element subtree into a self-contained SVG cropped to it. */
-export function captureElement(el: Element, opts: InPageOptions = {}): Promise<string> {
+export async function captureElement(el: Element, opts: InPageOptions = {}): Promise<string> {
+  return (await run(opts, el)).svg;
+}
+
+/** Like `captureCurrentPage`, with the report of what was drawn as pictures or left blank. */
+export function captureCurrentPageDetailed(opts: InPageOptions = {}): Promise<{ svg: string; report: CaptureReport }> {
+  return run(opts);
+}
+
+/** Like `captureElement`, with the report of what was drawn as pictures or left blank. */
+export function captureElementDetailed(el: Element, opts: InPageOptions = {}): Promise<{ svg: string; report: CaptureReport }> {
   return run(opts, el);
 }
 
-export { captureScene, emitSvg, captureSourceHtml };
+export { captureScene, emitSvg, captureSourceHtml, buildReport };
+export type { CaptureReport };

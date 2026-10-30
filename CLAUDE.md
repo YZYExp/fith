@@ -57,6 +57,12 @@ The core is a two-phase pipeline:
   layers, mask layers and background / image layers; the functions that need the page's colour normaliser, the
   loaded-image table or the document take a `BgEnv` first, and `captureScene` binds one with `bindEnv`.
 
+- A capture says what it could not draw as vectors: `buildReport(scene)` (`src/core/report.ts`) lists the raster
+  nodes (reason, rect, who filled them: `screenshot` from the backend or the host's `rasterize`, or `dom` from the
+  in-page re-render), the ones left blank (`omitted`) and how each font family is carried. `renderDetailed()` and
+  `captureElementDetailed()` / `captureCurrentPageDetailed()` return it; a backend that fills a raster node must set
+  `node.filledBy`. `test/visual/report.test.ts` guards it.
+
 - The `Scene` IR is the boundary between the in-page capture and the Node backend.
   Fields added to `Scene` must be added to `src/core/ir/types.ts`.
 
