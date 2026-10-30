@@ -13,7 +13,7 @@ async function main() {
   const setDisabled = (disabled: boolean) => controls.forEach((control) => { control.disabled = disabled; });
   setDisabled(true);
 
-  const empty = (message: string, hint = 'Capture the page again from the fitting-html extension.') => {
+  const empty = (message: string, hint = 'Capture the page again from the fith extension.') => {
     const node = document.createElement('div');
     node.id = 'empty';
     const heading = document.createElement('h1');
@@ -55,7 +55,7 @@ async function main() {
     $('file-name').textContent = name;
     $('file-name').title = name;
     $('meta').textContent = `${width} × ${height} px · ${size}`;
-    document.title = `${name} · fitting-html`;
+    document.title = `${name} · fith`;
     $('viewer-status').textContent = 'SVG ready. Scroll to explore.';
     setDisabled(false);
 

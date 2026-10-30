@@ -20,7 +20,7 @@ const html = `<!doctype html><html><head><style>
 body { margin: 0; background: #fff; }
 .t { font-family: 'FitTestMono', sans-serif; font-size: 28px; color: #111; padding: 24px; line-height: 1.5; }
 </style></head><body>
-<div class="t">Embedded WWW iiii 12345<br>fitting-html font test</div>
+<div class="t">Embedded WWW iiii 12345<br>fitting HTML font test</div>
 </body></html>`;
 
 describe('font embedding', () => {

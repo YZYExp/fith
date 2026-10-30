@@ -31,7 +31,7 @@ describe('capture an element that lives in another document', () => {
       entryPoints: [resolve(__dirname, '../../src/backends/browser/index.ts')],
       bundle: true,
       format: 'iife',
-      globalName: 'FittingHtml',
+      globalName: 'Fith',
       write: false,
       target: 'chrome110',
     });
@@ -60,7 +60,7 @@ describe('capture an element that lives in another document', () => {
     const svg: string = await page.evaluate(async () => {
       const el = (document.getElementById('f') as HTMLIFrameElement).contentDocument!.getElementById('card')!;
       // @ts-expect-error injected global
-      return await FittingHtml.captureElement(el, { fontMode: 'none' });
+      return await Fith.captureElement(el, { fontMode: 'none' });
     });
 
     expect(svg).toContain('<text');
@@ -102,7 +102,7 @@ describe('capture an element that lives in another document', () => {
     const out = await page.evaluate(async () => {
       const el = (document.getElementById('f') as HTMLIFrameElement).contentDocument!.getElementById('wrap')!;
       // @ts-expect-error injected global
-      return await FittingHtml.captureElementDetailed(el, { fontMode: 'none' });
+      return await Fith.captureElementDetailed(el, { fontMode: 'none' });
     });
     expect(out.svg).toContain('data:image/png');
     // the inline <svg> inside the picture must survive: `instanceof SVGElement` is false across realms

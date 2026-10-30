@@ -17,14 +17,14 @@ const md = `# fith
 
 ## Install
 \`\`\`bash
-pnpm add fitting-html
+pnpm add fith
 npx playwright install chromium
 \`\`\`
 
 ## Usage
 ### CLI
 \`\`\`ts
-import { render } from 'fitting-html';
+import { render } from 'fith';
 
 const svg = await render('https://example.com', { width: 1280, fontMode: 'embed' });
 console.log(svg.length); // → bytes

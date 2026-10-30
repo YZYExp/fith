@@ -2,11 +2,11 @@ FITH — VITE / REACT / TYPESCRIPT HOMEPAGE
 
 fith is short for fitting HTML (fit + h), inspired by the idea of fitting
 anything. This project exports rendered HTML as vector-first SVG. Repository
-links and Pages URLs anticipate the planned rename to 0x0079/fith. The root
-package name and CLI command currently remain fitting-html.
+links and Pages URLs use 0x0079/fith. The project, the root package and the
+CLI command are all named fith.
 
 An independent pnpm project in homepage/. Requires Node.js >=22.12.0 and
-pnpm 10.33.0. The root fitting-html package and its lockfile are unchanged.
+pnpm 10.33.0. The root fith package and its lockfile are unchanged.
 
 DEVELOP AND PREVIEW
   cd homepage

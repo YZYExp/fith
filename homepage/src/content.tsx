@@ -32,7 +32,7 @@ const cliCode = `node dist/backends/node/cli.js \\
   --width 520 --height 360 \\
   --font-mode outline`;
 
-const browserCode = `import { captureElement } from 'fitting-html/browser';
+const browserCode = `import { captureElement } from 'fith/browser';
 
 const element = document.querySelector('.card');
 
@@ -190,7 +190,7 @@ const zh = {
         filename: "capture.ts",
         description: "在浏览器中捕获整页或单个元素。核心使用 DOM API，不需要在浏览器运行时依赖 Node。",
         code: browserCode,
-        note: "在使用 fitting-html 模块的浏览器项目中运行。需要栅格回退的区域默认由页内 DOM 渲染补齐；也可以提供自己的 rasterize 适配器。",
+        note: "在使用 fith 模块的浏览器项目中运行。需要栅格回退的区域默认由页内 DOM 渲染补齐；也可以提供自己的 rasterize 适配器。",
       },
       {
         id: "extension",
@@ -403,7 +403,7 @@ const en: Messages = {
         description:
           "Capture the whole page or one element inside the browser. The core uses DOM APIs only — no Node at runtime.",
         code: browserCode,
-        note: "Run in a browser project that uses the fitting-html module. Regions that need a raster are re-rendered from the DOM in-page by default; you can also pass your own rasterize adapter.",
+        note: "Run in a browser project that uses the fith module. Regions that need a raster are re-rendered from the DOM in-page by default; you can also pass your own rasterize adapter.",
       },
       {
         id: "extension",

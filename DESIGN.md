@@ -1,9 +1,9 @@
 # fith 设计规划
 
 fith 源自 **fitting HTML**（`fit`：拟合；`h`：HTML），以「拟合万物」为理念，
-本项目聚焦 HTML 页面的视觉重建与 SVG 导出。仓库链接按迁移至
-[`0x0079/fith`](https://github.com/0x0079/fith) 准备；当前包名与 CLI 命令仍为
-`fitting-html`，下方 API 和命令示例与现有实现保持一致。
+本项目聚焦 HTML 页面的视觉重建与 SVG 导出。仓库为
+[`0x0079/fith`](https://github.com/0x0079/fith)；项目、npm 包名与 CLI 命令统一为
+`fith`，下方 API 和命令示例与现有实现一致。
 
 > 目标：把任意 HTML（含 CSS）**像素级忠实地**转换为一份**纯 SVG**。
 > 技术栈：TypeScript；布局计算复用浏览器引擎。
@@ -105,7 +105,7 @@ src/
       playwright.ts     启动 Chromium、page.evaluate 注入捕获、截图回退
       fonts.ts          系统字体解析（fontconfig）供 outline 模式
       diff-patch.ts     diffPatch 选项：渲染回 Chromium 比对并打栅格补丁
-      cli.ts            命令行入口（bin: fitting-html）
+      cli.ts            命令行入口（bin: fith）
     browser/
       index.ts          页内库：当前页直接运行 core；rasterize/outline 为可注入选项
       viewport-raster.ts 共享的非滚动 createViewportRasterizer（页内 + 扩展共用）
@@ -227,7 +227,7 @@ interface CaptureBackend {
 ## 8. API 设计
 
 ```ts
-import { htmlToSvg } from 'fitting-html';
+import { htmlToSvg } from 'fith';
 
 const svg: string = await htmlToSvg(html, {
   width: 1280,            // 视口宽（必填）
@@ -254,14 +254,14 @@ htmlToSvg({ page }, opts);   // 复用调用方的 Playwright page，便于批�
 CLI：
 
 ```
-fitting-html input.html -o out.svg --width 1280 --font-mode outline
-fitting-html https://example.com -o out.svg
+fith input.html -o out.svg --width 1280 --font-mode outline
+fith https://example.com -o out.svg
 ```
 
 **插件 / 页内库**：同一核心，捕获当前页（无需传 width/height，自动取视口）：
 
 ```ts
-import { captureCurrentPage } from 'fitting-html/browser';
+import { captureCurrentPage } from 'fith/browser';
 const { svg } = await captureCurrentPage({ fontMode: 'outline' });
 // 插件中由 content script 调用；得到 svg 后下载或回传 background
 ```

@@ -1,10 +1,10 @@
 {
-  "name": "fitting-html",
+  "name": "fith",
   "version": "0.0.0",
   "description": "Pixel-faithful HTML to pure SVG conversion using a headless browser engine.",
   "type": "module",
   "bin": {
-    "fitting-html": "./dist/backends/node/cli.js"
+    "fith": "./dist/backends/node/cli.js"
   },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",

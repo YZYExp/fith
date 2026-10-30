@@ -21,7 +21,7 @@ beforeAll(async () => {
     entryPoints: [resolve(__dirname, '../../src/backends/browser/index.ts')],
     bundle: true,
     format: 'iife',
-    globalName: 'FittingHtml',
+    globalName: 'Fith',
     write: false,
     target: 'chrome110',
   });
@@ -38,7 +38,7 @@ afterAll(async () => {
 
 const capture = (selector: string, opts: Record<string, unknown> = {}) =>
   page.evaluate(
-    ([sel, o]) => (window as any).FittingHtml.captureElement(document.querySelector(sel as string), o),
+    ([sel, o]) => (window as any).Fith.captureElement(document.querySelector(sel as string), o),
     [selector, opts] as const,
   ) as Promise<string>;
 const sessions = (svg: string) => new Set(svg.match(/Session \d+-\d+/g) ?? []).size;

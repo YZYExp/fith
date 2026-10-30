@@ -1,5 +1,5 @@
 import { chromium } from "playwright";
-import { htmlToSvg } from "../../dist/index.js";
+import { htmlToSvg } from "../../dist/node.js";
 import { writeFile } from "node:fs/promises";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
@@ -29,7 +29,7 @@ try {
   );
   await writeFile(`${directory}/card.svg`, svg);
   console.log(
-    "Generated card.svg with fitting-html and captured card.png from the source HTML.",
+    "Generated card.svg with fith and captured card.png from the source HTML.",
   );
 } finally {
   await browser.close();

@@ -25,7 +25,7 @@ describe('element (subtree) capture', () => {
         entryPoints: [resolve(__dirname, '../../src/backends/browser/index.ts')],
         bundle: true,
         format: 'iife',
-        globalName: 'FittingHtml',
+        globalName: 'Fith',
         write: false,
         target: 'chrome110',
       });
@@ -57,7 +57,7 @@ describe('element (subtree) capture', () => {
         await page.addScriptTag({ content: code });
         const svg: string = await page.evaluate(async () => {
           // @ts-expect-error injected global
-          return await FittingHtml.captureElement(document.querySelector('.card'));
+          return await Fith.captureElement(document.querySelector('.card'));
         });
 
         // viewBox must be cropped to the element box (not the full page at 0,0)

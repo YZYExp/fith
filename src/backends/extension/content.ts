@@ -179,7 +179,7 @@ function snapshotSource(enabled: boolean, root?: Element): string | null {
   try {
     return captureSourceHtml(root);
   } catch (e) {
-    console.error('[fitting-html] source snapshot failed', e);
+    console.error('[fith] source snapshot failed', e);
     return null;
   }
 }
@@ -318,7 +318,7 @@ function startPicker(fontMode: FontMode, mode: OutputMode, withSource: boolean, 
           await output(svg, safeName(pickName), mode);
           saveSource(source, pickName);
         })
-        .catch((err) => console.error('[fitting-html]', err))
+        .catch((err) => console.error('[fith]', err))
         .finally(() => { captureActive = false; });
     }
   };

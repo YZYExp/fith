@@ -6,10 +6,10 @@
 or elements into self-contained, vector-first SVG files. The name comes from the
 idea of fitting anything; this project focuses on HTML visual reconstruction.
 
-Use **fith** as the project display name. Repository links target the planned
-rename to `https://github.com/0x0079/fith`. The package name and CLI command
-currently remain `fitting-html`; imports and command examples must match those
-actual identifiers.
+**fith** is the one name for the project, the npm package and the CLI command:
+`import … from 'fith'`, `fith/node`, `fith/browser`, `fith/outline`, `fith input.html`.
+"fitting HTML" is only what the name stands for. Repository links point to
+`https://github.com/0x0079/fith`.
 
 It works in three environments:
 - **Node/Playwright** (`src/backends/node/playwright.ts`) — full-page SVG via a headless Chromium
