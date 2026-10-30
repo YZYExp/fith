@@ -123,10 +123,12 @@ describe('css/filter', () => {
       { fn: 'brightness', amount: 1.2 },
       { fn: 'hue-rotate', deg: 180 },
     ]);
-    // getComputedStyle puts the colour first, which is the only order the parser reads
-    expect(parseFilterList('drop-shadow(rgb(0, 0, 0) 2px 3px 4px)', norm)).toEqual([
-      { fn: 'drop-shadow', x: 2, y: 3, blur: 4, color: 'rgb(0, 0, 0)' },
-    ]);
+    // getComputedStyle puts the colour first; an author-order value (colour last) reads the same
+    for (const v of ['drop-shadow(rgb(0, 0, 0) 2px 3px 4px)', 'drop-shadow(2px 3px 4px rgb(0, 0, 0))']) {
+      expect(parseFilterList(v, norm)).toEqual([{ fn: 'drop-shadow', x: 2, y: 3, blur: 4, color: 'rgb(0, 0, 0)' }]);
+    }
+    expect(parseFilterList('drop-shadow(2px 3px red)', norm)).toEqual([{ fn: 'drop-shadow', x: 2, y: 3, blur: 0, color: 'red' }]);
+    expect(parseFilterList('drop-shadow(1px 2px)', norm)).toEqual([{ fn: 'drop-shadow', x: 1, y: 2, blur: 0, color: 'rgb(0, 0, 0)' }]);
   });
 
   it('returns null for none and for functions SVG cannot reproduce', () => {
