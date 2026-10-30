@@ -67,7 +67,7 @@ export function unfurlScrollContainers(win: Win, rootEl: Element): () => void {
 // Reset all scroll positions so scrolled-out content is at its natural position
 // during capture. getBoundingClientRect() forces a synchronous layout flush, so
 // positions are correct even though the reset is synchronous.
-// Also override content-visibility:auto/hidden — browsers skip layout for
+// Also override content-visibility:auto — browsers skip layout for
 // off-screen content-visibility:auto elements, leaving their children with zero
 // bounding rects that would be culled as invisible (GitHub issue feeds, etc.).
 // Both states are restored after capture.
@@ -106,7 +106,8 @@ export function resetScrollAndContentVisibility(doc: Document, win: Win, rootEl:
       h.scrollLeft = 0;
     }
     const cv = (win.getComputedStyle(h) as any).contentVisibility;
-    if (cv === 'auto' || cv === 'hidden') {
+    // only `auto` (skipped because off-screen); `hidden` is the author hiding the content on purpose
+    if (cv === 'auto') {
       cvSaved.push({ el: h, v: h.style.contentVisibility });
       h.style.contentVisibility = 'visible';
     }
