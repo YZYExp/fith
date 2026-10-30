@@ -27,7 +27,13 @@ The core is a two-phase pipeline:
   `pnpm build`; from source it is bundled on the fly), and `src/backends/node/inject.ts` evaluates that once per
   page. In-page code may therefore import modules. `captureScene` itself is still one large closure; splitting it is
   the next step (see the refactor plan). Keep it free of Node APIs: it also runs in the browser library and the
-  extension.
+  extension. Anything that evaluates `captureScene` in a page (tests, scripts) must use `runCaptureScene`, never
+  `page.evaluate(captureScene)`: with imports the function no longer serialises.
+
+- `src/css/` holds the pure CSS parsers split out of `captureScene` (colour, gradient, shadow, filter, transform,
+  clip path, small string helpers): strings in, data out, no DOM, unit-tested in `test/css.test.ts`. Parsers that
+  need the page's colour normaliser (it uses a canvas) take it as a `ColorNorm` argument; `captureScene` binds its
+  own `normColor` in thin wrappers. Put new CSS parsing here, not inside the closure.
 
 - The `Scene` IR is the boundary between the in-page capture and the Node backend.
   Fields added to `Scene` must be added to `src/core/ir/types.ts`.
@@ -117,6 +123,7 @@ behaviour with a fixture + test in `test/visual/realworld-regressions.test.ts` a
 ```
 test/
   emit.test.ts              # unit tests for the SVG emitter
+  css.test.ts               # unit tests for src/css (pure CSS parsers)
   viewport-raster.test.ts   # pure unit: createViewportRasterizer (origin offset,
                             #   shootRegion precedence, off-screen → null)
   shot-scheduler.test.ts    # pure unit: createShotScheduler rate-limit/retry (virtual clock)

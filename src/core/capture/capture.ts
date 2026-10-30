@@ -1,4 +1,16 @@
 import type { Scene, PaintNode, Clip, CornerRadii, CaptureOptions, BgLayer } from '../ir/types.js';
+import { num, splitTopLevel, splitTopLevelWs, lenToPx } from '../../css/util.js';
+import { transparent, rgbaOf } from '../../css/color.js';
+import { parseMatrix } from '../../css/transform.js';
+import {
+  sideToAngle,
+  parseLinearGradient as cssParseLinearGradient,
+  parseFirstLinearGradient as cssParseFirstLinearGradient,
+  parseGradientStops as cssParseGradientStops,
+} from '../../css/gradient.js';
+import { parseShadows as cssParseShadows, parseInsetShadows as cssParseInsetShadows } from '../../css/shadow.js';
+import { parseFilterList as cssParseFilterList, filterOverflow, pureBlur } from '../../css/filter.js';
+import { rrPath } from '../../css/clip.js';
 
 /**
  * Captures the current page into a Scene IR. Runs INSIDE the page context (bundled into
@@ -140,133 +152,19 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
     return out;
   };
 
-  const num = (v: string | null | undefined) => {
-    const n = parseFloat(v || '');
-    return isFinite(n) ? n : 0;
-  };
+  // CSS parsers live in src/css (pure, unit-tested); these bind the page's colour normaliser.
+  const parseLinearGradient = (value: string) => cssParseLinearGradient(value, normColor);
+  const parseFirstLinearGradient = (value: string) => cssParseFirstLinearGradient(value, normColor);
+  const parseGradientStops = (parts: string[], lineLen: number, repeating = false) => cssParseGradientStops(parts, lineLen, normColor, repeating);
+  const parseShadows = (value: string) => cssParseShadows(value, normColor);
+  const parseInsetShadows = (value: string) => cssParseInsetShadows(value, normColor);
+  const parseFilterList = (v: string | undefined) => cssParseFilterList(v, normColor);
 
-  const transparent = (c: string) =>
-    !c || c === 'transparent' || c === 'rgba(0, 0, 0, 0)' ||
-    // alpha-0 only: a bare `, 0)` suffix also matches opaque rgb(255, 153, 0) (blue channel 0)
-    /^(?:rgba|hsla)\([^)]*,\s*0(?:\.0+)?\)\s*$/.test(c) || /\/\s*0(?:\.0+)?%?\s*\)\s*$/.test(c);
 
-  const parseMatrix = (tf: string) => {
-    if (!tf || tf === 'none') return null;
-    const m = tf.match(/matrix\(([^)]+)\)/);
-    if (m) {
-      const p = m[1].split(',').map((x) => parseFloat(x));
-      return { a: p[0], b: p[1], c: p[2], d: p[3], e: p[4], f: p[5] };
-    }
-    const m3 = tf.match(/matrix3d\(([^)]+)\)/);
-    if (m3) {
-      const p = m3[1].split(',').map((x) => parseFloat(x));
-      return { a: p[0], b: p[1], c: p[4], d: p[5], e: p[12], f: p[13] };
-    }
-    return null;
-  };
 
-  const splitTopLevel = (s: string): string[] => {
-    const out: string[] = [];
-    let depth = 0;
-    let cur = '';
-    for (const ch of s) {
-      if (ch === '(') depth++;
-      else if (ch === ')') depth--;
-      if (ch === ',' && depth === 0) {
-        out.push(cur);
-        cur = '';
-      } else cur += ch;
-    }
-    if (cur.trim()) out.push(cur);
-    return out;
-  };
 
-  const sideToAngle: Record<string, number> = {
-    'to top': 0,
-    'to right': 90,
-    'to bottom': 180,
-    'to left': 270,
-  };
 
-  // Parse a single linear-gradient() into a structured fill, or null if it is
-  // anything we don't vectorize (radial/conic/url, corner keywords, px stops,
-  // multiple layers) — those fall back to raster.
-  const parseLinearGradient = (value: string) => {
-    const v = value.trim();
-    if (!/^linear-gradient\(/.test(v)) return null;
-    if (v.lastIndexOf('linear-gradient(') !== 0) return null; // single layer only
-    const inner = v.slice(v.indexOf('(') + 1, v.lastIndexOf(')'));
-    const parts = splitTopLevel(inner).map((p) => p.trim());
-    if (parts.length === 0) return null;
 
-    let angle = 180;
-    let i = 0;
-    const first = parts[0];
-    if (/deg$/.test(first)) {
-      angle = parseFloat(first);
-      i = 1;
-    } else if (/^to\b/.test(first)) {
-      if (!(first in sideToAngle)) return null; // corner keyword: aspect-dependent, raster it
-      angle = sideToAngle[first];
-      i = 1;
-    } else if (/(rad|turn|grad)$/.test(first)) {
-      const angleNum = parseFloat(first);
-      if (/turn$/.test(first)) angle = angleNum * 360;
-      else if (/grad$/.test(first)) angle = angleNum * 0.9;
-      else angle = (angleNum * 180) / Math.PI;
-      i = 1;
-    }
-
-    const stops: { offset: number | null; color: string }[] = [];
-    for (; i < parts.length; i++) {
-      const seg = parts[i];
-      const colorMatch = seg.match(
-        /^((?:rgba?|hsla?|oklch|oklab|lab|lch|hwb|color)\([^)]+\)|#[0-9a-fA-F]+|[a-zA-Z]+)/,
-      );
-      if (!colorMatch) return null;
-      const rawColor = colorMatch[0];
-      const color = normColor(rawColor);
-      // SVG stop-opacity interpolation diverges from CSS when stop alphas differ;
-      // raster gradients with any non-opaque stop to stay faithful.
-      const alpha = color.match(/rgba\([^)]*,\s*([\d.]+)\s*\)$/);
-      if ((alpha && parseFloat(alpha[1]) < 1) || rawColor === 'transparent') return null;
-      const rest = seg.slice(rawColor.length).trim();
-      const positions = rest ? rest.split(/\s+/) : [];
-      if (positions.length === 0) {
-        stops.push({ offset: null, color });
-      } else {
-        for (const p of positions) {
-          if (!/%$/.test(p)) return null; // px / other units: raster
-          stops.push({ offset: parseFloat(p) / 100, color });
-        }
-      }
-    }
-    if (stops.length < 2) return null;
-
-    // fill missing offsets (CSS rules) and enforce monotonic non-decreasing
-    if (stops[0].offset == null) stops[0].offset = 0;
-    if (stops[stops.length - 1].offset == null) stops[stops.length - 1].offset = 1;
-    let lastDefined = 0;
-    for (let k = 1; k < stops.length; k++) {
-      if (stops[k].offset != null) {
-        const gap = k - lastDefined;
-        if (gap > 1) {
-          const start = stops[lastDefined].offset as number;
-          const end = stops[k].offset as number;
-          for (let j = 1; j < gap; j++) stops[lastDefined + j].offset = start + ((end - start) * j) / gap;
-        }
-        lastDefined = k;
-      }
-    }
-    let prev = 0;
-    const finalStops = stops.map((s) => {
-      let off = Math.max(0, Math.min(1, s.offset as number));
-      off = Math.max(off, prev);
-      prev = off;
-      return { offset: off, color: s.color };
-    });
-    return { type: 'linear-gradient' as const, angle, stops: finalStops };
-  };
 
   // Corner radii in px. Computed `border-radius` keeps percentages ("50%"), which must be resolved
   // against the box (horizontal % vs width, vertical % vs height; elliptical corners use the smaller
@@ -380,62 +278,9 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
     return null;
   };
 
-  // CSS `filter` function list → FilterOp[] (null when it holds anything SVG can't reproduce, e.g. url()).
-  const parseFilterList = (v: string | undefined) => {
-    const val = (v || '').trim();
-    if (!val || val === 'none') return null;
-    const toks: string[] = [];
-    let depth = 0, cur = '';
-    for (const ch of val) {
-      if (ch === '(') depth++;
-      else if (ch === ')') depth--;
-      if (/\s/.test(ch) && depth === 0) { if (cur) toks.push(cur); cur = ''; } else cur += ch;
-    }
-    if (cur) toks.push(cur);
-    const ops: any[] = [];
-    const amt = (t: string) => (/%$/.test(t) ? parseFloat(t) / 100 : parseFloat(t));
-    for (const t of toks) {
-      const m = t.match(/^([\w-]+)\(([\s\S]*)\)$/);
-      if (!m) return null;
-      const fn = m[1], arg = m[2].trim();
-      if (fn === 'blur') { if (!/px$/.test(arg)) return null; ops.push({ fn, px: parseFloat(arg) }); }
-      else if (['brightness', 'contrast', 'grayscale', 'invert', 'opacity', 'saturate', 'sepia'].includes(fn)) { const a = amt(arg || '1'); if (!isFinite(a)) return null; ops.push({ fn, amount: a }); }
-      else if (fn === 'hue-rotate') { const f = parseFloat(arg); if (!isFinite(f)) return null; ops.push({ fn, deg: /turn$/.test(arg) ? f * 360 : /rad$/.test(arg) ? (f * 180) / Math.PI : /grad$/.test(arg) ? f * 0.9 : f }); }
-      else if (fn === 'drop-shadow') {
-        const cm = arg.match(/(rgba?\([^)]*\)|#[0-9a-fA-F]+|[a-zA-Z]+(?![\w(]))/);
-        const color = cm ? normColor(cm[0]) : 'rgb(0, 0, 0)';
-        const lens = (cm ? arg.replace(cm[0], '') : arg).match(/-?[\d.]+px/g) || [];
-        if (lens.length < 2) return null;
-        ops.push({ fn, x: parseFloat(lens[0] as string), y: parseFloat(lens[1] as string), blur: lens[2] ? parseFloat(lens[2] as string) : 0, color });
-      } else return null;
-    }
-    return ops.length ? ops : null;
-  };
-  // how far a filter chain can paint beyond the element box
-  const filterOverflow = (ops: any[]) => {
-    let pad = 4;
-    for (const o of ops) {
-      if (o.fn === 'blur') pad += o.px * 3;
-      else if (o.fn === 'drop-shadow') pad += Math.abs(o.x) + Math.abs(o.y) + o.blur * 1.5 + 2;
-    }
-    return pad;
-  };
   const groupedEls = new WeakSet<Element>();
 
-  // `filter: blur(Npx)` alone (the "glow" decoration pattern) maps 1:1 to feGaussianBlur.
-  const pureBlur = (filter: string | undefined): number | null => {
-    const m = (filter || '').trim().match(/^blur\(\s*([\d.]+)px\s*\)$/);
-    return m ? parseFloat(m[1]) : null;
-  };
 
-  // clip-path basic shapes → absolute-px SVG path data (reference box = border box). null when
-  // unsupported (url(), path(), geometry boxes other than border-box…): stays a subtree raster.
-  const rrPath = (x: number, y: number, w: number, h: number, rad: number[]): string => {
-    const m = Math.min(w, h) / 2;
-    const [tl, tr, br, bl] = rad.map((v) => Math.max(0, Math.min(v, m)));
-    const f = (v: number) => String(Math.round(v * 100) / 100);
-    return `M${f(x + tl)},${f(y)}H${f(x + w - tr)}${tr ? `A${f(tr)},${f(tr)} 0 0 1 ${f(x + w)},${f(y + tr)}` : ''}V${f(y + h - br)}${br ? `A${f(br)},${f(br)} 0 0 1 ${f(x + w - br)},${f(y + h)}` : ''}H${f(x + bl)}${bl ? `A${f(bl)},${f(bl)} 0 0 1 ${f(x)},${f(y + h - bl)}` : ''}V${f(y + tl)}${tl ? `A${f(tl)},${f(tl)} 0 0 1 ${f(x + tl)},${f(y)}` : ''}Z`;
-  };
   const parseClipShape = (el: Element, cs: CSSStyleDeclaration): { d: string; evenodd?: boolean } | null => {
     const v = (cs.clipPath || '').trim();
     const m = v.match(/^(inset|circle|ellipse|polygon)\((.*)\)\s*(border-box)?$/);
@@ -564,104 +409,13 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
     return null;
   };
 
-  // Try to parse a linear-gradient from a background-image value that may contain
-  // multiple comma-separated layers. Returns the first vectorizable layer found,
-  // so "url(…), linear-gradient(…)" still yields a gradient instead of falling back.
-  const parseFirstLinearGradient = (value: string) => {
-    const single = parseLinearGradient(value);
-    if (single) return single;
-    const layers = splitTopLevel(value);
-    if (layers.length <= 1) return null;
-    for (const layer of layers) {
-      const g = parseLinearGradient(layer.trim());
-      if (g) return g;
-    }
-    return null;
-  };
 
   // ---- background gradients (all layers) -------------------------------------------------
   // Supports linear-/radial-gradient with %/px stops, corner keywords, alpha stops (resampled in
   // premultiplied space like CSS) and multiple layers. null = something we can't reproduce exactly
   // (conic, repeating-*, tiled layers, url() mixed in), which keeps the raster fallback.
   type GBox = { x: number; y: number; width: number; height: number };
-  const rgbaOf = (c: string): [number, number, number, number] | null => {
-    const m = c.match(/rgba?\(\s*([\d.]+)[,\s]+([\d.]+)[,\s]+([\d.]+)(?:[,\s/]+([\d.]+%?))?\s*\)/i);
-    if (!m) return null;
-    const a = m[4] === undefined ? 1 : m[4].endsWith('%') ? parseFloat(m[4]) / 100 : parseFloat(m[4]);
-    return [parseFloat(m[1]), parseFloat(m[2]), parseFloat(m[3]), a];
-  };
-  const STOP_COLOR = /^((?:rgba?|hsla?|oklch|oklab|lab|lch|hwb|color)\([^)]+\)|#[0-9a-fA-F]+|[a-zA-Z]+)/;
-  // parts = comma-split stop list; lineLen = px length that 100% maps to
-  const parseGradientStops = (parts: string[], lineLen: number, repeating = false) => {
-    const raw: { offset: number | null; color: string }[] = [];
-    for (const seg of parts) {
-      const cm = seg.trim().match(STOP_COLOR);
-      if (!cm) return null; // transition hint / calc() / unknown
-      let color = normColor(cm[0]);
-      if (color === 'transparent') color = 'rgba(0, 0, 0, 0)'; // CSS `transparent` is alpha-0 black
-      const rest = seg.trim().slice(cm[0].length).trim();
-      const positions = rest ? rest.split(/\s+/) : [];
-      if (positions.length === 0) raw.push({ offset: null, color });
-      else {
-        for (const pos of positions) {
-          if (/%$/.test(pos)) raw.push({ offset: parseFloat(pos) / 100, color });
-          else if (/px$/.test(pos) && lineLen > 0) raw.push({ offset: parseFloat(pos) / lineLen, color });
-          else if (/deg$/.test(pos)) raw.push({ offset: parseFloat(pos) / 360, color });
-          else if (/turn$/.test(pos)) raw.push({ offset: parseFloat(pos), color });
-          else if (pos === '0') raw.push({ offset: 0, color });
-          else return null;
-        }
-      }
-    }
-    if (raw.length < 2) return null;
-    if (raw[0].offset == null) raw[0].offset = 0;
-    if (raw[raw.length - 1].offset == null) raw[raw.length - 1].offset = 1;
-    let last = 0;
-    for (let k = 1; k < raw.length; k++) {
-      if (raw[k].offset != null) {
-        const gap = k - last;
-        if (gap > 1) {
-          const a = raw[last].offset as number, b = raw[k].offset as number;
-          for (let j = 1; j < gap; j++) raw[last + j].offset = a + ((b - a) * j) / gap;
-        }
-        last = k;
-      }
-    }
-    let prev = -Infinity;
-    const stops = raw.map((st) => {
-      const off = Math.max(st.offset as number, prev);
-      prev = off;
-      return { offset: off, color: st.color };
-    });
-    // SVG interpolates un-premultiplied, CSS premultiplied: where alpha changes between stops,
-    // insert intermediate stops sampled in premultiplied space so both agree visually.
-    const out: { offset: number; color: string }[] = [];
-    for (let k = 0; k < stops.length; k++) {
-      out.push(stops[k]);
-      if (k === stops.length - 1) break;
-      const c0 = rgbaOf(stops[k].color), c1 = rgbaOf(stops[k + 1].color);
-      const span = stops[k + 1].offset - stops[k].offset;
-      if (!c0 || !c1 || span <= 1e-6 || c0[3] === c1[3] && (c0[3] === 1 || (c0[0] === c1[0] && c0[1] === c1[1] && c0[2] === c1[2]))) continue;
-      const N = 7;
-      for (let j = 1; j < N; j++) {
-        const t = j / N;
-        const a = c0[3] + (c1[3] - c0[3]) * t;
-        const pm = [0, 1, 2].map((q) => (c0[q] * c0[3] * (1 - t) + c1[q] * c1[3] * t));
-        const col = a > 1e-4 ? pm.map((v) => Math.round(v / a)) : [c1[0], c1[1], c1[2]];
-        out.push({ offset: stops[k].offset + span * t, color: `rgba(${col[0]}, ${col[1]}, ${col[2]}, ${Math.round(a * 1000) / 1000})` });
-      }
-    }
-    // SVG stop offsets live in [0,1] (a repeating gradient is normalised by the caller)
-    if (repeating) return out;
-    return out.map((st) => ({ offset: Math.min(1, Math.max(0, st.offset)), color: st.color }));
-  };
 
-  const lenToPx = (t: string, ref: number): number | null => {
-    if (/%$/.test(t)) return (parseFloat(t) / 100) * ref;
-    if (/px$/.test(t)) return parseFloat(t);
-    if (t === '0') return 0;
-    return null;
-  };
 
   const parseGradientLayer = (layer: string, box: GBox) => {
     const v = layer.trim();
@@ -1091,17 +845,6 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
   // General background engine: any mix of gradient and url()/image-set() layers with their own
   // background-size / -position / -repeat / -origin / -clip (CSS order top → bottom; returned bottom → top).
   // null when something can't be reproduced (fixed attachment, space/round, blend modes, unloaded image…).
-  const splitTopLevelWs = (v: string): string[] => {
-    const out: string[] = [];
-    let depth = 0, cur = '';
-    for (const ch of v) {
-      if (ch === '(') depth++;
-      else if (ch === ')') depth--;
-      if (/\s/.test(ch) && depth === 0) { if (cur) out.push(cur); cur = ''; } else cur += ch;
-    }
-    if (cur) out.push(cur);
-    return out;
-  };
   const tileOf = (
     info: { w: number; h: number },
     sizeV: string, posV: string,
@@ -1317,39 +1060,7 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
     if (el) opts.rasterElements?.set(id, el);
   };
 
-  // `inset` layers (sharp or blurred); null never — kept nullable for callers.
-  const parseInsetShadows = (value: string) => {
-    if (!value || value === 'none') return [];
-    const out: { offsetX: number; offsetY: number; spread: number; color: string; blur?: number }[] = [];
-    const COLOR_FN = /((?:rgba?|hsla?|oklch|oklab|lab|lch|hwb|color)\([^)]+\)|#[0-9a-fA-F]+|[a-z]+)/;
-    for (const part of splitTopLevel(value)) {
-      if (!part.includes('inset')) continue;
-      const body = part.replace(/\binset\b/, '');
-      const colorMatch = body.match(COLOR_FN);
-      const color = normColor(colorMatch ? colorMatch[0] : 'rgba(0,0,0,0.2)');
-      const v = (body.replace(COLOR_FN, '').match(/-?\d*\.?\d+px/g) || []).map((x) => parseFloat(x));
-      if (!transparent(color)) out.push({ offsetX: v[0] || 0, offsetY: v[1] || 0, spread: v[3] || 0, color, blur: v[2] || undefined });
-    }
-    return out;
-  };
 
-  const parseShadows = (value: string) => {
-    if (!value || value === 'none') return [];
-    // Only emit outset layers; inset layers are handled as raster by needsBoxRaster.
-    // Filter before parsing so a mix of outset + inset keeps the outset shadows.
-    const parts = splitTopLevel(value).filter((p) => !p.includes('inset'));
-    if (parts.length === 0) return [];
-    const out: { offsetX: number; offsetY: number; blur: number; spread: number; color: string }[] = [];
-    const COLOR_FN = /((?:rgba?|hsla?|oklch|oklab|lab|lch|hwb|color)\([^)]+\)|#[0-9a-fA-F]+|[a-z]+)/;
-    for (const part of parts) {
-      const colorMatch = part.match(COLOR_FN);
-      const color = normColor(colorMatch ? colorMatch[0] : 'rgba(0,0,0,0.2)');
-      const nums = part.replace(COLOR_FN, '').match(/-?\d*\.?\d+px/g) || [];
-      const v = nums.map((s) => parseFloat(s));
-      out.push({ offsetX: v[0] || 0, offsetY: v[1] || 0, blur: v[2] || 0, spread: v[3] || 0, color });
-    }
-    return out;
-  };
 
   // Synthesize a text node for the CSS ::marker pseudo-element on list items.
   // Markers are pseudo-elements not in the DOM — getComputedStyle(el,'::marker')
