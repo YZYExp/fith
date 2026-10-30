@@ -38,8 +38,9 @@ The core is a two-phase pipeline:
 - `captureScene` reads the document and window of the element it captures (`doc` / `win` at the top of the
   function: `root.ownerDocument`), never the page's globals, so an editor can capture an element of a same-origin
   iframe (`instanceof HTMLElement` is false across realms). Use `win.getComputedStyle`, `win.HTMLElement`,
-  `doc.createElement`… in new code; `test/visual/cross-document.test.ts` guards it. Known gap: the
-  `dom-raster.ts` fallback still uses the page globals.
+  `doc.createElement`… in new code; `test/visual/cross-document.test.ts` guards it, `dom-raster.ts` included
+  (it takes the document and window from each element it draws). `collectFonts` and `fetchDataURL` still use the
+  page's `fetch` (fith#48).
 
 - `captureScene` (`capture.ts`, ~160 lines) only sets up a run and builds one `CaptureCtx` (`ctx.ts`: the document and
   window, options, the paint list, counters, caches and the bound parsers); everything else is a function of a sibling

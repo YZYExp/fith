@@ -26,11 +26,15 @@ export interface DomRasterizer {
 }
 
 export function createDomRasterizer(): DomRasterizer {
+  // The document and window of the element being drawn: it may live in a same-origin iframe, so the page's
+  // globals would build nodes of the wrong realm (`instanceof` is false across realms) and fetch with the wrong origin.
+  let doc: Document = document;
+  let win: Window & typeof globalThis = window;
   const urlCache = new Map<string, Promise<string | null>>();
 
   const blobToDataUrl = (blob: Blob) =>
     new Promise<string | null>((resolve) => {
-      const fr = new FileReader();
+      const fr = new win.FileReader();
       fr.onload = () => resolve(fr.result as string);
       fr.onerror = () => resolve(null);
       fr.readAsDataURL(blob);
@@ -43,7 +47,7 @@ export function createDomRasterizer(): DomRasterizer {
     if (!p) {
       p = (async () => {
         try {
-          const res = await fetch(url, { cache: 'force-cache' });
+          const res = await win.fetch(url, { cache: 'force-cache' });
           return res.ok ? await blobToDataUrl(await res.blob()) : null;
         } catch {
           return null;
@@ -80,7 +84,7 @@ export function createDomRasterizer(): DomRasterizer {
 
   // Copy the computed style of `src` (or one of its pseudo-elements) onto `dst`.
   const copyStyle = async (src: Element, dst: HTMLElement, pseudo?: '::before' | '::after') => {
-    const cs = getComputedStyle(src, pseudo);
+    const cs = win.getComputedStyle(src, pseudo);
     for (let i = 0; i < cs.length; i++) {
       const prop = cs[i];
       if (SKIP_PROPS.has(prop) || prop.startsWith('animation-') || prop.startsWith('transition-')) continue;
@@ -107,7 +111,7 @@ export function createDomRasterizer(): DomRasterizer {
     if (!c || c === 'none' || c === 'normal') return null;
     const str = c.match(/^(["'])([\s\S]*)\1$/);
     if (str) {
-      return document.createTextNode(
+      return doc.createTextNode(
         str[2]
           .replace(/\\([0-9a-fA-F]{1,6})\s?/g, (_m, h) => String.fromCodePoint(parseInt(h, 16)))
           .replace(/\\([\s\S])/g, '$1'),
@@ -117,29 +121,29 @@ export function createDomRasterizer(): DomRasterizer {
     if (url) {
       const data = await toDataUrl(url[2]);
       if (!data) return null;
-      const img = document.createElement('img');
+      const img = doc.createElement('img');
       img.setAttribute('src', data);
       return img;
     }
     const attr = c.match(/^attr\(([^)]+)\)$/);
-    if (attr) return document.createTextNode(host.getAttribute(attr[1].trim()) ?? '');
+    if (attr) return doc.createTextNode(host.getAttribute(attr[1].trim()) ?? '');
     return null; // counters / quotes: leave empty (box still renders)
   };
 
   const cloneTree = async (src: Node, root: Element, rootRect: DOMRect): Promise<Node | null> => {
-    if (src.nodeType === Node.TEXT_NODE) return document.createTextNode(src.textContent || '');
-    if (src.nodeType !== Node.ELEMENT_NODE) return null;
+    if (src.nodeType === win.Node.TEXT_NODE) return doc.createTextNode(src.textContent || '');
+    if (src.nodeType !== win.Node.ELEMENT_NODE) return null;
     const el = src as Element;
     const tag = el.tagName.toLowerCase();
     if (tag === 'script' || tag === 'noscript' || tag === 'style' || tag === 'link') return null;
-    const cs0 = getComputedStyle(el);
+    const cs0 = win.getComputedStyle(el);
     if (cs0.display === 'none') return null;
     if (++nodeCount > MAX_NODES) throw new Error('subtree too large');
 
-    const isSvgEl = el instanceof SVGElement;
+    const isSvgEl = el instanceof win.SVGElement;
     let out: HTMLElement | SVGElement;
     if (tag === 'canvas') {
-      const img = document.createElement('img');
+      const img = doc.createElement('img');
       try {
         img.setAttribute('src', (el as HTMLCanvasElement).toDataURL('image/png'));
       } catch {
@@ -147,10 +151,10 @@ export function createDomRasterizer(): DomRasterizer {
       }
       out = img;
     } else if (tag === 'video') {
-      const img = document.createElement('img');
+      const img = doc.createElement('img');
       try {
         const v = el as HTMLVideoElement;
-        const c = document.createElement('canvas');
+        const c = doc.createElement('canvas');
         c.width = v.videoWidth || v.clientWidth;
         c.height = v.videoHeight || v.clientHeight;
         c.getContext('2d')!.drawImage(v, 0, 0, c.width, c.height);
@@ -160,11 +164,11 @@ export function createDomRasterizer(): DomRasterizer {
       }
       out = img;
     } else if (tag === 'iframe' || tag === 'object' || tag === 'embed') {
-      out = document.createElement('div'); // can't embed another document
+      out = doc.createElement('div'); // can't embed another document
     } else if (isSvgEl) {
       out = el.cloneNode(false) as SVGElement;
     } else {
-      out = document.createElement(tag) as HTMLElement;
+      out = doc.createElement(tag) as HTMLElement;
       for (const a of Array.from(el.attributes)) {
         if (/^on/i.test(a.name) || a.name === 'style' || a.name === 'srcset' || a.name === 'loading') continue;
         try {
@@ -216,10 +220,10 @@ export function createDomRasterizer(): DomRasterizer {
 
     // ::before content first
     if (!isSvgEl) {
-      const bcs = getComputedStyle(el, '::before');
+      const bcs = win.getComputedStyle(el, '::before');
       const bContent = await pseudoContent(el, bcs);
       if (bContent && bcs.display !== 'none') {
-        const span = document.createElement('span');
+        const span = doc.createElement('span');
         await copyStyle(el, span, '::before');
         noteFonts(bcs);
         span.appendChild(bContent);
@@ -230,7 +234,7 @@ export function createDomRasterizer(): DomRasterizer {
     // children (flattening an open shadow root and its slots)
     const kids = async (parent: Node) => {
       for (const child of Array.from(parent.childNodes)) {
-        if (child instanceof HTMLSlotElement) {
+        if (child instanceof win.HTMLSlotElement) {
           const assigned = child.assignedNodes({ flatten: true });
           if (assigned.length) for (const a of assigned) await add(a);
           else await kids(child);
@@ -246,10 +250,10 @@ export function createDomRasterizer(): DomRasterizer {
     else await kids(el);
 
     if (!isSvgEl) {
-      const acs = getComputedStyle(el, '::after');
+      const acs = win.getComputedStyle(el, '::after');
       const aContent = await pseudoContent(el, acs);
       if (aContent && acs.display !== 'none') {
-        const span = document.createElement('span');
+        const span = doc.createElement('span');
         await copyStyle(el, span, '::after');
         noteFonts(acs);
         span.appendChild(aContent);
@@ -264,7 +268,7 @@ export function createDomRasterizer(): DomRasterizer {
     const out: string[] = [];
     const visit = async (rules: CSSRuleList, against: string) => {
       for (const rule of Array.from(rules)) {
-        if (rule instanceof CSSFontFaceRule) {
+        if (rule instanceof win.CSSFontFaceRule) {
           const fam = unquote(rule.style.getPropertyValue('font-family'));
           if (!families.has(fam)) continue;
           let src = rule.style.getPropertyValue('src');
@@ -291,9 +295,9 @@ export function createDomRasterizer(): DomRasterizer {
         }
       }
     };
-    for (const sheet of Array.from(document.styleSheets)) {
+    for (const sheet of Array.from(doc.styleSheets)) {
       try {
-        await visit(sheet.cssRules, sheet.href || document.baseURI);
+        await visit(sheet.cssRules, sheet.href || doc.baseURI);
       } catch {
         /* cross-origin sheet: its fonts are unavailable */
       }
@@ -309,17 +313,19 @@ export function createDomRasterizer(): DomRasterizer {
     s.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '').replace(NONCHARS, '');
 
   return async (el, crop, scale) => {
+    doc = el.ownerDocument;
+    win = (doc.defaultView ?? window) as Window & typeof globalThis;
     const bb = el.getBoundingClientRect();
     if (bb.width <= 0 || bb.height <= 0 || crop.width <= 0 || crop.height <= 0) return null;
     families.clear();
     nodeCount = 0;
     try {
       const rootClone = (await cloneTree(el, el, bb)) as HTMLElement | null;
-      if (!rootClone || rootClone.nodeType !== Node.ELEMENT_NODE) return null;
+      if (!rootClone || rootClone.nodeType !== win.Node.ELEMENT_NODE) return null;
 
       const W = Math.ceil(bb.width);
       const H = Math.ceil(bb.height);
-      const cs = getComputedStyle(el);
+      const cs = win.getComputedStyle(el);
       const hasTransform = cs.transform && cs.transform !== 'none';
       // A transformed element's bounding box is larger than its layout box; centre
       // the layout box in it (default transform-origin) so the transform lands right.
@@ -333,23 +339,23 @@ export function createDomRasterizer(): DomRasterizer {
       rootClone.style.setProperty('bottom', 'auto');
       rootClone.style.setProperty('float', 'none');
 
-      const wrap = document.createElement('div');
+      const wrap = doc.createElement('div');
       wrap.setAttribute('xmlns', XHTML);
       wrap.style.cssText = `position:relative;width:${W}px;height:${H}px;overflow:visible;`;
       const fonts = await fontCss();
       if (fonts) {
-        const st = document.createElement('style');
+        const st = doc.createElement('style');
         st.textContent = fonts;
         wrap.appendChild(st);
       }
       wrap.appendChild(rootClone);
 
-      const xml = stripXmlIllegal(new XMLSerializer().serializeToString(wrap));
+      const xml = stripXmlIllegal(new win.XMLSerializer().serializeToString(wrap));
       const svg =
         `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">` +
         `<foreignObject x="0" y="0" width="${W}" height="${H}">${xml}</foreignObject></svg>`;
 
-      const img = new Image();
+      const img = new win.Image();
       img.decoding = 'sync';
       const loaded = new Promise<void>((res, rej) => {
         img.onload = () => res();
@@ -362,7 +368,7 @@ export function createDomRasterizer(): DomRasterizer {
       ]);
 
       const s = scale || 1;
-      const canvas = document.createElement('canvas');
+      const canvas = doc.createElement('canvas');
       canvas.width = Math.max(1, Math.round(crop.width * s));
       canvas.height = Math.max(1, Math.round(crop.height * s));
       const ctx = canvas.getContext('2d');
