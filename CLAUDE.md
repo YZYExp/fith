@@ -41,6 +41,12 @@ The core is a two-phase pipeline:
   `doc.createElement`… in new code; `test/visual/cross-document.test.ts` guards it. Known gap: the
   `dom-raster.ts` fallback still uses the page globals.
 
+- Code that is not a paint decision lives beside `captureScene` in `src/core/capture/`: `unfurl.ts` (the temporary
+  scroll / content-visibility / unfurl changes, each returning its own idempotent `restore`, which `captureScene`
+  also calls in its `finally`), `colorNorm.ts` (canvas colour normaliser), `images.ts` (data URLs of images and
+  canvases) and `fonts.ts` (`@font-face` collection). Each takes the `Document` / window it works in. Keep new
+  helpers out of the closure the same way.
+
 - The `Scene` IR is the boundary between the in-page capture and the Node backend.
   Fields added to `Scene` must be added to `src/core/ir/types.ts`.
 
