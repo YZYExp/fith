@@ -10,10 +10,12 @@ import { n, esc, noRadii, roundedRectPath } from './primitives.js';
 export class Defs {
   private items = new Map<string, string>();
   private seq = 0;
+  /** `prefix` keeps the ids of several SVGs in one document apart. */
+  constructor(private prefix = '') {}
   add(content: string): string {
     const existing = this.items.get(content);
     if (existing) return existing;
-    const id = 'd' + this.seq++;
+    const id = this.prefix + 'd' + this.seq++;
     this.items.set(content, id);
     return id;
   }

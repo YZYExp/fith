@@ -31,6 +31,8 @@ export interface InPageOptions {
    * For frames without network access, or when the host already holds the bytes.
    */
   fonts?: FontFace[];
+  /** Prepended to every id in the SVG so several captures can share one document (see `EmitOptions.idPrefix`). */
+  idPrefix?: string;
   /**
    * Optional glyph outliner for `outline` mode. Supplied by the caller to keep
    * opentype.js out of the default in-page bundle (so the content script stays
@@ -142,9 +144,9 @@ async function run(opts: InPageOptions, root?: Element): Promise<{ svg: string; 
   if (opts.fontMode === 'outline' && opts.outline) {
     const report = buildReport(scene, { outlined: true });
     scene.fonts = [];
-    return { svg: emitSvg(scene, { outline: opts.outline }), report };
+    return { svg: emitSvg(scene, { outline: opts.outline, idPrefix: opts.idPrefix }), report };
   }
-  return { svg: emitSvg(scene), report: buildReport(scene) };
+  return { svg: emitSvg(scene, { idPrefix: opts.idPrefix }), report: buildReport(scene) };
 }
 
 /** Capture the current page into a self-contained SVG string. */

@@ -51,6 +51,8 @@ export interface RenderOptions {
    * contains the page's content — only enable it when sharing is acceptable.
    */
   captureSourceHtml?: boolean;
+  /** Prepended to every id in the SVG so several captures can share one document. */
+  idPrefix?: string;
 }
 
 export interface RenderResult {
@@ -200,7 +202,7 @@ async function captureAndEmit(page: Page, opts: RenderOptions): Promise<RenderRe
   await screenshotRasterTargets(page, scene);
 
   // Build emit options (outline mode converts text to glyph paths).
-  const emitOpts: EmitOptions = {};
+  const emitOpts: EmitOptions = { idPrefix: opts.idPrefix };
   if (opts.fontMode === 'outline') {
     emitOpts.outline = createOutliner(scene.fonts, systemFontLoader(), systemFallbackLoader());
     scene.fonts = []; // glyphs become paths; no @font-face <style> needed
