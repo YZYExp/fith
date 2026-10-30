@@ -4,6 +4,7 @@ import { existsSync, readFileSync, writeFileSync, mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import opentype from 'opentype.js';
+import { PNG } from 'pngjs';
 import { validate, serveDir } from '../../scripts/validate.js';
 import { acceptsSubstitute, readFont } from '../../src/backends/node/fonts.js';
 
@@ -66,7 +67,8 @@ const fontContext = (() => {
       return 'n/a';
     }
   };
-  return `zh fonts: ${run(['fc-list', ':lang=zh', 'family'])}; sans: ${run(['fc-match', 'sans-serif:lang=zh-cn'])}; serif: ${run(['fc-match', 'serif'])}; arial: ${run(['fc-match', 'Arial'])}`;
+  const prop = (pattern: string) => run(['sh', '-c', `fc-match -v '${pattern}' | grep -E 'hint|antialias|embeddedbitmap|rgba|file:' | tr -s ' ' | tr '\\n' ';'`]);
+  return `zh fonts: ${run(['fc-list', ':lang=zh', 'family'])}; sans: ${run(['fc-match', 'sans-serif:lang=zh-cn'])}; serif: ${run(['fc-match', 'serif'])}; arial: ${run(['fc-match', 'Arial'])}; zh props: ${prop('sans-serif:lang=zh-cn')}; latin props: ${prop('serif')}`;
 })();
 
 describe('outline mode: per-glyph font fallback (visual)', () => {
@@ -85,15 +87,24 @@ describe('outline mode: per-glyph font fallback (visual)', () => {
       { width: 800, height: 300, name: 'outline-font-fallback', outDir: OUT, fontMode: 'outline' },
     );
     const svg = readFileSync(join(OUT, 'outline-font-fallback.svg'), 'utf8');
+    // where the differing pixels are, per 25px band of the page: names the line that differs
+    const diff = PNG.sync.read(readFileSync(join(OUT, 'outline-font-fallback.diff.png')));
+    const bands: number[] = [];
+    for (let y = 0; y < diff.height; y++)
+      for (let x = 0; x < diff.width; x++) {
+        const i = (y * diff.width + x) * 4;
+        if (diff.data[i] === 255 && diff.data[i + 1] === 0 && diff.data[i + 2] === 0) bands[Math.floor(y / 25)] = (bands[Math.floor(y / 25)] ?? 0) + 1;
+      }
+    const where = `diff px per 25px band: ${Array.from(bands, (n) => n ?? 0).join(',')}`;
     // Latin lines are always coverable, so they must be outlined (not left as <text>)
     expect(svg).not.toMatch(/<text[^>]*>[^<]*(Keep the|Mixed stacks|metric-compatible)/);
     if (hasCjkFont) {
       // with a CJK system font every glyph is outlined; before the fix CJK became tofu
       expect(svg).not.toContain('<text');
-      expect(r.ratio, fontContext).toBeLessThan(0.01);
+      expect(r.ratio, `${where}; ${fontContext}`).toBeLessThan(0.01);
     } else {
       // without one, CJK lines stay <text> rather than being drawn as .notdef
-      expect(r.ratio, fontContext).toBeLessThan(0.03);
+      expect(r.ratio, `${where}; ${fontContext}`).toBeLessThan(0.03);
     }
   }, 90_000);
 });
