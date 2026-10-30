@@ -20,6 +20,8 @@ The core is a two-phase pipeline:
 1. `captureScene` (runs in-page, `src/core/capture/`) — walks the DOM, emits a `Scene` IR of `PaintNode[]`
 2. `emitSvg` (Node or in-page) — serializes the IR to an SVG string
 
+Architecture overview (pipeline, module map, backends, entries, tests): `.design/architecture.md`. Keep it in sync when a PR changes the module layout, a package entry or a backend; other design notes: `.design/library-split.md`, `.design/fonts.md`.
+
 ## Key Architecture Constraints
 
 - The Node backend no longer serialises `captureScene` with `.toString()`: `scripts/build-inject.ts` bundles
