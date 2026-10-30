@@ -158,7 +158,8 @@ if (card) {
 The browser library uses DOM APIs without Node or Playwright at runtime. It captures the current layout; `width` and `height` control capture dimensions rather than creating a new browser viewport.
 
 - `viewportOnly: true` captures the current viewport for page captures; the default is the full document. Element capture crops to the selected subtree.
-- `rasterize(rect, scale)` supplies screenshot data as a data URI, or `null`. Without this adapter, regions requiring raster fallback are omitted.
+- `rasterize(rect, scale, { element, reason })` supplies screenshot data as a data URI, or `null`. `element` is the element the region belongs to (an `<iframe>`, a `<video>`, a 3D-transformed box…), so a host can answer with a picture it already holds. Without this adapter, regions requiring raster fallback are omitted.
+- `fonts` is a list of `{ family, weight, style, src, format }` faces (`src` a data URI) to embed instead of reading the document's `@font-face` rules, for frames without network access.
 - `fontMode: 'outline'` requires an `outline` callback supplied by the caller. The browser entry does not export an outliner factory; setting the mode alone does not convert text to paths.
 
 #### What was not drawn as vectors
