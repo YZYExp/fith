@@ -159,6 +159,7 @@ The browser library uses DOM APIs without Node or Playwright at runtime. It capt
 
 - `viewportOnly: true` captures the current viewport for page captures; the default is the full document. Element capture crops to the selected subtree.
 - `rasterize(rect, scale, { element, reason })` supplies screenshot data as a data URI, or `null`. `element` is the element the region belongs to (an `<iframe>`, a `<video>`, a 3D-transformed box…), so a host can answer with a picture it already holds. Without this adapter, regions requiring raster fallback are omitted.
+- `idPrefix` (also a Node option) is prepended to every generated id, so several captures can sit in one document without their clip paths, gradients and filters colliding.
 - `fonts` is a list of `{ family, weight, style, src, format }` faces (`src` a data URI) to embed instead of reading the document's `@font-face` rules, for frames without network access.
 - `fontMode: 'outline'` requires an `outline` callback supplied by the caller. The browser entry does not export an outliner factory; setting the mode alone does not convert text to paths.
 

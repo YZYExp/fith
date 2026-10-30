@@ -150,6 +150,7 @@ if (card) {
 
 - `viewportOnly: true` 用于捕获当前页面可视区，默认捕获完整文档；元素捕获裁剪到选中的子树。
 - `rasterize(rect, scale, { element, reason })` 由调用方提供截图能力，返回 data URI 或 `null`。`element` 是该区域所属的元素（`<iframe>`、`<video>`、3D 变换的盒子……），宿主可以直接用手上已有的图回答。未提供时，需要栅格回退的区域会被省略。
+- `idPrefix`（Node 选项里也有）会加在每个生成的 id 前面，这样多份捕获结果放进同一个文档时，clipPath、渐变、滤镜的 id 不会冲突。
 - `fonts` 是 `{ family, weight, style, src, format }` 字体列表（`src` 为 data URI），用来代替读取文档的 `@font-face` 规则，适合没有网络的框架。
 - 使用 `fontMode: 'outline'` 时，调用方还需提供 `outline` 回调。浏览器入口没有导出字形轮廓器工厂，仅设置模式不会把文字转成路径。
 

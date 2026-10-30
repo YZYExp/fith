@@ -305,10 +305,16 @@ function wrap(node: PaintNode, inner: string, defs: Defs): string {
 export interface EmitOptions {
   /** When provided, text is converted to glyph <path> outlines where possible. */
   outline?: Outliner;
+  /**
+   * Prepended to every id the emitter generates (clip paths, gradients, filters, masks, patterns), so several
+   * SVGs can share one document without their ids colliding. Letters, digits, `-` and `_`; must start with a letter.
+   */
+  idPrefix?: string;
 }
 
 export function emitSvg(scene: Scene, opts: EmitOptions = {}): string {
-  const defs = new Defs();
+  if (opts.idPrefix !== undefined && !/^[A-Za-z][\w-]*$/.test(opts.idPrefix)) throw new Error(`idPrefix must start with a letter and use letters, digits, - or _: ${JSON.stringify(opts.idPrefix)}`);
+  const defs = new Defs(opts.idPrefix);
   const body: string[] = [];
 
   // count repeated icons (position-independent) so only repeats go to defs+use
