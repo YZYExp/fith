@@ -84,4 +84,47 @@ describe('capture an element that lives in another document', () => {
     expect(px / (a.width * a.height)).toBeLessThan(0.03);
     await ctx.close();
   }, 60_000);
+
+  it('re-renders an unvectorizable element of an iframe with the DOM rasterizer', async () => {
+    const ctx = await browser.newContext({ viewport: { width: 600, height: 400 }, deviceScaleFactor: 1 });
+    const page = await ctx.newPage();
+    await page.setContent(
+      `<!doctype html><body style="margin:0"><iframe id="f" style="border:0;width:500px;height:300px"></iframe></body>`,
+    );
+    await page.evaluate((html) => {
+      (document.getElementById('f') as HTMLIFrameElement).srcdoc = html;
+    }, `<!doctype html><body style="margin:0;background:#fff"><div id="wrap" style="padding:40px">
+      <div id="tilt" style="width:160px;height:80px;background:rgb(0,128,0);color:#fff;font:700 18px sans-serif;
+        transform:perspective(200px) rotateY(25deg)">tilted
+        <svg width="40" height="30" style="display:block"><rect width="40" height="30" fill="rgb(255,0,0)"/></svg></div></div></body>`);
+    await page.waitForFunction(() => !!(document.getElementById('f') as HTMLIFrameElement).contentDocument?.getElementById('wrap'));
+    await page.addScriptTag({ content: code });
+    const out = await page.evaluate(async () => {
+      const el = (document.getElementById('f') as HTMLIFrameElement).contentDocument!.getElementById('wrap')!;
+      // @ts-expect-error injected global
+      return await FittingHtml.captureElementDetailed(el, { fontMode: 'none' });
+    });
+    expect(out.svg).toContain('data:image/png');
+    // the inline <svg> inside the picture must survive: `instanceof SVGElement` is false across realms
+    const red: number = await page.evaluate(async (svg: string) => {
+      const href = /href="(data:image\/png;base64,[^"]+)"/.exec(svg)![1];
+      const img = new Image();
+      img.src = href;
+      await img.decode();
+      const c = document.createElement('canvas');
+      c.width = img.width;
+      c.height = img.height;
+      const g = c.getContext('2d')!;
+      g.drawImage(img, 0, 0);
+      const d = g.getImageData(0, 0, c.width, c.height).data;
+      let n = 0;
+      for (let i = 0; i < d.length; i += 4) if (d[i] > 200 && d[i + 1] < 60 && d[i + 2] < 60 && d[i + 3] > 200) n++;
+      return n;
+    }, out.svg);
+    expect(red).toBeGreaterThan(200);
+    const dom = out.report.rasters.filter((r: { filled: string }) => r.filled === 'dom');
+    expect(dom.length).toBeGreaterThan(0);
+    expect(out.report.omitted).toEqual([]);
+    await ctx.close();
+  }, 60_000);
 });
