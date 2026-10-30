@@ -35,6 +35,12 @@ The core is a two-phase pipeline:
   need the page's colour normaliser (it uses a canvas) take it as a `ColorNorm` argument; `captureScene` binds its
   own `normColor` in thin wrappers. Put new CSS parsing here, not inside the closure.
 
+- `captureScene` reads the document and window of the element it captures (`doc` / `win` at the top of the
+  function: `root.ownerDocument`), never the page's globals, so an editor can capture an element of a same-origin
+  iframe (`instanceof HTMLElement` is false across realms). Use `win.getComputedStyle`, `win.HTMLElement`,
+  `doc.createElement`… in new code; `test/visual/cross-document.test.ts` guards it. Known gap: the
+  `dom-raster.ts` fallback still uses the page globals.
+
 - The `Scene` IR is the boundary between the in-page capture and the Node backend.
   Fields added to `Scene` must be added to `src/core/ir/types.ts`.
 
@@ -134,6 +140,7 @@ test/
     lost-content.test.ts    # structural invariant: no visible text node is lost
     images.test.ts          # image capture: paint order, CORS fallback
     element.test.ts         # subtree (single-element) capture
+    cross-document.test.ts  # capturing an element that lives in a same-origin iframe
     inpage.test.ts          # in-page backend
     raster-fallback.test.ts # in-page DOM (foreignObject) raster fallback, no screenshot backend
     scroll-element.test.ts  # element export from a scrolling app-shell sidebar (unfurl, zero-height <body>)
