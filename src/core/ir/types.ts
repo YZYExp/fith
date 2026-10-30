@@ -280,6 +280,8 @@ export interface RasterNode extends NodeBase {
   reason: string;
   /** Source element (tag.class) for diagnostics. */
   desc?: string;
+  /** Who produced `href`: a real screenshot (the backend or the host's `rasterize` callback) or the in-page DOM re-render. */
+  filledBy?: 'screenshot' | 'dom';
   /** Set when an <img> could not be read in-page (CORS): the Node backend may fetch `src` itself and
    *  turn this node back into an ImageNode (vector-first) instead of screenshotting it. */
   imgFallback?: { src: string; rect: Rect; preserveAspectRatio?: string };
@@ -319,4 +321,14 @@ export interface CaptureOptions {
   rasterElements?: Map<string, Element>;
   /** Element capture: expand inner scroll containers to full content height (default true). */
   unfurlScrollContainers?: boolean;
+}
+
+/** What a capture could not draw as vectors, so a host can tell the person instead of leaving a silent gap. */
+export interface CaptureReport {
+  /** Regions drawn as pictures instead of vectors, with the reason and who produced the pixels. */
+  rasters: { reason: string; rect: Rect; desc?: string; filled: 'screenshot' | 'dom' | 'none' }[];
+  /** The subset of `rasters` that has no pixels at all: the region is blank in the SVG. */
+  omitted: { reason: string; rect: Rect; desc?: string }[];
+  /** The primary font family of every text run and how its glyphs are carried. */
+  fonts: { family: string; mode: 'embedded' | 'outlined' | 'referenced' }[];
 }

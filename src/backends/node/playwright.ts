@@ -12,7 +12,8 @@ import { createOutliner } from '../../core/emit/outline.js';
 import { systemFallbackLoader, systemFontLoader } from './fonts.js';
 import { findDiffRegions } from './diff-patch.js';
 import { pngDataUrl, waitForFonts } from './page-utils.js';
-import type { Scene } from '../../core/ir/types.js';
+import type { CaptureReport, Scene } from '../../core/ir/types.js';
+import { buildReport } from '../../core/report.js';
 
 export interface RenderOptions {
   width: number;
@@ -56,6 +57,8 @@ export interface RenderResult {
   svg: string;
   /** Present when `captureSourceHtml` was requested. */
   sourceHtml?: string;
+  /** What was drawn as pictures instead of vectors, what was left blank and how fonts are carried. */
+  report: CaptureReport;
 }
 
 export type RenderInput = { html: string } | { url: string } | { page: Page };
@@ -146,6 +149,7 @@ async function screenshotRasterTargets(page: Page, scene: Scene): Promise<void> 
         type: 'png',
       });
       node.href = pngDataUrl(buf);
+      node.filledBy = 'screenshot';
     } catch {
       node.href = null;
     }
@@ -210,7 +214,7 @@ async function captureAndEmit(page: Page, opts: RenderOptions): Promise<RenderRe
     svg = await applyDiffPatch(page, scene, svg, emitOpts);
   }
 
-  return { svg, sourceHtml };
+  return { svg, sourceHtml, report: buildReport(scene, { outlined: opts.fontMode === 'outline' }) };
 }
 
 /** Like `renderToSvg`, but also returns the optional source-HTML snapshot. */

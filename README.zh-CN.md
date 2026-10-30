@@ -152,6 +152,21 @@ if (card) {
 - `rasterize(rect, scale)` 由调用方提供截图能力，返回 data URI 或 `null`。未提供时，需要栅格回退的区域会被省略。
 - 使用 `fontMode: 'outline'` 时，调用方还需提供 `outline` 回调。浏览器入口没有导出字形轮廓器工厂，仅设置模式不会把文字转成路径。
 
+#### 哪些内容没有画成矢量
+
+变成图片的区域，或因为没有截图能力而被省略的区域，会列在报告里，而不是静默缺失：
+
+```ts
+import { captureElementDetailed } from 'fitting-html/browser';
+
+const { svg, report } = await captureElementDetailed(card);
+report.rasters; // { reason, rect, desc, filled: 'screenshot' | 'dom' | 'none' }[]
+report.omitted; // 完全没有像素的栅格区域：在 SVG 里是空白
+report.fonts;   // { family, mode: 'embedded' | 'outlined' | 'referenced' }[]
+```
+
+Node API 的 `renderDetailed()` 在 `svg` 旁边返回同样的 `report`。
+
 ### Chrome 扩展
 
 ```bash

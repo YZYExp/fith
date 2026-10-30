@@ -161,6 +161,21 @@ The browser library uses DOM APIs without Node or Playwright at runtime. It capt
 - `rasterize(rect, scale)` supplies screenshot data as a data URI, or `null`. Without this adapter, regions requiring raster fallback are omitted.
 - `fontMode: 'outline'` requires an `outline` callback supplied by the caller. The browser entry does not export an outliner factory; setting the mode alone does not convert text to paths.
 
+#### What was not drawn as vectors
+
+Regions that become pictures, or are omitted because no screenshot was available, are listed instead of failing silently:
+
+```ts
+import { captureElementDetailed } from 'fitting-html/browser';
+
+const { svg, report } = await captureElementDetailed(card);
+report.rasters; // { reason, rect, desc, filled: 'screenshot' | 'dom' | 'none' }[]
+report.omitted; // the rasters with no pixels at all: blank in the SVG
+report.fonts;   // { family, mode: 'embedded' | 'outlined' | 'referenced' }[]
+```
+
+`renderDetailed()` in the Node API returns the same `report` next to `svg`.
+
 ### Chrome extension
 
 ```bash
