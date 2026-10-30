@@ -55,6 +55,14 @@
     "screenshot"
   ],
   "license": "MPL-2.0",
+  "homepage": "https://github.com/0x0079/fith",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/0x0079/fith.git"
+  },
+  "bugs": {
+    "url": "https://github.com/0x0079/fith/issues"
+  },
   "devDependencies": {
     "@sparticuz/chromium": "^148.0.0",
     "@types/chrome": "^0.1.42",

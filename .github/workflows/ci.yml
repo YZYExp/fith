@@ -36,6 +36,11 @@ jobs:
       - name: Install Playwright browsers
         run: pnpm exec playwright install chromium --with-deps
 
+      - name: Check the package installs and runs
+        run: |
+          mkdir -p out && npm pack --pack-destination out
+          .github/scripts/smoke-package.sh out/fith-*.tgz "$(node -p 'require("./package.json").version')"
+
       - name: Run tests
         run: pnpm test
         env:

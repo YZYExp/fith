@@ -1,3 +1,4 @@
+#!/usr/bin/env node
 import { readFileSync, writeFileSync } from 'node:fs';
 import { renderDetailed, type RenderInput } from './playwright.js';
 
