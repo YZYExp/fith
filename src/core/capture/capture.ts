@@ -1,4 +1,8 @@
 import type { Scene, PaintNode, Clip, CornerRadii, CaptureOptions, BgLayer } from '../ir/types.js';
+import { unfurlScrollContainers, resetScrollAndContentVisibility } from './unfurl.js';
+import { createColorNormalizer } from './colorNorm.js';
+import { blobToDataURL, fetchDataURL, normDataUrl, canvasDataUrl as domCanvasDataUrl, canvasExtractDataURL as domCanvasExtractDataURL } from './images.js';
+import { collectFonts } from './fonts.js';
 import { num, splitTopLevel, splitTopLevelWs, lenToPx } from '../../css/util.js';
 import { transparent, rgbaOf } from '../../css/color.js';
 import { parseMatrix } from '../../css/transform.js';
@@ -27,62 +31,11 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
   const rootEl = root ?? doc.documentElement;
   const subtree = rootEl !== doc.documentElement;
 
-  // Element export of scrollable content ("unfurl"): a picked container (or one
-  // nested inside it, e.g. a sidebar's session list) only shows its viewport-sized
-  // window, so the export would silently drop everything scrolled out of view.
-  // Temporarily let every vertically-scrolling container grow to its full content
-  // height — and release the fixed-height / flex-constrained ancestors up to the
-  // root — so the root's own box (and thus the export) covers all of it. Inline
-  // styles and scroll positions are restored in the `finally` below.
-  const unfurlSaved: { el: HTMLElement; style: string | null }[] = [];
-  const unfurlScroll: { el: HTMLElement; top: number; left: number }[] = [];
-  if (subtree && (opts as any).captureScrollableContent && (opts as any).unfurlScrollContainers !== false) {
-    const scrollers: HTMLElement[] = [];
-    for (const el of [rootEl, ...Array.from(rootEl.querySelectorAll('*'))]) {
-      const h = el as HTMLElement;
-      if (!(h instanceof win.HTMLElement)) continue;
-      const oy = win.getComputedStyle(h).overflowY;
-      if ((oy === 'auto' || oy === 'scroll') && h.scrollHeight > h.clientHeight + 1) scrollers.push(h);
-    }
-    const touched = new Set<HTMLElement>();
-    for (const sc of scrollers) {
-      unfurlScroll.push({ el: sc, top: sc.scrollTop, left: sc.scrollLeft });
-      for (let a: HTMLElement | null = sc; a; a = a.parentElement) {
-        touched.add(a);
-        if (a === rootEl) break;
-      }
-    }
-    for (const el of touched) {
-      const original = el.getAttribute('style');
-      unfurlSaved.push({ el, style: original });
-      const parentFlex = el.parentElement ? /flex/.test(win.getComputedStyle(el.parentElement).display) : false;
-      const cs0 = win.getComputedStyle(el);
-      const decl = ['height:auto', 'max-height:none'];
-      if (parentFlex) decl.push('flex:0 0 auto');
-      // visible+hidden on the two axes would compute back to `auto`; clip the x axis instead
-      if (cs0.overflowY !== 'visible') {
-        decl.push('overflow-y:visible');
-        if (cs0.overflowX !== 'visible') decl.push('overflow-x:clip');
-      }
-      // Written through the attribute, not el.style: a CSSOM edit makes Chrome leave
-      // `style=""` behind even after removeAttribute, so the DOM wouldn't round-trip.
-      el.setAttribute('style', (original ? original.replace(/;?\s*$/, ';') : '') + decl.map((d) => d + ' !important').join(';'));
-    }
-    for (const { el } of unfurlScroll) {
-      el.scrollTop = 0;
-      el.scrollLeft = 0;
-    }
-  }
-  const unfurlRestore = () => {
-    for (const { el, style } of unfurlSaved) {
-      if (style === null) el.removeAttribute('style');
-      else el.setAttribute('style', style);
-    }
-    for (const { el, top, left } of unfurlScroll) {
-      el.scrollTop = top;
-      el.scrollLeft = left;
-    }
-  };
+  const restoreUnfurl =
+    subtree && (opts as any).captureScrollableContent && (opts as any).unfurlScrollContainers !== false
+      ? unfurlScrollContainers(win, rootEl)
+      : () => {};
+  let restoreScroll = () => {};
   try {
   const rootRect = rootEl.getBoundingClientRect();
   const W = subtree ? rootRect.width : opts.width;
@@ -116,45 +69,7 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
   const metricsCanvas = doc.createElement('canvas');
   const mctx = metricsCanvas.getContext('2d')!;
 
-  // Normalize any computed color (oklch/oklab/lab/lch/color()/hwb/hsl/…) to plain
-  // sRGB rgb()/rgba(). getComputedStyle returns modern color functions verbatim
-  // (e.g. shadcn/Tailwind oklch), which SVG renderers without CSS Color 4 can't
-  // display — they must be converted for a portable, pure SVG.
-  const colorCanvas = doc.createElement('canvas');
-  colorCanvas.width = colorCanvas.height = 1;
-  const cctx = colorCanvas.getContext('2d', { willReadFrequently: true })!;
-  const colorCache = new Map<string, string>();
-  // non-color paint keywords (valid for fill/stroke) must pass through untouched
-  const NON_COLOR = new Set(['none', 'currentcolor', 'context-fill', 'context-stroke', 'inherit', 'initial', 'unset']);
-  const SENTINEL = 'rgba(1, 2, 3, 0.5)';
-  const normColor = (c: string): string => {
-    if (!c) return c;
-    if (c === 'transparent' || c.charCodeAt(0) === 35 /* # */ || /^rgb/i.test(c)) return c;
-    if (NON_COLOR.has(c.toLowerCase())) return c;
-    const cached = colorCache.get(c);
-    if (cached !== undefined) return cached;
-    let out = c;
-    try {
-      // detect invalid color: fillStyle keeps its prior value when assigned junk
-      cctx.fillStyle = SENTINEL;
-      cctx.fillStyle = c;
-      if (cctx.fillStyle === SENTINEL) {
-        colorCache.set(c, c);
-        return c;
-      }
-      cctx.clearRect(0, 0, 1, 1);
-      cctx.fillRect(0, 0, 1, 1);
-      const d = cctx.getImageData(0, 0, 1, 1).data;
-      out =
-        d[3] === 255
-          ? `rgb(${d[0]}, ${d[1]}, ${d[2]})`
-          : `rgba(${d[0]}, ${d[1]}, ${d[2]}, ${Math.round((d[3] / 255) * 1000) / 1000})`;
-    } catch {
-      out = c;
-    }
-    colorCache.set(c, out);
-    return out;
-  };
+  const normColor = createColorNormalizer(doc);
 
   // CSS parsers live in src/css (pure, unit-tested); these bind the page's colour normaliser.
   const parseLinearGradient = (value: string) => cssParseLinearGradient(value, normColor);
@@ -597,17 +512,6 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
   // may hold quotes/`<` that would break the SVG attribute) and measured, so the
   // layer can be placed exactly (size/position) and embedded as an <image>.
   const imgInfo = new Map<string, { href: string; w: number; h: number } | null>();
-  const normDataUrl = (u: string): string => {
-    const m = u.match(/^data:([^,]*?),([\s\S]*)$/);
-    if (!m || /;base64$/i.test(m[1])) return u;
-    try {
-      const raw = decodeURIComponent(m[2]);
-      const mime = m[1].split(';')[0] || 'text/plain';
-      return `data:${mime};base64,${btoa(unescape(encodeURIComponent(raw)))}`;
-    } catch {
-      return u;
-    }
-  };
   const loadImgInfo = async (url: string) => {
     if (imgInfo.has(url)) return;
     imgInfo.set(url, null);
@@ -983,64 +887,9 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
     return null;
   };
 
-  const blobToDataURL = (blob: Blob): Promise<string | null> =>
-    new Promise((resolve) => {
-      const fr = new FileReader();
-      fr.onload = () => resolve(fr.result as string);
-      fr.onerror = () => resolve(null);
-      fr.readAsDataURL(blob);
-    });
 
-  const fetchDataURL = async (url: string): Promise<string | null> => {
-    // Guard against fetching the current page when img.src is empty or blank.
-    if (!url || url === 'about:blank') return null;
-    if (url.startsWith('data:')) return url;
-    try {
-      const res = await fetch(url, { cache: 'force-cache' });
-      if (!res.ok) return null;
-      return await blobToDataURL(await res.blob());
-    } catch {
-      return null;
-    }
-  };
-
-  // Try to extract image pixels via canvas (works for decoded same-origin images
-  // and CORS-enabled cross-origin images without a network round-trip).
-  // Data URL of a canvas bitmap, or null when it cannot be read (tainted) or looks blank — a WebGL canvas
-  // without preserveDrawingBuffer reads back transparent, which must NOT replace the real pixels.
-  const canvasDataUrl = (cv: HTMLCanvasElement): string | null => {
-    if (cv.width === 0 || cv.height === 0) return null;
-    try {
-      const probe = doc.createElement('canvas');
-      const pw = Math.min(64, cv.width), ph = Math.min(64, cv.height);
-      probe.width = pw; probe.height = ph;
-      const pc = probe.getContext('2d');
-      if (!pc) return null;
-      pc.drawImage(cv, 0, 0, pw, ph);
-      const d = pc.getImageData(0, 0, pw, ph).data;
-      let any = false;
-      for (let i = 3; i < d.length; i += 4) if (d[i] !== 0) { any = true; break; }
-      if (!any) return null;
-      return cv.toDataURL('image/png');
-    } catch {
-      return null;
-    }
-  };
-
-  const canvasExtractDataURL = (img: HTMLImageElement): string | null => {
-    if (!img.complete || img.naturalWidth === 0 || img.naturalHeight === 0) return null;
-    try {
-      const c = doc.createElement('canvas');
-      c.width = img.naturalWidth;
-      c.height = img.naturalHeight;
-      const ctx = c.getContext('2d');
-      if (!ctx) return null;
-      ctx.drawImage(img, 0, 0);
-      return c.toDataURL('image/png');
-    } catch {
-      return null; // cross-origin without CORS headers: canvas is tainted
-    }
-  };
+  const canvasDataUrl = (cv: HTMLCanvasElement) => domCanvasDataUrl(doc, cv);
+  const canvasExtractDataURL = (img: HTMLImageElement) => domCanvasExtractDataURL(doc, img);
 
   // Clamp a DOMRect to the captured region (whole-px snap); null when nothing overlaps.
   const clampToCapture = (rect: DOMRect) => {
@@ -2260,68 +2109,16 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
         : '#ffffff';
   }
 
-  // Reset all scroll positions so scrolled-out content is at its natural position
-  // during capture. getBoundingClientRect() forces a synchronous layout flush, so
-  // positions are correct even though the reset is synchronous.
-  // Also override content-visibility:auto/hidden — browsers skip layout for
-  // off-screen content-visibility:auto elements, leaving their children with zero
-  // bounding rects that would be culled as invisible (GitHub issue feeds, etc.).
-  // Both states are restored after capture.
-  const scrollSaved: { el: HTMLElement; top: number; left: number }[] = [];
-  const cvSaved: { el: HTMLElement; v: string }[] = [];
-  if ((opts as any).captureScrollableContent) {
-    // For full-page capture, reset the outer document scroll so all content is
-    // at its natural (unfurled) position for getBoundingClientRect() and for
-    // captureVisibleTab screenshots. For element (subtree) capture, we must NOT
-    // reset the page scroll — the user just picked an element that is visible in
-    // the current viewport, and resetting scroll would push it off-screen, making
-    // captureVisibleTab unable to reach raster regions inside it.
-    if (!subtree) {
-      const docEl = doc.documentElement as HTMLElement;
-      const bodyEl = doc.body as HTMLElement | null;
-      for (const el of [docEl, bodyEl]) {
-        if (!el) continue;
-        if (el.scrollTop || el.scrollLeft) {
-          scrollSaved.push({ el, top: el.scrollTop, left: el.scrollLeft });
-          el.scrollTop = 0;
-          el.scrollLeft = 0;
-        }
-      }
-    }
-    // Reset scroll on elements inside the capture root (full-page: all; subtree:
-    // only descendants of rootEl). Also force content-visibility so off-screen
-    // content inside the root gets layout and isn't culled as zero-rect.
-    const scrollScope = subtree
-      ? Array.from(rootEl.querySelectorAll('*'))
-      : Array.from(doc.querySelectorAll('*'));
-    for (const el of scrollScope) {
-      const h = el as HTMLElement;
-      if (h.scrollTop || h.scrollLeft) {
-        scrollSaved.push({ el: h, top: h.scrollTop, left: h.scrollLeft });
-        h.scrollTop = 0;
-        h.scrollLeft = 0;
-      }
-      const cv = (win.getComputedStyle(h) as any).contentVisibility;
-      if (cv === 'auto' || cv === 'hidden') {
-        cvSaved.push({ el: h, v: h.style.contentVisibility });
-        h.style.contentVisibility = 'visible';
-      }
-    }
-  }
-
+  restoreScroll = (opts as any).captureScrollableContent ? resetScrollAndContentVisibility(doc, win, rootEl, subtree) : restoreScroll;
   // In subtree mode, walk from document root so siblings and cousins that
   // visually overlap the selected element's bounding area are captured with
   // correct paint order. rootAncestors guards suppress their own rendering.
   await walk(subtree ? (doc.documentElement as Element) : rootEl, null, 1);
   await Promise.all(imgTasks);
 
-  for (const { el, v } of cvSaved) el.style.contentVisibility = v;
-  for (const { el, top, left } of scrollSaved) {
-    el.scrollTop = top;
-    el.scrollLeft = left;
-  }
+  restoreScroll();
 
-  const fonts = (opts.fontMode ?? 'embed') === 'embed' ? await collectFonts(nodes) : [];
+  const fonts = (opts.fontMode ?? 'embed') === 'embed' ? await collectFonts(nodes, { doc, win, externalCss: (opts as any).externalCss }) : [];
 
   return {
     width: W,
@@ -2336,109 +2133,8 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
     fonts,
   };
 
-  async function collectFonts(painted: PaintNode[]) {
-    // families actually referenced by text nodes
-    const used = new Set<string>();
-    for (const node of painted) {
-      if (node.kind !== 'text') continue;
-      for (const fam of node.fontFamily.split(',')) {
-        used.add(fam.trim().replace(/^["']|["']$/g, '').toLowerCase());
-      }
-    }
-
-    const fmtFromUrl = (url: string, hint?: string) => {
-      const h = (hint || '').toLowerCase();
-      if (h.includes('woff2')) return 'woff2';
-      if (h.includes('woff')) return 'woff';
-      if (h.includes('truetype')) return 'truetype';
-      if (h.includes('opentype')) return 'opentype';
-      if (/\.woff2(\?|$)/i.test(url)) return 'woff2';
-      if (/\.woff(\?|$)/i.test(url)) return 'woff';
-      if (/\.otf(\?|$)/i.test(url)) return 'opentype';
-      return 'truetype';
-    };
-
-    const out: { family: string; weight: string; style: string; src: string; format: string; unicodeRange?: string }[] = [];
-    const seen = new Set<string>();
-    const urlCache = new Map<string, string | null>();
-
-    // Collect @font-face rules, descending into @media/@supports/@layer groups, with the
-    // URL base of the owning stylesheet (url() in a sheet resolve against the sheet, not the page).
-    const faces: { rule: CSSFontFaceRule; base: string }[] = [];
-    // Cross-origin sheets (Google Fonts via <link>/@import without crossorigin) throw on
-    // .cssRules; their text is still fetchable when the host sends CORS headers.
-    const opaque: string[] = [];
-    const walk = (rules: CSSRuleList, base: string, depth: number) => {
-      for (const rule of Array.from(rules)) {
-        if (rule.constructor.name === 'CSSFontFaceRule' || (rule as any).type === 5) {
-          faces.push({ rule: rule as CSSFontFaceRule, base });
-        } else if ((rule as any).type === 3 && (rule as any).styleSheet && depth < 6) {
-          // @import: the imported sheet's url()s resolve against its own href
-          const sub = (rule as any).styleSheet as CSSStyleSheet;
-          try { walk(sub.cssRules, sub.href || base, depth + 1); } catch { if (sub.href) opaque.push(sub.href); }
-        } else if (depth < 6 && (rule as any).cssRules) {
-          try { walk((rule as any).cssRules as CSSRuleList, base, depth + 1); } catch { /* ignore */ }
-        }
-      }
-    };
-    const sheets: CSSStyleSheet[] = Array.from(doc.styleSheets) as CSSStyleSheet[];
-    try { for (const s of (doc as any).adoptedStyleSheets || []) sheets.push(s); } catch { /* ignore */ }
-    for (const sheet of sheets) {
-      let rules: CSSRuleList;
-      try {
-        rules = sheet.cssRules;
-        if (!rules) continue;
-      } catch {
-        if (sheet.href) opaque.push(sheet.href);
-        continue; // cross-origin sheet
-      }
-      walk(rules, sheet.href || doc.baseURI, 0);
-    }
-    for (const href of Array.from(new Set(opaque)).slice(0, 120)) {
-      try {
-        let text = (opts as any).externalCss?.[href] as string | undefined;
-        if (text === undefined) {
-          const res = await fetch(href, { cache: 'force-cache' });
-          if (!res.ok) continue;
-          text = await res.text();
-        }
-        const parsed = new win.CSSStyleSheet();
-        parsed.replaceSync(text.replace(/@import[^;]*;/g, ''));
-        walk(parsed.cssRules, href, 0);
-      } catch { /* CORS-blocked or unparsable: fonts stay referenced by name */ }
-    }
-
-    for (const { rule, base } of faces) {
-      const style = rule.style;
-      const family = style.getPropertyValue('font-family').trim().replace(/^["']|["']$/g, '');
-      if (!family || !used.has(family.toLowerCase())) continue;
-      const weight = style.getPropertyValue('font-weight') || '400';
-      const fstyle = style.getPropertyValue('font-style') || 'normal';
-      const src = style.getPropertyValue('src');
-      if (!src) continue;
-      const unicodeRange = style.getPropertyValue('unicode-range').trim() || undefined;
-
-      // pick first url() src (prefer woff2)
-      const entries = Array.from(src.matchAll(/url\(([^)]+)\)(?:\s*format\(([^)]+)\))?/g)).map((m) => ({
-        url: m[1].trim().replace(/^["']|["']$/g, ''),
-        hint: (m[2] || '').replace(/["']/g, ''),
-      }));
-      if (entries.length === 0) continue;
-      const pick = entries.find((e) => /woff2/i.test(e.hint) || /\.woff2/i.test(e.url)) || entries[0];
-      let abs: string;
-      try { abs = new URL(pick.url, base).href; } catch { continue; }
-      const key = family + '|' + weight + '|' + fstyle + '|' + (unicodeRange || '') + '|' + abs;
-      if (seen.has(key)) continue;
-      seen.add(key);
-      let dataUrl: string | null;
-      if (urlCache.has(abs)) dataUrl = urlCache.get(abs)!;
-      else { dataUrl = await fetchDataURL(abs); urlCache.set(abs, dataUrl); }
-      if (!dataUrl) continue;
-      out.push({ family, weight, style: fstyle, src: dataUrl, format: fmtFromUrl(pick.url, pick.hint), unicodeRange });
-    }
-    return out;
-  }
   } finally {
-    unfurlRestore();
+    restoreScroll();
+    restoreUnfurl();
   }
 }
