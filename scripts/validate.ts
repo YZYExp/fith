@@ -19,7 +19,8 @@ import { createOutliner } from '../src/core/emit/outline.js';
 import { systemFallbackLoader, systemFontLoader } from '../src/backends/node/fonts.js';
 import type { Scene } from '../src/core/ir/types.js';
 
-const ARGS = ['--no-sandbox', '--disable-setuid-sandbox', '--disable-gpu', '--single-process'];
+// Hinting and LCD text are machine settings (fontconfig); outlined glyph paths are neither, so pin them off for a stable comparison.
+const ARGS = ['--no-sandbox', '--disable-setuid-sandbox', '--disable-gpu', '--single-process', '--font-render-hinting=none', '--disable-lcd-text'];
 
 const MIME: Record<string, string> = {
   '.html': 'text/html',
