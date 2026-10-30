@@ -1,4 +1,5 @@
 import type { ColorNorm } from './color.js';
+import { splitTopLevelWs } from './util.js';
 
 export // CSS `filter` function list → FilterOp[] (null when it holds anything SVG can't reproduce, e.g. url()).
 const parseFilterList = (v: string | undefined, norm: ColorNorm) => {
@@ -22,9 +23,11 @@ const parseFilterList = (v: string | undefined, norm: ColorNorm) => {
     else if (['brightness', 'contrast', 'grayscale', 'invert', 'opacity', 'saturate', 'sepia'].includes(fn)) { const a = amt(arg || '1'); if (!isFinite(a)) return null; ops.push({ fn, amount: a }); }
     else if (fn === 'hue-rotate') { const f = parseFloat(arg); if (!isFinite(f)) return null; ops.push({ fn, deg: /turn$/.test(arg) ? f * 360 : /rad$/.test(arg) ? (f * 180) / Math.PI : /grad$/.test(arg) ? f * 0.9 : f }); }
     else if (fn === 'drop-shadow') {
-      const cm = arg.match(/(rgba?\([^)]*\)|#[0-9a-fA-F]+|[a-zA-Z]+(?![\w(]))/);
-      const color = cm ? norm(cm[0]) : 'rgb(0, 0, 0)';
-      const lens = (cm ? arg.replace(cm[0], '') : arg).match(/-?[\d.]+px/g) || [];
+      // tokens split outside parentheses: lengths are numbers (with or without px), the other token is the colour
+      const tokens = splitTopLevelWs(arg);
+      const colorToken = tokens.find((t) => !/^-?[\d.]+(?:px)?$/.test(t));
+      const color = colorToken ? norm(colorToken) : 'rgb(0, 0, 0)';
+      const lens = tokens.filter((t) => t !== colorToken && /^-?[\d.]+px$/.test(t));
       if (lens.length < 2) return null;
       ops.push({ fn, x: parseFloat(lens[0] as string), y: parseFloat(lens[1] as string), blur: lens[2] ? parseFloat(lens[2] as string) : 0, color });
     } else return null;
