@@ -243,7 +243,8 @@ export const walkNode = async (ctx: CaptureCtx, el: Element, clip: Clip | null, 
   // closed <details>. The element's own box stays; its text and children are not drawn.
   const closedDetails = el.tagName === 'DETAILS' && !(el as HTMLDetailsElement).open;
   const contentHidden = !skipRender && ((cs as any).contentVisibility === 'hidden' || closedDetails);
-  if (contentHidden) childClip = { x: r.left, y: r.top, width: 0, height: 0, radii: radiiOf(cs, 0, 0) };
+  // the element's own text and marker get an empty clip; a closed <details>' summary is walked with the real one
+  const textClip: Clip | null = contentHidden ? { x: r.left, y: r.top, width: 0, height: 0, radii: radiiOf(cs, 0, 0) } : childClip;
 
   let afterPseudoNodes: PaintNode[] = [];
   let pseudoVectorized = false;
@@ -268,8 +269,8 @@ export const walkNode = async (ctx: CaptureCtx, el: Element, clip: Clip | null, 
       // Paint order: host box → ::before → host content/children → ::after.
       emitBox(ctx, el, cs, clip, opacity);
       ctx.nodes.push(...before.nodes);
-      captureText(ctx, el, cs, childClip, opacity);
-      captureListMarker(ctx, el, cs, childClip, opacity);
+      captureText(ctx, el, cs, textClip, opacity);
+      captureListMarker(ctx, el, cs, textClip, opacity);
       afterPseudoNodes = after.nodes;
     }
   }
@@ -283,19 +284,18 @@ export const walkNode = async (ctx: CaptureCtx, el: Element, clip: Clip | null, 
       // skip emitBox/captureText — the raster already captures them including ::marker
     } else {
       emitBox(ctx, el, cs, clip, opacity);
-      captureText(ctx, el, cs, childClip, opacity);
-      captureListMarker(ctx, el, cs, childClip, opacity);
+      captureText(ctx, el, cs, textClip, opacity);
+      captureListMarker(ctx, el, cs, textClip, opacity);
     }
   } else if (!boxReason && !skipRender && !visHidden) {
       emitBox(ctx, el, cs, clip, opacity);
-      captureText(ctx, el, cs, childClip, opacity);
-    captureListMarker(ctx, el, cs, childClip, opacity);
+      captureText(ctx, el, cs, textClip, opacity);
+    captureListMarker(ctx, el, cs, textClip, opacity);
   }
 
   // <option>s are painted by captureNative; a closed <details> paints only its first <summary>
-  const kids = nativeControl(el) ? []
-    : closedDetails ? Array.from(el.children).filter((k, _i, all) => k === all.find((c) => c.tagName === 'SUMMARY'))
-    : contentHidden ? [] : Array.from(el.children);
+  const summary = closedDetails ? Array.from(el.children).find((c) => c.tagName === 'SUMMARY') : undefined;
+  const kids = nativeControl(el) || (contentHidden && !closedDetails) ? [] : closedDetails ? (summary ? [summary] : []) : Array.from(el.children);
   const parentIsFlexGrid = /flex|grid/.test(cs.display);
   const meta = kids.map((k) => {
     const kcs = ctx.win.getComputedStyle(k);

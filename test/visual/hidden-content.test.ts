@@ -40,6 +40,8 @@ describe('hidden content is not drawn', () => {
           const all = texts.join('\n');
           expect(all).toContain('SHOWN plain text');
           expect(all).toContain('SHOWN content-visibility auto');
+          expect(all).toContain('SHOWN summary');
+          expect(all).toContain('SHOWN open summary');
           expect(all).toContain('SHOWN open details body');
           expect(all).toContain('SHOWN last');
           expect(all).not.toMatch(/HIDDEN/);
