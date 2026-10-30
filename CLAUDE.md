@@ -22,10 +22,12 @@ The core is a two-phase pipeline:
 
 ## Key Architecture Constraints
 
-- `captureScene` in `src/core/capture/capture.ts` must be **fully self-contained**:
-  it is serialized via `.toString()` and injected into Chromium by `page.evaluate`.
-  No imports, no closure references to module-level symbols — every helper must be
-  defined inside the function body.
+- The Node backend no longer serialises `captureScene` with `.toString()`: `scripts/build-inject.ts` bundles
+  `src/inject/entry.ts` with esbuild into one IIFE (`src/inject/bundle.generated.ts`, git-ignored, built by
+  `pnpm build`; from source it is bundled on the fly), and `src/backends/node/inject.ts` evaluates that once per
+  page. In-page code may therefore import modules. `captureScene` itself is still one large closure; splitting it is
+  the next step (see the refactor plan). Keep it free of Node APIs: it also runs in the browser library and the
+  extension.
 
 - The `Scene` IR is the boundary between the in-page capture and the Node backend.
   Fields added to `Scene` must be added to `src/core/ir/types.ts`.
@@ -38,7 +40,8 @@ The core is a two-phase pipeline:
 The project uses **pnpm** (`packageManager` field; CI uses pnpm too).
 
 ```bash
-pnpm build            # TypeScript compile (tsc)
+pnpm build            # in-page bundle (build:inject) + TypeScript compile (tsc)
+pnpm golden <dir>     # render every fixture to <dir>; run before/after a refactor and `diff -r` the folders
 pnpm build:extension  # esbuild MV3 bundle → dist/extension/
 pnpm test             # Vitest — all visual + unit tests
 pnpm validate <url|file> [name] [w] [h] [fontMode]   # ad-hoc pixel-diff of any page

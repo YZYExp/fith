@@ -8,3 +8,4 @@ examples/**/dist/
 out.svg
 bench/out/
 bench/.cache/
+src/inject/bundle.generated.ts

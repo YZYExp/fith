@@ -11,7 +11,7 @@ import { chromium, type Browser } from 'playwright';
 import { PNG } from 'pngjs';
 import pixelmatch from 'pixelmatch';
 import sparticuz from '@sparticuz/chromium';
-import { captureScene } from '../src/core/capture/capture.js';
+import { runCaptureScene } from '../src/backends/node/inject.js';
 import { emitSvg } from '../src/core/emit/svg.js';
 import { collectExternalCss } from '../src/backends/node/external-css.js';
 import { resolveCorsImages } from '../src/backends/node/cors-images.js';
@@ -234,7 +234,7 @@ export async function validate(
       }
       return n;
     }, [opts.width, height] as [number, number]);
-    const scene: Scene = await page.evaluate(captureScene, {
+    const scene: Scene = await runCaptureScene(page, {
       width: opts.width,
       height,
       deviceScaleFactor: 2,
