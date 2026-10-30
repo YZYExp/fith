@@ -56,6 +56,9 @@ export interface InPageOptions {
 }
 
 async function run(opts: InPageOptions, root?: Element): Promise<string> {
+  // the element's own document and window: it may live in a same-origin iframe of this page
+  const doc = root?.ownerDocument ?? document;
+  const win = doc.defaultView ?? window;
   // Viewport-only: keep coords viewport-relative (don't reset scroll, don't
   // unfurl overflow) so one viewport screenshot composites correctly and
   // off-screen content is left out.
@@ -63,13 +66,13 @@ async function run(opts: InPageOptions, root?: Element): Promise<string> {
   const rasterElements = new Map<string, Element>();
   const scene: Scene = await captureScene(
     {
-      width: opts.width ?? (viewportOnly ? window.innerWidth : document.documentElement.clientWidth),
+      width: opts.width ?? (viewportOnly ? win.innerWidth : doc.documentElement.clientWidth),
       height:
         opts.height ??
         (viewportOnly
-          ? window.innerHeight
-          : Math.max(document.documentElement.scrollHeight, document.body ? document.body.scrollHeight : 0)),
-      deviceScaleFactor: opts.deviceScaleFactor ?? window.devicePixelRatio ?? 1,
+          ? win.innerHeight
+          : Math.max(doc.documentElement.scrollHeight, doc.body ? doc.body.scrollHeight : 0)),
+      deviceScaleFactor: opts.deviceScaleFactor ?? win.devicePixelRatio ?? 1,
       fontMode: opts.fontMode === 'none' ? 'none' : 'embed',
       collectGlyphX: opts.fontMode === 'outline',
       // containerRasterFallback is intentionally OFF for the extension (both

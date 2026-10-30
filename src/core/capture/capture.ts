@@ -20,8 +20,12 @@ import { rrPath } from '../../css/clip.js';
  */
 export async function captureScene(opts: CaptureOptions, root?: Element): Promise<Scene> {
   const dpr = opts.deviceScaleFactor || 1;
-  const rootEl = root ?? document.documentElement;
-  const subtree = rootEl !== document.documentElement;
+  // The element's own document and window, not the globals of the page this code was loaded into:
+  // the editor that embeds fith captures a same-origin <iframe>, and `instanceof HTMLElement` is false across realms.
+  const doc = root?.ownerDocument ?? document;
+  const win = (doc.defaultView ?? window) as Window & typeof globalThis;
+  const rootEl = root ?? doc.documentElement;
+  const subtree = rootEl !== doc.documentElement;
 
   // Element export of scrollable content ("unfurl"): a picked container (or one
   // nested inside it, e.g. a sidebar's session list) only shows its viewport-sized
@@ -36,8 +40,8 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
     const scrollers: HTMLElement[] = [];
     for (const el of [rootEl, ...Array.from(rootEl.querySelectorAll('*'))]) {
       const h = el as HTMLElement;
-      if (!(h instanceof HTMLElement)) continue;
-      const oy = getComputedStyle(h).overflowY;
+      if (!(h instanceof win.HTMLElement)) continue;
+      const oy = win.getComputedStyle(h).overflowY;
       if ((oy === 'auto' || oy === 'scroll') && h.scrollHeight > h.clientHeight + 1) scrollers.push(h);
     }
     const touched = new Set<HTMLElement>();
@@ -51,8 +55,8 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
     for (const el of touched) {
       const original = el.getAttribute('style');
       unfurlSaved.push({ el, style: original });
-      const parentFlex = el.parentElement ? /flex/.test(getComputedStyle(el.parentElement).display) : false;
-      const cs0 = getComputedStyle(el);
+      const parentFlex = el.parentElement ? /flex/.test(win.getComputedStyle(el.parentElement).display) : false;
+      const cs0 = win.getComputedStyle(el);
       const decl = ['height:auto', 'max-height:none'];
       if (parentFlex) decl.push('flex:0 0 auto');
       // visible+hidden on the two axes would compute back to `auto`; clip the x axis instead
@@ -86,8 +90,8 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
     ? rootRect.height
     : opts.height ||
       Math.max(
-        document.documentElement.scrollHeight,
-        document.body ? document.body.scrollHeight : 0,
+        doc.documentElement.scrollHeight,
+        doc.body ? doc.body.scrollHeight : 0,
       );
   const originX = subtree ? rootRect.left : 0;
   const originY = subtree ? rootRect.top : 0;
@@ -109,14 +113,14 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
   let counter = 0;
   const nid = () => 'n' + counter++;
 
-  const metricsCanvas = document.createElement('canvas');
+  const metricsCanvas = doc.createElement('canvas');
   const mctx = metricsCanvas.getContext('2d')!;
 
   // Normalize any computed color (oklch/oklab/lab/lch/color()/hwb/hsl/…) to plain
   // sRGB rgb()/rgba(). getComputedStyle returns modern color functions verbatim
   // (e.g. shadcn/Tailwind oklch), which SVG renderers without CSS Color 4 can't
   // display — they must be converted for a portable, pure SVG.
-  const colorCanvas = document.createElement('canvas');
+  const colorCanvas = doc.createElement('canvas');
   colorCanvas.width = colorCanvas.height = 1;
   const cctx = colorCanvas.getContext('2d', { willReadFrequently: true })!;
   const colorCache = new Map<string, string>();
@@ -240,7 +244,7 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
   };
 
   const pseudoVisible = (el: Element, sel: string) => {
-    const cs = getComputedStyle(el, sel);
+    const cs = win.getComputedStyle(el, sel);
     if (cs.display === 'none' || cs.visibility !== 'visible' || num(cs.opacity) === 0) return false;
     const content = cs.content;
     if (content === 'none' || content === 'normal') return false;
@@ -365,7 +369,7 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
   const inPerspective = (el: Element, p: number[]): boolean => {
     if (Math.abs(p[3]) > 1e-6 || Math.abs(p[7]) > 1e-6 || Math.abs(p[11]) > 1e-6) return true;
     for (let a = el.parentElement; a; a = a.parentElement) {
-      const pp = getComputedStyle(a).perspective;
+      const pp = win.getComputedStyle(a).perspective;
       if (pp && pp !== 'none') return true;
     }
     return false;
@@ -611,7 +615,7 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
     if (!fetched) return;
     const href = normDataUrl(fetched);
     const dim = await new Promise<{ w: number; h: number } | null>((res) => {
-      const im = new Image();
+      const im = new win.Image();
       im.onload = () => res({ w: im.naturalWidth, h: im.naturalHeight });
       im.onerror = () => res(null);
       im.src = href;
@@ -909,7 +913,7 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
       if (lay === 'none') continue;
       // fixed: positioned against the viewport (scroll is 0 during capture ⇒ viewport px == page px)
       const fixedAtt = atts[k % atts.length] === 'fixed';
-      const area = fixedAtt ? { x: 0, y: 0, width: document.documentElement.clientWidth, height: window.innerHeight } : boxes[orgs[k % orgs.length]];
+      const area = fixedAtt ? { x: 0, y: 0, width: doc.documentElement.clientWidth, height: win.innerHeight } : boxes[orgs[k % orgs.length]];
       const clipName = clips[k % clips.length];
       const clipBox = boxes[clipName];
       if (!area || !clipBox || area.width <= 0 || area.height <= 0) return null;
@@ -1007,7 +1011,7 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
   const canvasDataUrl = (cv: HTMLCanvasElement): string | null => {
     if (cv.width === 0 || cv.height === 0) return null;
     try {
-      const probe = document.createElement('canvas');
+      const probe = doc.createElement('canvas');
       const pw = Math.min(64, cv.width), ph = Math.min(64, cv.height);
       probe.width = pw; probe.height = ph;
       const pc = probe.getContext('2d');
@@ -1026,7 +1030,7 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
   const canvasExtractDataURL = (img: HTMLImageElement): string | null => {
     if (!img.complete || img.naturalWidth === 0 || img.naturalHeight === 0) return null;
     try {
-      const c = document.createElement('canvas');
+      const c = doc.createElement('canvas');
       c.width = img.naturalWidth;
       c.height = img.naturalHeight;
       const ctx = c.getContext('2d');
@@ -1053,7 +1057,7 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
     if (!r) return;
     const id = nid();
     const desc = el ? el.tagName.toLowerCase() + (typeof (el as any).className === 'string' && (el as any).className ? '.' + (el as any).className.trim().split(/\s+/).slice(0, 2).join('.') : '') : undefined;
-    const detail = el && reason === 'background-image' ? ' ' + getComputedStyle(el).backgroundImage.slice(0, 90) : el && reason === 'clip-path' ? ' ' + getComputedStyle(el).clipPath.slice(0, 60) : el && reason === 'mask' ? (() => { const c: any = getComputedStyle(el); return ' ' + String(c.maskImage || c.webkitMaskImage).slice(0, 80) + ' | ' + (c.maskSize || '') + ' | ' + (c.maskComposite || ''); })() : '';
+    const detail = el && reason === 'background-image' ? ' ' + win.getComputedStyle(el).backgroundImage.slice(0, 90) : el && reason === 'clip-path' ? ' ' + win.getComputedStyle(el).clipPath.slice(0, 60) : el && reason === 'mask' ? (() => { const c: any = win.getComputedStyle(el); return ' ' + String(c.maskImage || c.webkitMaskImage).slice(0, 80) + ' | ' + (c.maskSize || '') + ' | ' + (c.maskComposite || ''); })() : '';
     nodes.push({ kind: 'raster', id, rect: r, opacity, clip, reason, desc: desc && (desc.slice(0, 50) + detail) } as PaintNode);
     rasterTargets.push({ id, ...r });
     // in-page backends can re-render this element themselves when no screenshot is available
@@ -1067,11 +1071,11 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
   // exposes their computed content and color in Chrome 86+/FF 68+/Safari 13.1+.
   const captureListMarker = (el: Element, cs: CSSStyleDeclaration, clip: Clip | null, opacity: number) => {
     if (cs.display !== 'list-item') return;
-    const ms = getComputedStyle(el, '::marker');
+    const ms = win.getComputedStyle(el, '::marker');
     let markerText = ms.content || '';
     if (!markerText || markerText === 'none' || markerText === 'normal') {
       // Fallback: infer from list-style-type
-      const lstyle = cs.listStyleType || getComputedStyle(el.parentElement || el).listStyleType || '';
+      const lstyle = cs.listStyleType || win.getComputedStyle(el.parentElement || el).listStyleType || '';
       if (!lstyle || lstyle === 'none') return;
       if (lstyle === 'disc') markerText = '•';
       else if (lstyle === 'circle') markerText = '○';
@@ -1108,7 +1112,7 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
       return null;
     })();
     if (firstTN) {
-      const rng = document.createRange();
+      const rng = doc.createRange();
       rng.setStart(firstTN, 0);
       rng.setEnd(firstTN, Math.min(1, (firstTN.textContent || '').length));
       const rs = rng.getClientRects();
@@ -1148,7 +1152,7 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
   const bucketCharsByLine = (child: ChildNode, raw: string) => {
     const buckets = new Map<number, { chars: string[]; xs: number[]; top: number; height: number }>();
     for (let i = 0; i < raw.length; i++) {
-      const cr = document.createRange();
+      const cr = doc.createRange();
       cr.setStart(child, i);
       cr.setEnd(child, i + 1);
       const rb = cr.getBoundingClientRect();
@@ -1170,7 +1174,7 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
   const elScale = (el: Element): number => {
     const h = el as HTMLElement;
     const ow = h.offsetWidth, oh = h.offsetHeight;
-    if (!ow || !oh || !(el instanceof HTMLElement)) return 1;
+    if (!ow || !oh || !(el instanceof win.HTMLElement)) return 1;
     const r = el.getBoundingClientRect();
     const sx = r.width / ow, sy = r.height / oh;
     // only trust a uniform, non-degenerate scale (rotations/skews are rastered elsewhere)
@@ -1184,7 +1188,7 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
     const isPh = !el.value;
     const raw = isPh ? el.placeholder || '' : el.type === 'password' ? '\u2022'.repeat(el.value.length) : el.value;
     if (!raw) return;
-    const ps = isPh ? getComputedStyle(el, '::placeholder') : cs;
+    const ps = isPh ? win.getComputedStyle(el, '::placeholder') : cs;
     const fontSize = num(cs.fontSize) * sc;
     if (fontSize <= 0) return;
     const r = el.getBoundingClientRect();
@@ -1328,9 +1332,9 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
     const cl = r.left + bl + padL, ct = r.top + bt + padT;
     const cw = ta.clientWidth * sc - padL - padR, ch = ta.clientHeight * sc - padT - padB;
     if (cw <= 0 || ch <= 0) return;
-    const mir = document.createElement('div');
+    const mir = doc.createElement('div');
     for (let i = 0; i < cs.length; i++) mir.style.setProperty(cs[i], cs.getPropertyValue(cs[i]));
-    const ps = isPh ? getComputedStyle(el, '::placeholder') : cs;
+    const ps = isPh ? win.getComputedStyle(el, '::placeholder') : cs;
     const mset = (k: string, v: string) => mir.style.setProperty(k, v, 'important');
     mset('position', 'fixed'); mset('left', cl / sc + 'px'); mset('top', (ct - ta.scrollTop * sc) / sc + 'px');
     mset('margin', '0'); mset('border', '0'); mset('padding', '0'); mset('box-sizing', 'content-box');
@@ -1341,9 +1345,9 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
     mset('white-space', cs.whiteSpace === 'pre' ? 'pre' : 'pre-wrap'); mset('overflow-wrap', cs.whiteSpace === 'pre' ? 'normal' : 'break-word');
     mset('color', ps.color); mset('-webkit-text-fill-color', ps.color); mset('opacity', '1');
     mir.textContent = content;
-    document.documentElement.appendChild(mir);
+    doc.documentElement.appendChild(mir);
     try {
-      const mcs = getComputedStyle(mir);
+      const mcs = win.getComputedStyle(mir);
       captureText(mir, mcs, intersect(clip, { x: cl, y: ct, width: cw, height: ch, radii: [0, 0, 0, 0] }), opacity * (isPh ? num(ps.opacity || '1') : 1));
     } finally { mir.remove(); }
   };
@@ -1384,7 +1388,7 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
       if (child.nodeType !== Node.TEXT_NODE) continue;
       const raw = child.textContent || '';
       if (!raw.trim()) continue;
-      const range = document.createRange();
+      const range = doc.createRange();
       range.selectNodeContents(child);
       const rects = Array.from(range.getClientRects()).filter((r) => r.width > 0 && r.height > 0);
       if (rects.length === 0) continue;
@@ -1406,7 +1410,7 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
         if (!preserveSpace) {
           const lead = raw.search(/\S/);
           if (lead > 0) {
-            const cr = document.createRange();
+            const cr = doc.createRange();
             cr.setStart(child, lead);
             cr.setEnd(child, lead + 1);
             const rb = cr.getBoundingClientRect();
@@ -1464,7 +1468,7 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
       let backgroundStyle = cs;
       if (transparent(textColor)) {
         for (let candidate: Element | null = el; candidate; candidate = candidate.parentElement) {
-          const style = candidate === el ? cs : getComputedStyle(candidate);
+          const style = candidate === el ? cs : win.getComputedStyle(candidate);
           const clip = style.backgroundClip || (style as any).webkitBackgroundClip;
           if ((clip === 'text' || clip === '-webkit-text') &&
               (!transparent(style.backgroundColor) || style.backgroundImage !== 'none')) {
@@ -1553,7 +1557,7 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
     const textClipped = cs.backgroundClip === 'text' || cs.backgroundClip === '-webkit-text';
     // <body>'s background propagates to the canvas when <html> has none: it paints beneath everything
     // (incl. negative z-index layers) and is already the scene background.
-    const canvasBg = !subtree && el === document.body && transparent(getComputedStyle(document.documentElement).backgroundColor);
+    const canvasBg = !subtree && el === doc.body && transparent(win.getComputedStyle(doc.documentElement).backgroundColor);
     const fill = textClipped || canvasBg || transparent(cs.backgroundColor) ? null : normColor(cs.backgroundColor);
     const { border } = buildBorder(cs);
     const shadows = parseShadows(cs.boxShadow);
@@ -1624,7 +1628,7 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
     clip: Clip | null,
     opacity: number,
   ): { handled: boolean; node?: PaintNode } => {
-    const ps = getComputedStyle(el, sel);
+    const ps = win.getComputedStyle(el, sel);
     if (ps.display === 'none' || ps.visibility !== 'visible' || num(ps.opacity) === 0) return { handled: true };
     const content = ps.content;
     if (content === 'none') return { handled: true }; // generates no box at all
@@ -1644,8 +1648,8 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
     // reset to 0 for the capture, so viewport px == page px).
     const cbX = fixedPos ? 0 : r.left + num(csEl.borderLeftWidth);
     const cbY = fixedPos ? 0 : r.top + num(csEl.borderTopWidth);
-    const cbW = fixedPos ? document.documentElement.clientWidth : r.width - num(csEl.borderLeftWidth) - num(csEl.borderRightWidth);
-    const cbH = fixedPos ? window.innerHeight : r.height - num(csEl.borderTopWidth) - num(csEl.borderBottomWidth);
+    const cbW = fixedPos ? doc.documentElement.clientWidth : r.width - num(csEl.borderLeftWidth) - num(csEl.borderRightWidth);
+    const cbH = fixedPos ? win.innerHeight : r.height - num(csEl.borderTopWidth) - num(csEl.borderBottomWidth);
     const x = cbX + num(ps.left) + num(ps.marginLeft);
     const y = cbY + num(ps.top) + num(ps.marginTop);
     const width = cbX + cbW - num(ps.right) - num(ps.marginRight) - x;
@@ -1705,7 +1709,7 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
     clip: Clip | null,
     opacity: number,
   ): PaintNode[] | null => {
-    const ps = getComputedStyle(el, sel);
+    const ps = win.getComputedStyle(el, sel);
     // content: "text" | "" (decorative box: carets, dots, bars, clearfix) | attr(name)
     const m = ps.content.match(/^(["'])([\s\S]*)\1$/);
     const am = ps.content.match(/^attr\(\s*([\w-]+)\s*\)$/);
@@ -1718,22 +1722,22 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
           .replace(/\\([0-9a-fA-F]{1,6})\s?/g, (_m, h) => String.fromCodePoint(parseInt(h, 16)))
           .replace(/\\([\s\S])/g, '$1');
     if (!text && ps.display === 'inline') return null; // empty inline pseudo paints nothing
-    const span = document.createElement('span');
+    const span = doc.createElement('span');
     for (let i = 0; i < ps.length; i++) span.style.setProperty(ps[i], ps.getPropertyValue(ps[i]));
     span.style.setProperty('animation', 'none');
     span.style.setProperty('transition', 'none');
     span.textContent = text;
     const host = el as HTMLElement;
     const attr = 'data-fith-pseudo-host';
-    const style = document.createElement('style');
+    const style = doc.createElement('style');
     style.textContent = `[${attr}]${sel}{content:none !important}`;
-    document.head.appendChild(style);
+    doc.head.appendChild(style);
     host.setAttribute(attr, '');
     if (sel === '::before') host.insertBefore(span, host.firstChild);
     else host.appendChild(span);
     const start = nodes.length;
     try {
-      const scs = getComputedStyle(span);
+      const scs = win.getComputedStyle(span);
       const op = opacity * num(ps.opacity);
       emitBox(span, scs, clip, op);
       captureText(span, scs, clip, op);
@@ -1776,7 +1780,7 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
     const src = [srcRoot, ...Array.from(srcRoot.querySelectorAll('*'))];
     const dst = [cloneRoot, ...Array.from(cloneRoot.querySelectorAll('*'))];
     for (let i = 0; i < src.length && i < dst.length; i++) {
-      const scs = getComputedStyle(src[i]);
+      const scs = win.getComputedStyle(src[i]);
       if (scs.display === 'none') {
         dst[i].setAttribute('display', 'none');
         continue;
@@ -1891,7 +1895,7 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
   // produced with the mask. Raster nodes are skipped — their screenshot already
   // contains the page's masked rendering, so masking again would fade it twice.
   const walkInner = async (el: Element, clip: Clip | null, inheritedOpacity: number) => {
-    const wcs = getComputedStyle(el);
+    const wcs = win.getComputedStyle(el);
     if ((wcs as any).maskImage && (wcs as any).maskImage !== 'none') await prepareImageLayers(wcs);
     const live = wcs.display !== 'none' && wcs.display !== 'contents' && !rootAncestors.has(el);
     const mk = live ? parseElementMask(el, wcs) : null;
@@ -1916,7 +1920,7 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
 
   // CSS filter / mix-blend-mode composite the whole subtree as one unit → tag its nodes with a group
   const withGroup = async (el: Element, clip: Clip | null, inheritedOpacity: number, run: () => Promise<void>) => {
-    const gcs = getComputedStyle(el);
+    const gcs = win.getComputedStyle(el);
     const live = gcs.display !== 'none' && gcs.display !== 'contents' && !rootAncestors.has(el);
     const fl = live && gcs.filter && gcs.filter !== 'none' ? parseFilterList(gcs.filter) : null;
     const bm = live && gcs.mixBlendMode && gcs.mixBlendMode !== 'normal' ? gcs.mixBlendMode : null;
@@ -1939,7 +1943,7 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
   };
 
   const walk = async (el: Element, clip: Clip | null, inheritedOpacity: number): Promise<void> => {
-    const cs0 = getComputedStyle(el);
+    const cs0 = win.getComputedStyle(el);
     const tf = cs0.transform;
     if (!tf || tf === 'none' || noVectorTransform.has(el) || cs0.display === 'none' || cs0.display === 'contents' || rootAncestors.has(el))
       return withGroup(el, clip, inheritedOpacity, () => walkInner(el, clip, inheritedOpacity));
@@ -1954,7 +1958,7 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
     const m3 = /matrix3d/.test(tf) ? parseMatrix(tf) : null;
     const mm = m3 && !has3D ? m3 : m;
     const rot = !!mm && !has3D && (Math.abs(mm.b) > 1e-3 || Math.abs(mm.c) > 1e-3);
-    if (!rot || has3D || hasRotateProps || !(el instanceof HTMLElement || el instanceof SVGElement)) return withGroup(el, clip, inheritedOpacity, () => walkInner(el, clip, inheritedOpacity));
+    if (!rot || has3D || hasRotateProps || !(el instanceof win.HTMLElement || el instanceof win.SVGElement)) return withGroup(el, clip, inheritedOpacity, () => walkInner(el, clip, inheritedOpacity));
     // a running CSS animation/transition would re-interpolate the cleared transform: keep raster
     try { if ((el as any).getAnimations && (el as any).getAnimations().length) return withGroup(el, clip, inheritedOpacity, () => walkInner(el, clip, inheritedOpacity)); } catch { /* ignore */ }
     void rotated;
@@ -2004,11 +2008,11 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
   type HoistItem = { k: Element; clip: Clip | null; opacity: number; z: number };
   let curHoist: { neg: HoistItem[]; pos: HoistItem[] } | null = null;
   const createsStackingContext = (el: Element, cs: CSSStyleDeclaration): boolean => {
-    if (el === document.documentElement || el === rootEl) return true;
+    if (el === doc.documentElement || el === rootEl) return true;
     if (cs.position === 'fixed' || cs.position === 'sticky') return true;
     if (cs.zIndex !== 'auto') {
       if (cs.position !== 'static') return true;
-      const pd = el.parentElement ? getComputedStyle(el.parentElement).display : '';
+      const pd = el.parentElement ? win.getComputedStyle(el.parentElement).display : '';
       if (/flex|grid/.test(pd)) return true;
     }
     if (num(cs.opacity || '1') < 1) return true;
@@ -2024,7 +2028,7 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
   };
 
   const walkNode = async (el: Element, clip: Clip | null, inheritedOpacity: number) => {
-    const cs = getComputedStyle(el);
+    const cs = win.getComputedStyle(el);
     if (cs.backgroundImage && cs.backgroundImage !== 'none') await prepareImageLayers(cs);
 
     // display:contents has no box of its own but its children (and direct text)
@@ -2133,7 +2137,7 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
     if (boxReason === 'pseudo') {
       // pseudo backgrounds may be url() images (accordion chevrons, icons): load them before the sync materialize
       for (const sel of ['::before', '::after'] as const) {
-        const pbg = getComputedStyle(el, sel).backgroundImage;
+        const pbg = win.getComputedStyle(el, sel).backgroundImage;
         if (pbg && pbg !== 'none') for (const layer of splitTopLevel(pbg)) { const u = layerUrl(layer); if (u) await loadImgInfo(u); }
       }
       // Try to vectorize the decorative pseudo(s) rather than raster the whole box.
@@ -2178,7 +2182,7 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
     const kids = nativeControl(el) ? [] : Array.from(el.children); // <option>s are painted by captureNative
     const parentIsFlexGrid = /flex|grid/.test(cs.display);
     const meta = kids.map((k) => {
-      const kcs = getComputedStyle(k);
+      const kcs = win.getComputedStyle(k);
       const positioned = kcs.position !== 'static';
       const zRaw = kcs.zIndex;
       const z = zRaw === 'auto' ? 0 : parseInt(zRaw, 10) || 0;
@@ -2242,17 +2246,17 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
     nodes.push(...afterPseudoNodes);
   };
 
-  const body = document.body;
+  const body = doc.body;
   let background: string;
   if (subtree) {
     // a subtree export is just the element: use its own opaque bg, else transparent
-    const ebg = getComputedStyle(rootEl).backgroundColor;
+    const ebg = win.getComputedStyle(rootEl).backgroundColor;
     background = transparent(ebg) ? '' : normColor(ebg);
   } else {
-    background = !transparent(getComputedStyle(document.documentElement).backgroundColor)
-      ? normColor(getComputedStyle(document.documentElement).backgroundColor)
-      : body && !transparent(getComputedStyle(body).backgroundColor)
-        ? normColor(getComputedStyle(body).backgroundColor)
+    background = !transparent(win.getComputedStyle(doc.documentElement).backgroundColor)
+      ? normColor(win.getComputedStyle(doc.documentElement).backgroundColor)
+      : body && !transparent(win.getComputedStyle(body).backgroundColor)
+        ? normColor(win.getComputedStyle(body).backgroundColor)
         : '#ffffff';
   }
 
@@ -2273,8 +2277,8 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
     // the current viewport, and resetting scroll would push it off-screen, making
     // captureVisibleTab unable to reach raster regions inside it.
     if (!subtree) {
-      const docEl = document.documentElement as HTMLElement;
-      const bodyEl = document.body as HTMLElement | null;
+      const docEl = doc.documentElement as HTMLElement;
+      const bodyEl = doc.body as HTMLElement | null;
       for (const el of [docEl, bodyEl]) {
         if (!el) continue;
         if (el.scrollTop || el.scrollLeft) {
@@ -2289,7 +2293,7 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
     // content inside the root gets layout and isn't culled as zero-rect.
     const scrollScope = subtree
       ? Array.from(rootEl.querySelectorAll('*'))
-      : Array.from(document.querySelectorAll('*'));
+      : Array.from(doc.querySelectorAll('*'));
     for (const el of scrollScope) {
       const h = el as HTMLElement;
       if (h.scrollTop || h.scrollLeft) {
@@ -2297,7 +2301,7 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
         h.scrollTop = 0;
         h.scrollLeft = 0;
       }
-      const cv = (getComputedStyle(h) as any).contentVisibility;
+      const cv = (win.getComputedStyle(h) as any).contentVisibility;
       if (cv === 'auto' || cv === 'hidden') {
         cvSaved.push({ el: h, v: h.style.contentVisibility });
         h.style.contentVisibility = 'visible';
@@ -2308,7 +2312,7 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
   // In subtree mode, walk from document root so siblings and cousins that
   // visually overlap the selected element's bounding area are captured with
   // correct paint order. rootAncestors guards suppress their own rendering.
-  await walk(subtree ? (document.documentElement as Element) : rootEl, null, 1);
+  await walk(subtree ? (doc.documentElement as Element) : rootEl, null, 1);
   await Promise.all(imgTasks);
 
   for (const { el, v } of cvSaved) el.style.contentVisibility = v;
@@ -2377,8 +2381,8 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
         }
       }
     };
-    const sheets: CSSStyleSheet[] = Array.from(document.styleSheets) as CSSStyleSheet[];
-    try { for (const s of (document as any).adoptedStyleSheets || []) sheets.push(s); } catch { /* ignore */ }
+    const sheets: CSSStyleSheet[] = Array.from(doc.styleSheets) as CSSStyleSheet[];
+    try { for (const s of (doc as any).adoptedStyleSheets || []) sheets.push(s); } catch { /* ignore */ }
     for (const sheet of sheets) {
       let rules: CSSRuleList;
       try {
@@ -2388,7 +2392,7 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
         if (sheet.href) opaque.push(sheet.href);
         continue; // cross-origin sheet
       }
-      walk(rules, sheet.href || document.baseURI, 0);
+      walk(rules, sheet.href || doc.baseURI, 0);
     }
     for (const href of Array.from(new Set(opaque)).slice(0, 120)) {
       try {
@@ -2398,7 +2402,7 @@ export async function captureScene(opts: CaptureOptions, root?: Element): Promis
           if (!res.ok) continue;
           text = await res.text();
         }
-        const parsed = new CSSStyleSheet();
+        const parsed = new win.CSSStyleSheet();
         parsed.replaceSync(text.replace(/@import[^;]*;/g, ''));
         walk(parsed.cssRules, href, 0);
       } catch { /* CORS-blocked or unparsable: fonts stay referenced by name */ }
