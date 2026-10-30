@@ -18,7 +18,7 @@ async function main() {
   const src = positional[0];
   if (!src) {
     console.error(
-      'usage: fitting-html <input.html|url> -o out.svg [--width N] [--height N] [--scale N] [--font-mode embed|outline|none] [--source-html page.html]',
+      'usage: fith <input.html|url> -o out.svg [--width N] [--height N] [--scale N] [--font-mode embed|outline|none] [--source-html page.html]',
     );
     process.exit(1);
   }

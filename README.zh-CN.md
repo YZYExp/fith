@@ -72,16 +72,16 @@ const svg = await htmlToSvg(
 await writeFile('page.svg', svg, 'utf8');
 ```
 
-在其他项目中安装或链接 fitting-html 后，将 `./dist/node.js` 改为 `fitting-html/node` 即可。
+在其他项目中安装或链接 fith 后，将 `./dist/node.js` 改为 `fith/node` 即可。
 
 ### 包入口
 
 | 入口 | 内容 | 依赖 |
 |---|---|---|
-| `fitting-html` | 场景类型、`emitSvg`、`buildReport` | 无 |
-| `fitting-html/node` | `htmlToSvg`、`renderToSvg`、`renderDetailed` | peer `playwright`；`fontMode: 'outline'` 需要 `opentype.js` |
-| `fitting-html/browser` | `captureCurrentPage`、`captureElement`、`captureSourceHtml` | 无 |
-| `fitting-html/outline` | 浏览器里 outline 模式用的 `createOutliner` | peer `opentype.js` |
+| `fith` | 场景类型、`emitSvg`、`buildReport` | 无 |
+| `fith/node` | `htmlToSvg`、`renderToSvg`、`renderDetailed` | peer `playwright`；`fontMode: 'outline'` 需要 `opentype.js` |
+| `fith/browser` | `captureCurrentPage`、`captureElement`、`captureSourceHtml` | 无 |
+| `fith/outline` | 浏览器里 outline 模式用的 `createOutliner` | peer `opentype.js` |
 
 两个 peer 都是可选的，按用到的入口安装即可。
 
@@ -136,16 +136,16 @@ node dist/backends/node/cli.js https://example.com \
   -o example.svg --width 1280 --height 720
 ```
 
-安装或链接包后，同一 CLI 可通过 `fitting-html` 命令调用。默认宽度为 `1280`、缩放比例为 `1`、字体模式为 `embed`、输出文件为 `out.svg`。省略 `--height` 时使用文档高度。CLI 支持通过 `CHROMIUM_PATH` 指定 Chromium 可执行文件。
+安装或链接包后，同一 CLI 可通过 `fith` 命令调用。默认宽度为 `1280`、缩放比例为 `1`、字体模式为 `embed`、输出文件为 `out.svg`。省略 `--height` 时使用文档高度。CLI 支持通过 `CHROMIUM_PATH` 指定 Chromium 可执行文件。
 
 仓库另有开发辅助命令 `pnpm render input.html out.svg 1280`，使用 `CHROMIUM_PATH` 或开发依赖 `@sparticuz/chromium`。
 
 ### 浏览器页内库
 
-在已安装或本地链接 fitting-html 的浏览器项目中，打包浏览器入口：
+在已安装或本地链接 fith 的浏览器项目中，打包浏览器入口：
 
 ```ts
-import { captureCurrentPage, captureElement } from 'fitting-html/browser';
+import { captureCurrentPage, captureElement } from 'fith/browser';
 
 const pageSvg = await captureCurrentPage({ fontMode: 'embed' });
 const visibleSvg = await captureCurrentPage({ viewportOnly: true });
@@ -170,7 +170,7 @@ if (card) {
 变成图片的区域，或因为没有截图能力而被省略的区域，会列在报告里，而不是静默缺失：
 
 ```ts
-import { captureElementDetailed } from 'fitting-html/browser';
+import { captureElementDetailed } from 'fith/browser';
 
 const { svg, report } = await captureElementDetailed(card);
 report.rasters; // { reason, rect, desc, filled: 'screenshot' | 'dom' | 'none' }[]

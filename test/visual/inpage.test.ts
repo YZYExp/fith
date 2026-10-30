@@ -25,7 +25,7 @@ describe('in-page backend', () => {
         entryPoints: [resolve(__dirname, '../../src/backends/browser/index.ts')],
         bundle: true,
         format: 'iife',
-        globalName: 'FittingHtml',
+        globalName: 'Fith',
         write: false,
         target: 'chrome110',
       });
@@ -45,7 +45,7 @@ describe('in-page backend', () => {
         await page.addScriptTag({ content: code });
         const svg: string = await page.evaluate(async () => {
           // @ts-expect-error injected global
-          return await FittingHtml.captureCurrentPage({ width: 420, height: 280, fontMode: 'embed' });
+          return await Fith.captureCurrentPage({ width: 420, height: 280, fontMode: 'embed' });
         });
 
         mkdirSync(OUT, { recursive: true });

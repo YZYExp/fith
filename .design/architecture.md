@@ -80,16 +80,16 @@ src/
 
 ## 6. 后端
 
-### Node/Playwright（`backends/node/`，入口 `fitting-html/node`）
+### Node/Playwright（`backends/node/`，入口 `fith/node`）
 `renderDetailed(input, opts)` 开页面（`html`/`url`/已有 `page`），注入捕获包，跑 `captureScene`，然后在 Node 侧补齐 `Scene`：
 1. 字体：`fonts` 是列表就随选项进页面；是 `FontResolver` 就在 Node 侧按 `fontRequests` 逐个问；outline 模式用 fontconfig 找系统字体（`fonts.ts`，只接受度量兼容的替代，其余视为未安装）。
 2. 跨域 `<img>`：下载真实字节嵌入，比截图更清晰（`cors-images.ts`）。
 3. 栅格目标：对每个 `rasterTarget` 截图（`screenshotRasterTargets`）。
 4. 可选：`guaranteeFloor`（整页截图作底层）、`diffPatch`（把 SVG 渲染回 Chromium，与原页做格子对比，用截图补不一致的区域，`diff-patch.ts`）。
 5. `emitSvg`，并返回 `report`；`captureSourceHtml` 开启时附 `.source.html`。
-还有 CLI（`fitting-html` 命令）。
+还有 CLI（`fith` 命令）。
 
-### 浏览器页内库（`backends/browser/`，入口 `fitting-html/browser`）
+### 浏览器页内库（`backends/browser/`，入口 `fith/browser`）
 `captureElement` / `captureCurrentPage`（带 `Detailed` 后缀的版本同时返回 `report`）直接在页面里调用 `captureScene` 与 `emitSvg`，没有 Node、Playwright、CDP。没有截图能力，所以栅格有三层：宿主给的 `rasterize(rect, scale, {element, reason})`（抛错只让那一块变成空，不拖垮整个捕获），然后是库自带的 `dom-raster.ts`（克隆元素、内联计算样式、放进 `<foreignObject>`、画到 canvas；做不到就返回 null 而不是错图），再往后才是省略并写进 `report`。`fonts` 与 `idPrefix` 同样可由宿主给。
 
 ### Chrome 扩展（`backends/extension/`）
@@ -99,12 +99,12 @@ MV3：content script 捕获，background 提供截图（`captureVisibleTab` 经 
 
 | 入口 | 内容 | 依赖 |
 |---|---|---|
-| `fitting-html` | `emitSvg`、`buildReport`、IR 类型 | 无 |
-| `fitting-html/node` | `renderToSvg`、`renderDetailed`、`htmlToSvg` | 可选 peer `playwright`（outline 另需 `opentype.js`） |
-| `fitting-html/browser` | `captureElement`、`captureCurrentPage` 及其 `Detailed` 版本 | 无 |
-| `fitting-html/outline` | `createOutliner` | 可选 peer `opentype.js` |
+| `fith` | `emitSvg`、`buildReport`、IR 类型 | 无 |
+| `fith/node` | `renderToSvg`、`renderDetailed`、`htmlToSvg` | 可选 peer `playwright`（outline 另需 `opentype.js`） |
+| `fith/browser` | `captureElement`、`captureCurrentPage` 及其 `Detailed` 版本 | 无 |
+| `fith/outline` | `createOutliner` | 可选 peer `opentype.js` |
 
-Playwright 与 opentype.js 只在对应路径上动态 `import()`，主入口和浏览器入口的产物里没有它们（`test/exports.test.ts` 检查）。`pixelmatch`、`pngjs` 是普通依赖（diff-patch 与验证用）。包名与命令目前仍是 `fitting-html`，等待迁移到 `0x0079/fith` 后再统一。
+Playwright 与 opentype.js 只在对应路径上动态 `import()`，主入口和浏览器入口的产物里没有它们（`test/exports.test.ts` 检查）。`pixelmatch`、`pngjs` 是普通依赖（diff-patch 与验证用）。项目、包名与命令统一为 `fith`（仓库 `0x0079/fith`）。
 
 ## 8. 测试与基线
 

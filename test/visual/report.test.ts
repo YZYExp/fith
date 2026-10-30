@@ -64,13 +64,13 @@ describe('capture report', () => {
   }, 90_000);
 
   it('the in-page backend says which regions are blank without a screenshot backend, and which the DOM re-render filled', async () => {
-    const bundle = await build({ entryPoints: [resolve(__dirname, '../../src/backends/browser/index.ts')], bundle: true, format: 'iife', globalName: 'FittingHtml', write: false, target: 'chrome110' });
+    const bundle = await build({ entryPoints: [resolve(__dirname, '../../src/backends/browser/index.ts')], bundle: true, format: 'iife', globalName: 'Fith', write: false, target: 'chrome110' });
     const ctx = await browser.newContext({ viewport: { width: 440, height: 360 } });
     const page = await ctx.newPage();
     await page.goto(RASTER, { waitUntil: 'networkidle' });
     await page.addScriptTag({ content: bundle.outputFiles[0].text });
     const run = (domRasterFallback: boolean) =>
-      page.evaluate((o) => (window as any).FittingHtml.captureCurrentPageDetailed(o), { width: 440, height: 360, domRasterFallback }) as Promise<{ svg: string; report: import('../../src/core/ir/types.js').CaptureReport }>;
+      page.evaluate((o) => (window as any).Fith.captureCurrentPageDetailed(o), { width: 440, height: 360, domRasterFallback }) as Promise<{ svg: string; report: import('../../src/core/ir/types.js').CaptureReport }>;
     const off = await run(false);
     expect(off.report.omitted.length).toBeGreaterThan(0);
     expect(off.report.omitted.every((o) => !!o.reason)).toBe(true);

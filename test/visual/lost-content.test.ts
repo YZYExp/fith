@@ -22,7 +22,7 @@ async function bundleBrowser(): Promise<string> {
     entryPoints: [resolve(__dirname, '../../src/backends/browser/index.ts')],
     bundle: true,
     format: 'iife',
-    globalName: 'FittingHtml',
+    globalName: 'Fith',
     write: false,
     target: 'chrome110',
   });
@@ -77,7 +77,7 @@ describe('lost-content detector', () => {
         const lost = await page.evaluate(
           async ({ detector }) => {
             // @ts-expect-error injected global
-            const scene = await FittingHtml.captureScene({
+            const scene = await Fith.captureScene({
               width: document.documentElement.clientWidth,
               height: Math.max(document.documentElement.scrollHeight, document.body.scrollHeight),
               deviceScaleFactor: 1,
@@ -119,7 +119,7 @@ describe('lost-content detector', () => {
         // These would be clipped to nothing by SVG's clip-path — invisible.
         const clippedAway = await page.evaluate(async () => {
           // @ts-expect-error injected global
-          const scene = await FittingHtml.captureScene({
+          const scene = await Fith.captureScene({
             width: document.documentElement.clientWidth,
             height: Math.max(document.documentElement.scrollHeight, document.body.scrollHeight),
             deviceScaleFactor: 1,
@@ -170,7 +170,7 @@ describe('lost-content detector', () => {
         // overlaps the button but is not a DOM descendant — it must still appear.
         const texts = await page.evaluate(async () => {
           // @ts-expect-error injected global
-          const scene = await FittingHtml.captureScene(
+          const scene = await Fith.captureScene(
             {
               width: 0,
               height: 0,

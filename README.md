@@ -73,16 +73,16 @@ const svg = await htmlToSvg(
 await writeFile('page.svg', svg, 'utf8');
 ```
 
-When fitting-html is installed or linked into another project, import from `fitting-html/node` instead of `./dist/node.js`.
+When fith is installed or linked into another project, import from `fith/node` instead of `./dist/node.js`.
 
 ### Package entries
 
 | Entry | Contents | Needs |
 |---|---|---|
-| `fitting-html` | scene types, `emitSvg`, `buildReport` | nothing |
-| `fitting-html/node` | `htmlToSvg`, `renderToSvg`, `renderDetailed` | peer `playwright`; `opentype.js` for `fontMode: 'outline'` |
-| `fitting-html/browser` | `captureCurrentPage`, `captureElement`, `captureSourceHtml` | nothing |
-| `fitting-html/outline` | `createOutliner` for outline mode in the browser | peer `opentype.js` |
+| `fith` | scene types, `emitSvg`, `buildReport` | nothing |
+| `fith/node` | `htmlToSvg`, `renderToSvg`, `renderDetailed` | peer `playwright`; `opentype.js` for `fontMode: 'outline'` |
+| `fith/browser` | `captureCurrentPage`, `captureElement`, `captureSourceHtml` | nothing |
+| `fith/outline` | `createOutliner` for outline mode in the browser | peer `opentype.js` |
 
 Both peers are optional: install only what the entries you use need.
 
@@ -145,16 +145,16 @@ node dist/backends/node/cli.js https://example.com \
 The Chrome extension offers the same snapshot under *Text, fonts & bug reports → Also save source HTML* (off by default).
 For feedback on a single element, use **Export element HTML** in the popup (or the context menu entry): pick an element and only its `.source.html` snapshot is downloaded.
 
-The package exposes the same CLI as `fitting-html` when installed or linked. Defaults: width `1280`, scale `1`, font mode `embed`, output `out.svg`. Omit `--height` to use the document height. Set `CHROMIUM_PATH` to select a Chromium executable for the CLI.
+The package exposes the same CLI as `fith` when installed or linked. Defaults: width `1280`, scale `1`, font mode `embed`, output `out.svg`. Omit `--height` to use the document height. Set `CHROMIUM_PATH` to select a Chromium executable for the CLI.
 
 The repository also has a development helper, `pnpm render input.html out.svg 1280`, which uses `CHROMIUM_PATH` or the development dependency `@sparticuz/chromium`.
 
 ### Browser library
 
-In a browser project that has fitting-html installed or locally linked, bundle the browser entry:
+In a browser project that has fith installed or locally linked, bundle the browser entry:
 
 ```ts
-import { captureCurrentPage, captureElement } from 'fitting-html/browser';
+import { captureCurrentPage, captureElement } from 'fith/browser';
 
 const pageSvg = await captureCurrentPage({ fontMode: 'embed' });
 const visibleSvg = await captureCurrentPage({ viewportOnly: true });
@@ -179,7 +179,7 @@ The browser library uses DOM APIs without Node or Playwright at runtime. It capt
 Regions that become pictures, or are omitted because no screenshot was available, are listed instead of failing silently:
 
 ```ts
-import { captureElementDetailed } from 'fitting-html/browser';
+import { captureElementDetailed } from 'fith/browser';
 
 const { svg, report } = await captureElementDetailed(card);
 report.rasters; // { reason, rect, desc, filled: 'screenshot' | 'dom' | 'none' }[]

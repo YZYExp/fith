@@ -31,7 +31,7 @@ async function send(tabId: number, type: 'fh:capture' | 'fh:pick' | 'fh:pickHtml
       sourceHtml: prefs.fhSource === true,
     });
   } catch (e) {
-    console.error('[fitting-html]', e);
+    console.error('[fith]', e);
   }
 }
 

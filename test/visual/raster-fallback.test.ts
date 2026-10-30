@@ -22,7 +22,7 @@ describe('in-page DOM raster fallback', () => {
       entryPoints: [resolve(__dirname, '../../src/backends/browser/index.ts')],
       bundle: true,
       format: 'iife',
-      globalName: 'FittingHtml',
+      globalName: 'Fith',
       write: false,
       target: 'chrome110',
     });
@@ -35,7 +35,7 @@ describe('in-page DOM raster fallback', () => {
       await page.evaluate(() => document.fonts.ready);
       await page.addScriptTag({ content: bundle.outputFiles[0].text });
       const svg: string = await page.evaluate(
-        (o) => (window as any).FittingHtml.captureCurrentPage(o),
+        (o) => (window as any).Fith.captureCurrentPage(o),
         { width: 440, height: 360, domRasterFallback },
       );
       const expected = await page.screenshot();
