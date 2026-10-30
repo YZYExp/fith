@@ -7,7 +7,7 @@ import { randomUUID } from 'node:crypto';
 import { pathToFileURL } from 'node:url';
 import { chromium, type Browser, type Page } from 'playwright';
 import { runCaptureScene, runCaptureSourceHtml } from './inject.js';
-import { emitSvg, type EmitOptions } from '../../core/emit/svg.js';
+import { assertIdPrefix, emitSvg, type EmitOptions } from '../../core/emit/svg.js';
 import { createOutliner } from '../../core/emit/outline.js';
 import { systemFallbackLoader, systemFontLoader } from './fonts.js';
 import { findDiffRegions } from './diff-patch.js';
@@ -221,6 +221,7 @@ async function captureAndEmit(page: Page, opts: RenderOptions): Promise<RenderRe
 
 /** Like `renderToSvg`, but also returns the optional source-HTML snapshot. */
 export async function renderDetailed(input: RenderInput, opts: RenderOptions): Promise<RenderResult> {
+  assertIdPrefix(opts.idPrefix);
   if ('page' in input) {
     return captureAndEmit(input.page, opts);
   }

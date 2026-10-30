@@ -312,8 +312,13 @@ export interface EmitOptions {
   idPrefix?: string;
 }
 
+/** Throws on an `idPrefix` that cannot start an XML id; hosts call it before paying for a capture. */
+export function assertIdPrefix(idPrefix: string | undefined): void {
+  if (idPrefix !== undefined && !/^[A-Za-z][\w-]*$/.test(idPrefix)) throw new Error(`idPrefix must start with a letter and use letters, digits, - or _: ${JSON.stringify(idPrefix)}`);
+}
+
 export function emitSvg(scene: Scene, opts: EmitOptions = {}): string {
-  if (opts.idPrefix !== undefined && !/^[A-Za-z][\w-]*$/.test(opts.idPrefix)) throw new Error(`idPrefix must start with a letter and use letters, digits, - or _: ${JSON.stringify(opts.idPrefix)}`);
+  assertIdPrefix(opts.idPrefix);
   const defs = new Defs(opts.idPrefix);
   const body: string[] = [];
 
