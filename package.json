@@ -13,10 +13,19 @@
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
     },
+    "./node": {
+      "types": "./dist/node.d.ts",
+      "default": "./dist/node.js"
+    },
     "./browser": {
       "types": "./dist/backends/browser/index.d.ts",
       "default": "./dist/backends/browser/index.js"
-    }
+    },
+    "./outline": {
+      "types": "./dist/outline.d.ts",
+      "default": "./dist/outline.js"
+    },
+    "./package.json": "./package.json"
   },
   "files": [
     "dist"
@@ -46,10 +55,6 @@
     "screenshot"
   ],
   "license": "MPL-2.0",
-  "dependencies": {
-    "opentype.js": "^2.0.0",
-    "playwright": "^1.47.0"
-  },
   "devDependencies": {
     "@sparticuz/chromium": "^148.0.0",
     "@types/chrome": "^0.1.42",
@@ -58,8 +63,8 @@
     "@types/pixelmatch": "^5.2.6",
     "@types/pngjs": "^6.0.5",
     "esbuild": "^0.28.0",
-    "pixelmatch": "^6.0.0",
-    "pngjs": "^7.0.0",
+    "opentype.js": "^2.0.0",
+    "playwright": "^1.47.0",
     "tsx": "^4.22.3",
     "typescript": "^5.5.0",
     "vitest": "^2.0.0"
@@ -72,5 +77,21 @@
     "onlyBuiltDependencies": [
       "esbuild"
     ]
+  },
+  "peerDependencies": {
+    "opentype.js": "^2.0.0",
+    "playwright": "^1.47.0"
+  },
+  "peerDependenciesMeta": {
+    "opentype.js": {
+      "optional": true
+    },
+    "playwright": {
+      "optional": true
+    }
+  },
+  "dependencies": {
+    "pixelmatch": "^6.0.0",
+    "pngjs": "^7.0.0"
   }
 }
